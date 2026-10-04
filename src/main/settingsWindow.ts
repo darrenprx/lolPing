@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
+import { SETTINGS_CH } from '../shared/settingsChannels';
 import { assetPath, IS_MAC, loadPage, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
@@ -54,13 +55,15 @@ export function settingsWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null;
 }
 
-export function openSettingsWindow(): BrowserWindow {
+/** `section`: the id of a settings section to scroll to, e.g. 'room'. */
+export function openSettingsWindow(section?: string): BrowserWindow {
   const existing = settingsWindow();
   if (existing) {
     showInDock(true);
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
+    if (section) existing.webContents.send(SETTINGS_CH.showSection, section);
     return existing;
   }
   const w = new BrowserWindow({
@@ -90,7 +93,7 @@ export function openSettingsWindow(): BrowserWindow {
     showInDock(true);
     w.show();
   });
-  void loadPage(w, 'settings');
+  void loadPage(w, 'settings', section);
   win = w;
   return w;
 }

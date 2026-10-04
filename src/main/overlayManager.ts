@@ -1,24 +1,49 @@
 import { BrowserWindow, ipcMain, screen, type Display } from 'electron';
-import { OVERLAY_ASSETS, type OverlayChannel, type OverlayEvents } from '../shared/ipc';
-import type { PingId } from '../shared/pings';
+import { EventEmitter } from 'node:events';
+import { OVERLAY_ASSETS, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag } from '../shared/ipc';
+import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent } from '../shared/protocol';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
+import { numberDisplays, type NumberedDisplay } from './displayNumbers';
 import { IS_MAC, loadPage, preloadPath } from './paths';
 
-/** One transparent, click-through, always-on-top window per display. */
-export class OverlayManager {
+/** A ping the user just placed, in overlay-local CSS px: the room shares these. */
+export interface SharedPing {
+  id: PingId;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * One transparent, click-through, always-on-top window per display.
+ * Emits 'shared' (SharedPing) for every wheel or trigger+click ping, never for settings previews.
+ */
+export class OverlayManager extends EventEmitter {
   readonly missingAssets = new Set<string>();
   private readonly windows = new Map<number, BrowserWindow>();
   private maps: DisplayMap[] = [];
+  private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
 
-  constructor(private settings: OverlaySettings) {}
+  constructor(private settings: OverlaySettings) {
+    super();
+  }
 
   start(): void {
     ipcMain.on(OVERLAY_ASSETS, (_event, missing: unknown) => {
       if (!Array.isArray(missing)) return;
       for (const m of missing) if (typeof m === 'string') this.missingAssets.add(m);
+    });
+    ipcMain.on(OVERLAY_PINGED, (event, raw: unknown) => {
+      const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
+      if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const displayId = [...this.windows].find(([, w]) => w === win)?.[0];
+      if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -51,7 +76,9 @@ export class OverlayManager {
       }
       case 'click': {
         const p = physicalToLocal(ev.x, ev.y, this.maps);
-        if (p) this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
+        if (!p) break;
+        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
+        this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
         break;
       }
       case 'cancel':
@@ -65,6 +92,16 @@ export class OverlayManager {
   previewPing(id: PingId): void {
     const d = screen.getPrimaryDisplay();
     this.send(d.id, 'ping:spawn', { id, x: d.bounds.width / 2, y: d.bounds.height / 2 });
+  }
+
+  /** A room member's ping, already mapped onto one of our displays. */
+  spawnRemote(p: { displayId: number; x: number; y: number; id: PingId; tag: PingTag }): void {
+    this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
+  }
+
+  /** This machine's displays with their room numbers (#1 = primary). */
+  numbered(): NumberedDisplay[] {
+    return this.numberedList;
   }
 
   toast(title: string, body: string): void {
@@ -90,6 +127,8 @@ export class OverlayManager {
     this.maps = displays.map((d) => IS_MAC
       ? { id: d.id, dip: d.bounds, phys: d.bounds, scale: 1 }
       : { id: d.id, dip: d.bounds, phys: screen.dipToScreenRect(null, d.bounds), scale: d.scaleFactor });
+    this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
+    this.emit('displays', this.numberedList);
     for (const [id, win] of this.windows) {
       if (!displays.some((d) => d.id === id)) {
         win.destroy();

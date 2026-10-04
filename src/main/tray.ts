@@ -14,6 +14,22 @@ export interface TrayHandlers {
   setEnabled(on: boolean): void;
   retryHelper(): void;
   quit(): void;
+  room: {
+    joinClipboard(): void;
+    create(): void;
+    copyCode(): void;
+    setMuted(on: boolean): void;
+    leave(): void;
+    /** Opens settings at the Room section. */
+    openSettings(): void;
+  };
+}
+
+/** What the tray shows about the room: `code` is null when not in one. */
+export interface TrayRoom {
+  code: string | null;
+  count: number;
+  muted: boolean;
 }
 
 /** Re-colours a premultiplied BGRA bitmap pixel by pixel. */
@@ -35,6 +51,7 @@ export class AppTray {
   private readonly icons: Record<Exclude<TrayMode, 'noAccess'>, NativeImage>;
   private mode: TrayMode = 'on';
   private enabled = true;
+  private room: TrayRoom = { code: null, count: 0, muted: false };
   private destroyed = false;
 
   /** `mac` switches to menu bar behaviour: template icons, and a click opens the menu (which has Settings…). */
@@ -79,6 +96,14 @@ export class AppTray {
     this.render();
   }
 
+  setRoom(room: TrayRoom): void {
+    if (this.destroyed) return;
+    const r = this.room;
+    if (r.code === room.code && r.count === room.count && r.muted === room.muted) return; // room state changes often
+    this.room = room;
+    this.render();
+  }
+
   /** Switches the tooltip and menu to another language. */
   setText(text: Strings): void {
     if (this.destroyed) return;
@@ -108,9 +133,32 @@ export class AppTray {
     if (failed) items.push({ label: t.trayRestart, click: () => this.handlers.retryHelper() });
     items.push(
       { type: 'separator' },
+      { label: t.trayRoom, submenu: this.roomMenu() },
       { label: t.traySettings, click: () => this.handlers.openSettings() },
       { label: t.trayQuit, click: () => this.handlers.quit() },
     );
     this.tray.setContextMenu(Menu.buildFromTemplate(items));
+  }
+
+  private roomMenu(): MenuItemConstructorOptions[] {
+    const t = this.text;
+    const r = this.handlers.room;
+    const settings: MenuItemConstructorOptions = { label: t.trayRoomSettings, click: () => r.openSettings() };
+    if (!this.room.code) {
+      return [
+        { label: t.trayRoomJoinClipboard, click: () => r.joinClipboard() },
+        { label: t.trayRoomCreate, click: () => r.create() },
+        settings,
+      ];
+    }
+    return [
+      { label: t.trayRoomLabel(this.room.code, this.room.count), enabled: false },
+      { type: 'separator' },
+      { label: t.trayRoomCopy, click: () => r.copyCode() },
+      { label: t.trayRoomMute, type: 'checkbox', checked: this.room.muted, click: (item) => r.setMuted(item.checked) },
+      { label: t.trayRoomLeave, click: () => r.leave() },
+      { type: 'separator' },
+      settings,
+    ];
   }
 }

@@ -24,7 +24,24 @@ describe('SettingsStore', () => {
     expect(store.problems).toHaveLength(1);
   });
 
-  it('normalizes values read from disk', () => {
+  it('saves the defaults it filled in, so the tag colour stays the same on the next launch', async () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 })); // a 0.2.1 file: no room keys
+    const first = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 3 }).load();
+    await sleep(80);
+    const second = new SettingsStore(dir, 10, 'win', { name: 'darren', color: 6 }).load();
+    expect([first.tagColor, second.tagColor]).toEqual([3, 3]);
+    expect(second.volume).toBe(30);
+  });
+
+  it('saves on the very first run too', async () => {
+    const dir = tempDir();
+    new SettingsStore(dir, 10, 'win', { name: 'darren', color: 2 }).load();
+    await sleep(80);
+    expect(new SettingsStore(dir, 10, 'win', { name: 'darren', color: 7 }).load().tagColor).toBe(2);
+  });
+
+    it('normalizes values read from disk', () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ volume: 900, trigger: 'ctrl' }));
     const s = new SettingsStore(dir).load();

@@ -24,6 +24,15 @@ const api: SettingsApi = {
   retryHelper: () => ipcRenderer.invoke(SETTINGS_CH.retryHelper),
   setCapturing: (on) => ipcRenderer.invoke(SETTINGS_CH.capture, on),
   openAccessibility: () => ipcRenderer.invoke(SETTINGS_CH.openAccessibility),
+  getRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomGet),
+  onRoom: (cb) => subscribe(SETTINGS_CH.roomChanged, cb),
+  createRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomCreate),
+  joinRoom: (text) => ipcRenderer.invoke(SETTINGS_CH.roomJoin, text),
+  leaveRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomLeave),
+  muteMember: (peer, on) => ipcRenderer.invoke(SETTINGS_CH.roomMute, peer, on),
+  clipboardRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomClipboard),
+  copyRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomCopy),
+  onShowSection: (cb) => subscribe(SETTINGS_CH.showSection, cb),
 };
 
 contextBridge.exposeInMainWorld('settingsApi', api);

@@ -12,6 +12,9 @@ const api: OverlayApi = {
   reportMissingAssets(names) {
     console.warn('lolPing demo: missing assets', names);
   },
+  reportPing() {
+    // the demo has no room to share pings with
+  },
 };
 window.overlay = api;
 

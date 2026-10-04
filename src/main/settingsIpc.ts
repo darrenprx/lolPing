@@ -4,6 +4,7 @@ import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from 
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
+import type { JoinResult, RoomState } from '../shared/room';
 import type { Settings } from '../shared/settings';
 import type { SettingsStore } from './settingsStore';
 
@@ -21,6 +22,15 @@ export interface SettingsIpcDeps {
   /** Strings in the app's current language. */
   text(): Strings;
   platform: Platform;
+  room: {
+    state(): RoomState;
+    create(): Promise<void>;
+    join(text: string): Promise<JoinResult>;
+    leave(): void;
+    mute(peer: string, on: boolean): void;
+    clipboardCode(): Promise<string | null>;
+    copyCode(): void;
+  };
 }
 
 /** Returns an error message when another app already owns this shortcut. */
@@ -62,4 +72,14 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.retryHelper, () => d.retryHelper());
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
+  ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
+  ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());
+  ipcMain.handle(SETTINGS_CH.roomJoin, (_e, text: unknown): Promise<JoinResult> | JoinResult =>
+    typeof text === 'string' ? d.room.join(text) : { ok: false, error: 'invalid' });
+  ipcMain.handle(SETTINGS_CH.roomLeave, () => d.room.leave());
+  ipcMain.handle(SETTINGS_CH.roomMute, (_e, peer: unknown, on: unknown) => {
+    if (typeof peer === 'string') d.room.mute(peer, on === true);
+  });
+  ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
+  ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
 }

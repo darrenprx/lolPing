@@ -13,4 +13,13 @@ export const SETTINGS_CH = {
   retryHelper: 'app:retryHelper',
   capture: 'app:capture',
   openAccessibility: 'app:openAccessibility',
+  roomGet: 'room:get',
+  roomChanged: 'room:state',
+  roomCreate: 'room:create',
+  roomJoin: 'room:join',
+  roomLeave: 'room:leave',
+  roomMute: 'room:mute',
+  roomClipboard: 'room:clipboardCode',
+  roomCopy: 'room:copyCode',
+  showSection: 'settings:showSection',
 } as const;

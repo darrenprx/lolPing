@@ -2,6 +2,9 @@ import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
 import type { Platform } from './platform';
+import { isTagColor } from './roomColors';
+import { parseRoomCode } from './roomCode';
+import { sanitizeName } from './roomProtocol';
 import { isValidWheel } from './wheelLayout';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
@@ -30,6 +33,23 @@ export interface Settings {
   tickSound: boolean;
   launchAtStartup: boolean;
   language: LanguagePref;
+  /** Shown under your pings on other people's screens. */
+  displayName: string;
+  /** Index into TAG_COLORS. */
+  tagColor: number;
+  /** Pings per second accepted from each room member; 0 = unlimited. */
+  incomingPingLimit: number;
+  allowInternet: boolean;
+  rejoinRoom: boolean;
+  /** Canonical code of the room to rejoin on launch. */
+  lastRoomCode: string | null;
+  roomMuted: boolean;
+}
+
+/** Per-machine defaults for the room profile: the OS username and a random tag colour. */
+export interface Identity {
+  name: string;
+  color: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +68,13 @@ export const DEFAULT_SETTINGS: Settings = {
   tickSound: true,
   launchAtStartup: false,
   language: 'auto',
+  displayName: 'Player',
+  tagColor: 0,
+  incomingPingLimit: 5,
+  allowInternet: true,
+  rejoinRoom: true,
+  lastRoomCode: null,
+  roomMuted: false,
 };
 
 export const LIMITS = {
@@ -55,10 +82,11 @@ export const LIMITS = {
   pingSizePx: { min: 60, max: 220, step: 1 },
   pingDurationS: { min: 1, max: 8, step: 0.1 },
   volume: { min: 0, max: 100, step: 1 },
+  incomingPingLimit: { min: 0, max: 20, step: 1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup';
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -90,9 +118,18 @@ function hotkey(raw: unknown): Hotkey {
   return { ...DEFAULT_SETTINGS.toggleHotkey };
 }
 
+function roomCode(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const parsed = parseRoomCode(raw);
+  return parsed.ok ? parsed.code : null;
+}
+
+const DEFAULT_IDENTITY: Identity = { name: DEFAULT_SETTINGS.displayName, color: DEFAULT_SETTINGS.tagColor };
+
 /** Turns anything (parsed JSON, IPC payloads) into a complete, valid Settings object for `platform`. */
-export function normalizeSettings(raw: unknown, platform: Platform = 'win'): Settings {
+export function normalizeSettings(raw: unknown, platform: Platform = 'win', identity: Identity = DEFAULT_IDENTITY): Settings {
   const r = isObj(raw) ? raw : {};
+  const fallbackName = sanitizeName(identity.name);
   return {
     version: 1,
     enabledOnStart: bool(r.enabledOnStart, 'enabledOnStart'),
@@ -109,11 +146,18 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win'): Set
     tickSound: bool(r.tickSound, 'tickSound'),
     launchAtStartup: bool(r.launchAtStartup, 'launchAtStartup'),
     language: (LANGUAGE_PREFS as readonly unknown[]).includes(r.language) ? (r.language as LanguagePref) : DEFAULT_SETTINGS.language,
+    displayName: typeof r.displayName === 'string' ? sanitizeName(r.displayName, fallbackName) : fallbackName,
+    tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
+    incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
+    allowInternet: bool(r.allowInternet, 'allowInternet'),
+    rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
+    lastRoomCode: roomCode(r.lastRoomCode),
+    roomMuted: bool(r.roomMuted, 'roomMuted'),
   };
 }
 
-export function mergeSettings(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): Settings {
-  return normalizeSettings({ ...current, ...patch }, platform);
+export function mergeSettings(current: Settings, patch: Partial<Settings>, platform: Platform = 'win', identity?: Identity): Settings {
+  return normalizeSettings({ ...current, ...patch }, platform, identity);
 }
 
 type KeyTrigger = Exclude<NamedTrigger, 'mouse4' | 'mouse5'>;

@@ -74,6 +74,21 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 
 Settings are saved in `%APPDATA%\lolPing\settings.json` on Windows and `~/Library/Application Support/lolPing/settings.json` on a Mac.
 
+## Ping with friends (rooms)
+
+Join a room and everyone in it sees your pings on their own screen, at the same spot (scaled to their resolution), with your name under them. Their pings show up on yours. It works between Windows and Mac.
+
+1. One person opens **Settings → Room** (or the tray menu → **Room**) and clicks **Create room**.
+2. They copy the code, such as `PING-7KQ4M-2HXTR`, and send it to friends.
+3. Each friend copies it and clicks **Join from clipboard** in the tray menu, or pastes it into the Room page and clicks **Join**.
+
+- Rooms work on the same local network. The first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
+- Friends somewhere else can join through a virtual LAN that carries broadcast, such as [ZeroTier](https://www.zerotier.com) or Radmin VPN. Tailscale doesn't carry broadcast, so rooms can't find each other over it. Joining over the internet without a VPN is planned.
+- A ping lands on the display with the same number (1 is the primary display), or on display 1.
+- **Mute room**, muting one person, and an **Incoming ping limit** (up to Unlimited) keep the spam under control. Pausing lolPing with the shortcut pauses room pings too.
+- A room holds up to 8 people. Leave and create a new room to get rid of someone.
+- **Privacy:** pings are end-to-end encrypted with a key made from the room code and go directly between devices. Nothing passes through a server. People in the room can see your IP address.
+
 ## Known limitations
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
@@ -106,6 +121,7 @@ npm run dev
 | `npm run dist:mac` | Builds the Mac disk image into `release/` (on a Mac) |
 | `npm run dev:site` | Serves a browser demo of the wheel (`site/`) |
 | `npm run media` | Re-records `docs/media/demo.gif` and `docs/media/og.png` from that demo (needs ffmpeg) |
+| `node tools/room-peer/run.mjs <code>` | Joins a room as a fake member that pings at random, to try rooms with one computer (see [`tools/room-peer`](tools/room-peer)) |
 
 ### Releasing
 
@@ -115,6 +131,7 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 
 - **Input:** [`native/hook-helper`](native/hook-helper) is a small C++ process that owns the low-level mouse and keyboard hooks on Windows, or an event tap on macOS. It swallows the Alt + drag so the app underneath never sees it, and talks to Electron in JSON lines over stdin and stdout.
 - **Display:** Electron draws the wheel and pings in one transparent, click-through, always-on-top window per monitor ([`src/renderer/overlay`](src/renderer/overlay)), and plays the sounds through Web Audio.
+- **Rooms:** [`src/main/roomManager.ts`](src/main/roomManager.ts) keeps the room's members and encrypts every message (AES-256-GCM, key from scrypt over the room code). [`src/main/lanTransport.ts`](src/main/lanTransport.ts) carries the encrypted packets over UDP on the local network.
 - **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows, restyled like System Settings on macOS.
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.
 - **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths. [docs/design-macos.md](docs/design-macos.md) covers the Mac port.

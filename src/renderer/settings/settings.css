@@ -75,3 +75,26 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.permission .lbl { padding: 12px 0; }
 .card.permission ol { margin: 6px 0 12px; padding-left: 18px; }
 .card.permission .actions { display: flex; gap: 8px; }
+/* Room */
+.swatches { display: flex; gap: 6px; }
+.swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid transparent; outline-offset: 1px; cursor: pointer; }
+.swatch.sel { border-color: var(--colorNeutralForeground1); }
+.swatch:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
+.card.roomJoin { flex-wrap: wrap; }
+.card.roomJoin .lbl { min-width: 220px; }
+.card.roomJoin .desc + .desc { margin-top: 4px; }
+.roomError { flex-basis: 100%; padding-left: 40px; font-size: 12px; color: #ff9c48; }
+.roomCode { font: 600 20px/28px "Cascadia Mono", Consolas, "SF Mono", monospace; letter-spacing: 1px; user-select: text; }
+.card.members { display: block; padding: 6px 20px; }
+.card.members:hover { background: var(--card); }
+.member { display: flex; align-items: center; gap: 10px; min-height: 40px; border-bottom: 1px solid var(--stroke); }
+.member:last-of-type { border-bottom: 0; }
+.tagDot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.memberName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.warnText { color: #ff9c48; }
+.badge { flex: none; font-size: 11px; line-height: 18px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--colorNeutralStroke1); color: var(--text3); white-space: nowrap; }
+.badge.lan, .badge.internet { color: #4caf50; border-color: rgba(76, 175, 80, .5); }
+.badge.unreachable, .badge.bad { color: #ff9c48; border-color: #ff9c48; }
+.roomWaiting { padding: 8px 0 10px 20px; }
+.displays { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.roomNote { margin: 8px 2px 0; }

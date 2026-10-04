@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MOD } from '../../src/shared/keys';
+import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
   DEFAULT_SETTINGS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings, triggerLabel,
 } from '../../src/shared/settings';
@@ -78,6 +79,48 @@ describe('normalizeSettings', () => {
 
   it('does not share the default hotkey object', () => {
     expect(normalizeSettings(undefined).toggleHotkey).not.toBe(DEFAULT_SETTINGS.toggleHotkey);
+  });
+});
+
+describe('room settings', () => {
+  const identity = { name: 'darren', color: 5 };
+
+  it('fills missing room keys from the identity and defaults', () => {
+    const s = normalizeSettings({}, 'win', identity);
+    expect(s).toMatchObject({
+      displayName: 'darren', tagColor: 5, incomingPingLimit: 5, allowInternet: true, rejoinRoom: true,
+      lastRoomCode: null, roomMuted: false,
+    });
+  });
+
+  it('defaults to Player and colour 0 without an identity', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ displayName: 'Player', tagColor: 0 });
+  });
+
+  it('clamps the incoming ping limit, 0 meaning unlimited', () => {
+    expect(normalizeSettings({ incomingPingLimit: 0 }).incomingPingLimit).toBe(0);
+    expect(normalizeSettings({ incomingPingLimit: 99 }).incomingPingLimit).toBe(20);
+    expect(normalizeSettings({ incomingPingLimit: -3 }).incomingPingLimit).toBe(0);
+    expect(normalizeSettings({ incomingPingLimit: 'x' }).incomingPingLimit).toBe(5);
+  });
+
+  it('replaces an invalid tag colour with the identity colour', () => {
+    expect(normalizeSettings({ tagColor: 9 }, 'win', identity).tagColor).toBe(5);
+    expect(normalizeSettings({ tagColor: 2 }, 'win', identity).tagColor).toBe(2);
+  });
+
+  it('sanitises the display name and falls back to the identity name', () => {
+    expect(normalizeSettings({ displayName: '‮  Alex  ' }, 'win', identity).displayName).toBe('Alex');
+    expect(normalizeSettings({ displayName: '   ' }, 'win', identity).displayName).toBe('darren');
+    expect(normalizeSettings({ displayName: 'x'.repeat(40) }).displayName).toHaveLength(16);
+    expect(mergeSettings(normalizeSettings({}, 'win', identity), { displayName: '' }, 'win', identity).displayName).toBe('darren');
+  });
+
+  it('keeps the last room code only when it is valid, in canonical form', () => {
+    expect(normalizeSettings({ lastRoomCode: 'nope' }).lastRoomCode).toBeNull();
+    expect(normalizeSettings({ lastRoomCode: 3 }).lastRoomCode).toBeNull();
+    const code = makeRoomCode(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]));
+    expect(normalizeSettings({ lastRoomCode: formatRoomCode(code) }).lastRoomCode).toBe(code);
   });
 });
 

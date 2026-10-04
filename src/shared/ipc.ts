@@ -1,11 +1,18 @@
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus } from './protocol';
+import type { JoinResult, RoomState } from './room';
 import type { OverlaySettings, Settings } from './settings';
 
 export interface Point {
   x: number;
   y: number;
+}
+
+/** The name tag under a room member's ping. `color` indexes TAG_COLORS. */
+export interface PingTag {
+  name: string;
+  color: number;
 }
 
 /** main → overlay renderer messages. Points are CSS pixels inside that overlay. */
@@ -15,7 +22,8 @@ export interface OverlayEvents {
   'wheel:move': Point;
   'wheel:release': Point;
   'wheel:cancel': null;
-  'ping:spawn': Point & { id: PingId };
+  /** `tag` marks a ping from another room member. */
+  'ping:spawn': Point & { id: PingId; tag?: PingTag };
   'toast:show': { title: string; body: string };
 }
 
@@ -27,6 +35,8 @@ export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
 export const OVERLAY_ASSETS = 'overlay:assets';
+/** overlay renderer → main: {id, x, y} of a ping the wheel just placed, so it can be shared with the room. */
+export const OVERLAY_PINGED = 'overlay:pinged';
 
 export interface AppStatus {
   enabled: boolean;
@@ -67,4 +77,16 @@ export interface SettingsApi {
   setCapturing(on: boolean): Promise<void>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
+  getRoom(): Promise<RoomState>;
+  onRoom(cb: (s: RoomState) => void): () => void;
+  createRoom(): Promise<void>;
+  /** Accepts a code or any text containing one. */
+  joinRoom(text: string): Promise<JoinResult>;
+  leaveRoom(): Promise<void>;
+  muteMember(peer: string, on: boolean): Promise<void>;
+  /** The room code on the clipboard, if there is one. The clipboard is read only when this is called. */
+  clipboardRoomCode(): Promise<string | null>;
+  copyRoomCode(): Promise<void>;
+  /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
+  onShowSection(cb: (id: string) => void): () => void;
 }

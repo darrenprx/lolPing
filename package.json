@@ -1,7 +1,7 @@
 {
   "name": "lolping",
   "productName": "lolPing",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "League of Legends style ping wheel for your Windows and macOS desktop",
   "author": "Danrui Meng (https://github.com/darrenprx)",
@@ -34,6 +34,7 @@
     "electron": "44.5.1",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
+    "esbuild": "0.25.12",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "5.9.3",
@@ -68,7 +69,8 @@
         { "from": "build", "to": ".", "filter": ["tray*Template*.png"] }
       ],
       "extendInfo": {
-        "NSAccessibilityUsageDescription": "lolPing reads the mouse and keyboard to open the ping wheel when you hold the trigger key and drag."
+        "NSAccessibilityUsageDescription": "lolPing reads the mouse and keyboard to open the ping wheel when you hold the trigger key and drag.",
+        "NSLocalNetworkUsageDescription": "lolPing finds the other people in your room on the local network and sends them your pings."
       }
     },
     "dmg": { "artifactName": "lolPing-${version}-arm64.dmg" }

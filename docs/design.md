@@ -1,13 +1,13 @@
 # lolPing — Design Spec
 
 **Date:** 2026-10-01
-**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1
+**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1; rooms over LAN added in v0.3.0 (§12)
 
 ## 1. Purpose
 
 A personal desktop toy for Windows that recreates League of Legends' ping wheel anywhere on the desktop. Hold the trigger key (Alt by default), drag, and a League-style ping wheel opens. Release on a slice to drop that ping, with its animation and its original sound, at the point where the wheel opened.
 
-- **Audience:** a single user on their own machine. There is no networking or multiplayer.
+- **Audience:** a single user on their own machine. Since v0.3.0, users on the same network can also join a room and see each other's pings (§12).
 - **Capture:** pings must appear in whole-screen capture (Discord "Screen", OBS Display Capture, screenshots). Single-window capture is not supported.
 - **Success criteria:**
   1. Alt+drag opens the wheel over any normal app without that app receiving the drag.
@@ -312,6 +312,20 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 
 ## 11. Out of scope for v1
 
-Multiplayer/sync, rebinding wheel slots, colourblind texture sets, per-ping volume, macOS/Linux, ping spam throttling, and a minimap.
+Multiplayer/sync (rooms arrived in v0.3.0, §12), rebinding wheel slots, colourblind texture sets, per-ping volume, macOS/Linux, ping spam throttling, and a minimap.
 
 macOS support was added in v0.2.0; see [design-macos.md](design-macos.md).
+
+## 12. Rooms (v0.3.0)
+
+Full design: [superpowers/specs/2026-10-04-room-ping-sharing-design.md](superpowers/specs/2026-10-04-room-ping-sharing-design.md). In short:
+
+- **Model:** a room is a code, `PING-XXXXX-XXXXX` (Crockford base32, 9 random characters + a Luhn mod 32 check character, `src/shared/roomCode.ts`). Parsing ranks candidates and never glues neighbouring words onto a code; clipboard reads are strict. Every finished ping (wheel or trigger+click, never a settings preview) goes to every member; up to 8 members.
+- **Crypto (`src/main/roomCrypto.ts`):** scrypt(code) → HKDF → AES-256-GCM. Each packet is `[0x01][nonce][ciphertext+tag]`, at most 1200 bytes. Keys never leave the main process.
+- **Messages (`src/shared/roomProtocol.ts`):** `presence` (name, tag colour, `on`/`paused`/`muted`, protocol and app version), `ping` (ping id, display number, x/y as 0–1 fractions), `bye`. Everything is validated field by field; names are stripped of control and bidi characters and shown with `textContent`. A per-peer sequence window plus a ±10 min timestamp check rejects replays. Packets outside that window never touch the member list; they only raise a "clock more than 10 minutes off" hint. The peer ID is random per join, because a peer that said bye stays rejected for the receiver's session.
+- **RoomManager (`src/main/roomManager.ts`):** members, path choice, the incoming rate limit (per member, user setting 1–20/s or unlimited), mute (room and per person), timeouts (LAN path alive 6 s, member dropped after 15 s), "room is full" after a 3 s settle. It only talks to the network through the `Transport` interface (`src/main/transport.ts`).
+- **LAN transport (`src/main/lanTransport.ts`):** one UDP socket on port 47474. Presence is broadcast every 2 s to 255.255.255.255 and each interface's directed broadcast; pings go unicast to the address a member's packets come from. Before decryption, a flood guard allows 100 packets/s per source IP and 800/s in total, and tracks at most 1024 addresses. The socket is re-bound after sleep.
+- **Mapping:** displays are numbered #1 = primary, then left→right, top→bottom (`src/main/displayNumbers.ts`). A ping lands on the receiver's display with the same number, or #1, at the same fraction of its size. `resolveTarget` is the hook a later share-window mode replaces.
+- **Overlay:** wheel pings are reported back to main (`overlay:pinged`); remote pings carry a name tag. Safety ceiling: 60 pings on screen, 8 overlapping sounds.
+- **Internet rooms** (WebRTC with signaling over public Nostr relays, no server of our own) are milestone 2 and share everything above the transport.
+

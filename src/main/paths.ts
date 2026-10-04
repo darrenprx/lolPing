@@ -27,7 +27,9 @@ export const assetPath = (...parts: string[]): string =>
 
 export const settingsDir = (): string => join(app.getPath('appData'), 'lolPing');
 
-export function loadPage(win: BrowserWindow, page: Page): Promise<void> {
+/** `hash` (without #) is passed to the page, e.g. the settings section to open at. */
+export function loadPage(win: BrowserWindow, page: Page, hash = ''): Promise<void> {
   const devUrl = process.env.ELECTRON_RENDERER_URL;
-  return devUrl ? win.loadURL(`${devUrl}/${page}/index.html`) : win.loadURL(`${APP_SCHEME}://app/${page}/index.html`);
+  const suffix = hash ? `#${hash}` : '';
+  return devUrl ? win.loadURL(`${devUrl}/${page}/index.html${suffix}`) : win.loadURL(`${APP_SCHEME}://app/${page}/index.html${suffix}`);
 }

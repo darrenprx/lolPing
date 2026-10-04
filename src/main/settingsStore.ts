@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Platform } from '../shared/platform';
-import { mergeSettings, normalizeSettings, type Settings } from '../shared/settings';
+import { mergeSettings, normalizeSettings, type Identity, type Settings } from '../shared/settings';
 
 /** Windows can briefly lock the target (antivirus, indexer), failing rename with one of these codes. */
 const TRANSIENT_RENAME_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', 'EACCES']);
@@ -33,20 +33,31 @@ export class SettingsStore extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
   private writing: Promise<void> = Promise.resolve();
 
-  constructor(readonly dir: string, private readonly debounceMs = 300, private readonly platform: Platform = 'win') {
+  /** `identity` supplies this machine's defaults for the room name and tag colour. */
+  constructor(
+    readonly dir: string,
+    private readonly debounceMs = 300,
+    private readonly platform: Platform = 'win',
+    private readonly identity?: Identity,
+  ) {
     super();
     this.file = join(dir, 'settings.json');
-    this.current = normalizeSettings(undefined, platform);
+    this.current = normalizeSettings(undefined, platform, identity);
   }
 
   load(): Settings {
     this.firstRun = !existsSync(this.file);
     if (this.firstRun) {
-      this.current = normalizeSettings(undefined, this.platform);
+      this.current = normalizeSettings(undefined, this.platform, this.identity);
+      this.scheduleSave(); // keeps this machine's random tag colour from changing on the next launch
       return this.current;
     }
     try {
-      this.current = normalizeSettings(JSON.parse(readFileSync(this.file, 'utf8')), this.platform);
+      const raw: unknown = JSON.parse(readFileSync(this.file, 'utf8'));
+      this.current = normalizeSettings(raw, this.platform, this.identity);
+      // A file from an older version lacks the newer keys: write the filled-in values once.
+      const stored = typeof raw === 'object' && raw !== null ? raw : {};
+      if (Object.keys(this.current).some((k) => !(k in stored))) this.scheduleSave();
     } catch (err) {
       let backup = 'it was backed up to settings.bak.json';
       try {
@@ -55,7 +66,7 @@ export class SettingsStore extends EventEmitter {
         backup = `it could not be backed up to settings.bak.json (${(copyErr as Error).message})`;
       }
       this.problems.push(`settings.json could not be read (${(err as Error).message}); ${backup} and defaults were restored.`);
-      this.current = normalizeSettings(undefined, this.platform);
+      this.current = normalizeSettings(undefined, this.platform, this.identity);
     }
     return this.current;
   }
@@ -65,7 +76,7 @@ export class SettingsStore extends EventEmitter {
   }
 
   update(patch: Partial<Settings>): Settings {
-    this.current = mergeSettings(this.current, patch, this.platform);
+    this.current = mergeSettings(this.current, patch, this.platform, this.identity);
     this.emit('change', this.current);
     this.scheduleSave();
     return this.current;

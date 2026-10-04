@@ -2,7 +2,7 @@ import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@
 import {
   ArrowMove24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
-  Timer24Regular, Cursor24Regular, LocalLanguage24Regular,
+  Timer24Regular, Cursor24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LANGUAGE_NAMES, LANGUAGE_PREFS, resolveLang, strings, type LanguagePref, type Strings } from '../../shared/i18n';
@@ -14,6 +14,7 @@ import { api } from './api';
 import { AboutSection } from './components/AboutSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
+import { RoomSection } from './components/RoomSection';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
@@ -32,6 +33,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
   { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
+  { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
 
@@ -77,6 +79,13 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
+
+  useEffect(() => {
+    const show = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const initial = location.hash.slice(1);
+    if (initial) requestAnimationFrame(() => show(initial));
+    return api.onShowSection(show);
+  }, []);
 
   const onScroll = () => {
     const main = mainRef.current;
@@ -160,6 +169,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <div className="section" id="wheel">{t.navWheel}</div>
         <WheelEditor wheel={s.wheel} clickPingId={s.clickPingId} clickPingOn={s.clickPing} trigger={trigger}
           onChange={(patch) => void update(patch)} />
+
+        <div className="section" id="room">{t.navRoom}</div>
+        <RoomSection settings={s} update={update} />
 
         <div className="section" id="app">{t.navApp}</div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
