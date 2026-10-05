@@ -50,6 +50,7 @@ function broadcastAddresses(): string[] {
  */
 export class LanTransport extends EventEmitter implements Transport {
   readonly kind = 'lan';
+  readonly shared = false;
   status: TransportStatus = 'off';
   private sock: Sock | null = null;
   /** Resolves once the previous socket has released the port. */

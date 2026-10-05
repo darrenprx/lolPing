@@ -6,8 +6,8 @@ describe('deriveRoomKeys', () => {
   it('matches the known-answer vectors', async () => {
     const k = await deriveRoomKeys('0000000000');
     expect(k.msgKey.toString('hex')).toBe('2b8ef59047332409e1662fe75774f9383fcd16b655fcb3db975f0e80ad2043da');
-    expect(k.sigRoomId).toBe('0381782f350540d4639958bed594ae3b2b1a3d11683146e542edb34db89b6910');
-    expect(k.sigPassword).toBe('dbc5ba2fcbcb257696a7d5f883ec1af4debabf392e8a1cc56ae2e02eaca4c7c1');
+    expect(k.relayTopic).toBe('0381782f350540d4639958bed594ae3b2b1a3d11683146e542edb34db89b6910');
+    expect(Object.keys(k).sort()).toEqual(['msgKey', 'relayTopic']);
   });
 
   it('gives different codes different keys', async () => {

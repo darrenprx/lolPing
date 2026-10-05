@@ -12,12 +12,20 @@ import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const MAX_MEMBERS = 8;
 const SETTLE_MS = 3000;
+/** Relays can take a while to answer: the "room full" check never waits longer than this after joining. */
+const SETTLE_CAP_MS = 15_000;
 const TICK_MS = 1000;
 /** How often presence is re-announced on each transport. */
 const PRESENCE_MS: Record<Transport['kind'], number> = { lan: 2000, internet: 10_000 };
 /** How long a path counts as alive after the last packet over it. */
-const ALIVE_MS: Record<Transport['kind'], number> = { lan: 6000, internet: 15_000 };
-const DROP_MS = 15_000;
+const ALIVE_MS: Record<Transport['kind'], number> = { lan: 6000, internet: 25_000 };
+/** Silence before a member is dropped: longer once it was heard over the internet, where presence comes every 10 s. */
+const DROP_MS: Record<Transport['kind'], number> = { lan: 15_000, internet: 30_000 };
+/** Pings over relays, per sender: one publish reaches everyone, and public relays only tolerate so much (tools/relay-probe). */
+export const RELAY_PING_RATE = 5;
+export const RELAY_PING_BURST = 10;
+/** Presence asked for on a shared transport (a change, a new link, a new member): at most this often. */
+const SHARED_PRESENCE_MS = 1000;
 const UNREACHABLE_MS = 20_000;
 const LONELY_MS = 20_000;
 const STALE_STRIKES = 3;
@@ -59,6 +67,8 @@ interface Member {
   needsUpdate: boolean;
   muted: boolean;
   firstSeen: number;
+  /** Ever heard over the internet: dropped after the longer silence. */
+  viaInternet: boolean;
   /** Per transport kind: the address it was last heard from, and when. */
   paths: Partial<Record<Transport['kind'], { key: PeerKey; seenAt: number }>>;
 }
@@ -94,20 +104,33 @@ export class RoomManager extends EventEmitter {
   /** When we last woke from sleep: members count as heard then, so they get a fresh grace period. */
   private wokeAt = 0;
   private settle: NodeJS.Timeout | null = null;
+  /** The settle timer has been cut down from the cap to SETTLE_MS. */
+  private settleShort = false;
+  private joinedAt = 0;
   private lastState = '';
+  private internetAllowed = true;
+  /** The transports running for this room: all of them, except the internet one while it isn't allowed. */
+  private readonly active = new Set<Transport>();
+  private readonly relayCap: RateLimiter;
+  /** A presence waiting out SHARED_PRESENCE_MS, per shared transport. */
+  private readonly sharedTimers = new Map<Transport, NodeJS.Timeout>();
 
   constructor(private readonly deps: RoomDeps) {
     super();
     this.self = toHex(deps.randomBytes(8));
     this.guard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
+    this.relayCap = new RateLimiter(deps.now);
     for (const t of deps.transports) {
       t.on('packet', (peer: PeerKey, packet: Uint8Array) => this.onPacket(t, peer, packet));
       t.on('peerGone', (peer: PeerKey) => this.onPeerGone(t, peer));
       t.on('status', (s: TransportStatus) => {
-        if (s === 'ok') this.announce(t); // a fresh socket: tell everyone now rather than at the next 2 s round
+        // A fresh socket: tell everyone now rather than at the next round. Relays say so per relay, with linkUp.
+        if (s === 'ok' && !t.shared) this.announce(t);
+        this.checkSettle();
         this.emitState();
       });
+      t.on('linkUp', () => this.announce(t));
     }
   }
 
@@ -136,10 +159,14 @@ export class RoomManager extends EventEmitter {
   sendPing(ping: PingId, shared: { d: number; x: number; y: number }): void {
     if (this.phase === 'idle' || !this.keys || this.paused) return;
     const packet = this.seal({ t: 'ping', ping, ...shared });
+    const sharedRoutes = new Set<Transport>();
     for (const m of this.members.values()) {
       const route = this.route(m);
-      if (route) route.transport.sendTo(route.key, packet);
+      if (!route) continue;
+      if (route.transport.shared) sharedRoutes.add(route.transport);
+      else route.transport.sendTo(route.key, packet);
     }
+    for (const t of sharedRoutes) if (this.relayCap.allow(t.kind, RELAY_PING_RATE, RELAY_PING_BURST)) t.broadcast(packet);
   }
 
   setStatusFlags(f: { paused: boolean; roomMuted: boolean }): void {
@@ -157,6 +184,37 @@ export class RoomManager extends EventEmitter {
     this.emitState();
   }
 
+  /**
+   * "Allow internet connections". Turning it off mid-room sends no bye: a bye makes the others ignore our peer ID for
+   * their whole session, LAN included. Members only reachable over the internet time out instead.
+   */
+  setInternetAllowed(on: boolean): void {
+    if (on === this.internetAllowed) return;
+    this.internetAllowed = on;
+    const keys = this.keys;
+    if (!keys) return; // idle, or still deriving keys: start() reads the flag
+    for (const t of this.deps.transports) {
+      if (t.kind !== 'internet') continue;
+      if (on) {
+        this.active.add(t);
+        t.start(keys);
+        this.announce(t);
+        continue;
+      }
+      this.active.delete(t);
+      this.cancelShared(t);
+      t.stop();
+      for (const m of this.members.values()) {
+        const p = m.paths.internet;
+        if (!p) continue;
+        this.answered.delete(p.key);
+        delete m.paths.internet;
+      }
+    }
+    this.checkSettle();
+    this.emitState();
+  }
+
   /** Name or colour changed: tell everyone now. */
   profileChanged(): void {
     this.announce();
@@ -166,7 +224,7 @@ export class RoomManager extends EventEmitter {
   state(): RoomStateCore {
     const now = this.deps.now();
     const status = (kind: Transport['kind']): TransportStatus =>
-      this.phase === 'idle' ? 'off' : (this.deps.transports.find((t) => t.kind === kind)?.status ?? 'off');
+      this.phase === 'idle' ? 'off' : ([...this.active].find((t) => t.kind === kind)?.status ?? 'off');
     const p = this.deps.profile();
     const members: RoomMember[] = this.phase === 'idle' ? [] : [
       { peer: this.self, name: p.name, color: p.color, path: 'lan', status: this.status(), needsUpdate: false, muted: false, self: true },
@@ -206,13 +264,28 @@ export class RoomManager extends EventEmitter {
     }
     if (session !== this.session) return true; // left while deriving
     this.keys = keys;
-    for (const t of this.deps.transports) t.start(keys);
+    this.joinedAt = this.lastTick = this.deps.now();
+    this.settleShort = false;
+    this.settle = setTimeout(() => this.settled(), SETTLE_CAP_MS);
+    for (const t of this.deps.transports) if (t.kind !== 'internet' || this.internetAllowed) this.active.add(t);
+    for (const t of this.active) t.start(keys);
     this.announce();
-    this.lastTick = this.deps.now();
     this.ticker = setInterval(() => this.tick(), TICK_MS);
-    this.settle = setTimeout(() => this.settled(), SETTLE_MS);
+    this.checkSettle();
     this.emitState();
     return true;
+  }
+
+  /**
+   * "Room full" is judged 3 s after the relays have answered or given up, so members only reachable over the
+   * internet count too; never later than SETTLE_CAP_MS after joining.
+   */
+  private checkSettle(): void {
+    if (this.phase !== 'joining' || !this.settle || this.settleShort) return;
+    if ([...this.active].some((t) => t.shared && (t.status === 'off' || t.status === 'starting'))) return;
+    this.settleShort = true;
+    clearTimeout(this.settle);
+    this.settle = setTimeout(() => this.settled(), Math.min(SETTLE_MS, this.joinedAt + SETTLE_CAP_MS - this.deps.now()));
   }
 
   private settled(): void {
@@ -232,9 +305,11 @@ export class RoomManager extends EventEmitter {
     this.session++;
     if (this.keys) {
       const bye = this.seal({ t: 'bye' });
-      for (const t of this.deps.transports) this.spread(t, bye);
-      for (const t of this.deps.transports) t.stop();
+      for (const t of this.active) this.spread(t, bye);
+      for (const t of this.active) t.stop();
     }
+    this.active.clear();
+    for (const t of [...this.sharedTimers.keys()]) this.cancelShared(t);
     if (this.ticker) clearInterval(this.ticker);
     if (this.settle) clearTimeout(this.settle);
     this.ticker = this.settle = null;
@@ -255,10 +330,10 @@ export class RoomManager extends EventEmitter {
     for (const [peer, s] of this.staleStrikes) if (now - s.at >= SKEW_HINT_MS) this.staleStrikes.delete(peer);
     for (const m of [...this.members.values()]) {
       const heard = Math.max(...Object.values(m.paths).map((p) => p.seenAt), m.firstSeen, this.wokeAt);
-      if (now - heard >= DROP_MS) this.remove(m, 'disconnected');
+      if (now - heard >= DROP_MS[m.viaInternet ? 'internet' : 'lan']) this.remove(m, 'disconnected');
     }
-    for (const t of this.deps.transports) {
-      if (now - (this.lastPresence[t.kind] ?? 0) >= PRESENCE_MS[t.kind]) this.announce(t);
+    for (const t of this.active) {
+      if (now - (this.lastPresence[t.kind] ?? 0) >= PRESENCE_MS[t.kind]) this.sendPresence(t);
     }
     this.emitState();
   }
@@ -296,7 +371,10 @@ export class RoomManager extends EventEmitter {
     let m = this.members.get(msg.peer);
     const isNew = !m;
     if (!m) {
-      m = { peer: msg.peer, name: msg.name, color: msg.color, status: msg.status, needsUpdate: false, muted: false, firstSeen: this.deps.now(), paths: {} };
+      m = {
+        peer: msg.peer, name: msg.name, color: msg.color, status: msg.status, needsUpdate: false, muted: false,
+        firstSeen: this.deps.now(), viaInternet: false, paths: {},
+      };
       this.members.set(m.peer, m);
       this.aloneSince = null;
     }
@@ -307,7 +385,8 @@ export class RoomManager extends EventEmitter {
     this.heard(m, t, key);
     if (!this.answered.has(key)) {
       this.answered.add(key);
-      t.sendTo(key, this.presencePacket());
+      if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
+      else t.sendTo(key, this.presencePacket());
     }
     if (isNew && this.phase === 'active') this.emit('toast', { kind: 'joined', name: m.name } satisfies RoomToast);
     this.emitState();
@@ -332,6 +411,7 @@ export class RoomManager extends EventEmitter {
 
   private heard(m: Member, t: Transport, key: PeerKey): void {
     m.paths[t.kind] = { key, seenAt: this.deps.now() };
+    if (t.kind === 'internet') m.viaInternet = true;
   }
 
   private remove(m: Member, kind: 'left' | 'disconnected'): void {
@@ -348,7 +428,7 @@ export class RoomManager extends EventEmitter {
     const now = this.deps.now();
     for (const kind of ['lan', 'internet'] as const) {
       const p = m.paths[kind];
-      const transport = this.deps.transports.find((t) => t.kind === kind);
+      const transport = [...this.active].find((t) => t.kind === kind);
       if (p && transport && now - p.seenAt < ALIVE_MS[kind]) return { transport, key: p.key };
     }
     return null;
@@ -369,14 +449,39 @@ export class RoomManager extends EventEmitter {
     return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status() });
   }
 
-  /** Sends presence on one transport, or all of them. */
+  /**
+   * Presence on one transport, or on every running one. A shared transport sends at most once a second: the first
+   * request goes out at once, later ones in that second become one presence at its end, with the latest state.
+   */
   private announce(only?: Transport): void {
     if (!this.keys) return;
-    const packet = this.presencePacket();
-    for (const t of only ? [only] : this.deps.transports) {
-      this.spread(t, packet);
-      this.lastPresence[t.kind] = this.deps.now();
+    for (const t of only ? [only] : [...this.active]) {
+      if (!this.active.has(t)) continue;
+      if (!t.shared) {
+        this.sendPresence(t);
+        continue;
+      }
+      const wait = (this.lastPresence[t.kind] ?? -Infinity) + SHARED_PRESENCE_MS - this.deps.now();
+      if (wait <= 0) this.sendPresence(t);
+      else if (!this.sharedTimers.has(t)) {
+        this.sharedTimers.set(t, setTimeout(() => {
+          this.sharedTimers.delete(t);
+          if (this.keys && this.active.has(t)) this.sendPresence(t);
+        }, wait));
+      }
     }
+  }
+
+  private sendPresence(t: Transport): void {
+    this.cancelShared(t);
+    this.spread(t, this.presencePacket());
+    this.lastPresence[t.kind] = this.deps.now();
+  }
+
+  private cancelShared(t: Transport): void {
+    const timer = this.sharedTimers.get(t);
+    if (timer) clearTimeout(timer);
+    this.sharedTimers.delete(t);
   }
 
   /**
@@ -385,7 +490,7 @@ export class RoomManager extends EventEmitter {
    */
   private spread(t: Transport, packet: Uint8Array): void {
     t.broadcast(packet);
-    if (t.kind !== 'lan') return; // an internet broadcast already goes to each connected peer
+    if (t.shared) return; // one send already reached everyone
     for (const m of this.members.values()) {
       const key = m.paths.lan?.key;
       if (key) t.sendTo(key, packet);

@@ -28,6 +28,15 @@ describe('RateLimiter', () => {
     for (let i = 0; i < 1000; i++) expect(rl.allow('a', 0)).toBe(true);
   });
 
+  it('allows a burst bigger than the rate when asked', () => {
+    const { rl, advance } = limiter();
+    for (let i = 0; i < 10; i++) expect(rl.allow('a', 5, 10)).toBe(true);
+    expect(rl.allow('a', 5, 10)).toBe(false);
+    advance(200);
+    expect(rl.allow('a', 5, 10)).toBe(true);
+    expect(rl.allow('a', 5, 10)).toBe(false);
+  });
+
   it('keeps keys apart, and forget resets one', () => {
     const { rl } = limiter();
     expect(rl.allow('a', 1)).toBe(true);

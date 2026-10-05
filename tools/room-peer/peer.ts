@@ -3,7 +3,10 @@
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { LanTransport } from '../../src/main/lanTransport';
+import { RelayTransport } from '../../src/main/relayTransport';
 import { deriveRoomKeys, open, seal } from '../../src/main/roomCrypto';
+import { RELAY_PING_RATE } from '../../src/main/roomManager';
+import type { Transport } from '../../src/main/transport';
 import { ALL_PINGS } from '../../src/shared/pings';
 import { parseRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, PROTOCOL_VERSION, type RoomMessage } from '../../src/shared/roomProtocol';
@@ -17,12 +20,13 @@ const { values, positionals } = parseArgs({
     host: { type: 'string', default: '127.0.0.1' }, // where lolPing runs
     port: { type: 'string', default: '47475' }, // this peer's own port (lolPing itself uses 47474)
     display: { type: 'string', default: '1' },
+    relay: { type: 'boolean', default: false }, // through the public relays instead of the LAN
   },
 });
 
 const parsed = parseRoomCode(positionals.join(' '));
 if (!parsed.ok) {
-  console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1]');
+  console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1] [--relay]');
   process.exit(1);
 }
 
@@ -34,9 +38,12 @@ const packet = (body: Record<string, unknown>): Buffer =>
 const presence = (): Buffer =>
   packet({ t: 'presence', proto: PROTOCOL_VERSION, app: 'room-peer', name: values.name, color: Number(values.color), status: 'on' });
 
-const lan = new LanTransport({ port: Number(values.port), seeds: [{ host: values.host!, port: 47474 }] });
-lan.on('status', (s) => console.log(`[lan] ${s}`));
-lan.on('packet', (from: string, data: Uint8Array) => {
+const transport: Transport = values.relay
+  ? new RelayTransport()
+  : new LanTransport({ port: Number(values.port), seeds: [{ host: values.host!, port: 47474 }] });
+const label = values.relay ? 'relay' : 'lan';
+transport.on('status', (s) => console.log(`[${label}] ${s}`));
+transport.on('packet', (from: string, data: Uint8Array) => {
   const plain = open(keys.msgKey, data);
   const msg = plain && decodeMessage(plain);
   if (!msg || msg.peer === peer) return;
@@ -44,21 +51,27 @@ lan.on('packet', (from: string, data: Uint8Array) => {
   else if (msg.t === 'presence') console.log(`[in] presence: ${msg.name} (${msg.status})`);
   else console.log(`[in] bye from ${msg.peer}`);
 });
-lan.start(keys);
+transport.start(keys);
 
-setInterval(() => lan.broadcast(presence()), 2000);
-lan.once('status', () => lan.broadcast(presence()));
-const rate = Number(values.rate);
+setInterval(() => transport.broadcast(presence()), values.relay ? 10_000 : 2000);
+if (values.relay) transport.on('linkUp', () => transport.broadcast(presence())); // each relay as it comes up
+else transport.once('status', () => transport.broadcast(presence()));
+let rate = Number(values.rate);
+if (values.relay && rate > RELAY_PING_RATE) {
+  console.log(`[relay] --rate ${rate} is more than the relays should get; using ${RELAY_PING_RATE}`);
+  rate = RELAY_PING_RATE;
+}
 if (rate > 0) {
   setInterval(() => {
     const ping = ALL_PINGS[Math.floor(Math.random() * ALL_PINGS.length)].id;
     const [x, y] = [0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.8];
-    lan.broadcast(packet({ t: 'ping', ping, d: Number(values.display), x, y }));
+    transport.broadcast(packet({ t: 'ping', ping, d: Number(values.display), x, y }));
     console.log(`[out] ${ping} at ${x.toFixed(2)}, ${y.toFixed(2)}`);
   }, 1000 / rate);
 }
-console.log(`room-peer "${values.name}" in room ${positionals.join(' ')} — Ctrl+C to leave`);
+console.log(`room-peer "${values.name}" in room ${positionals.join(' ')} over ${values.relay ? 'the relays' : 'the LAN'} — Ctrl+C to leave`);
 process.on('SIGINT', () => {
-  lan.broadcast(packet({ t: 'bye' }));
-  setTimeout(() => process.exit(0), 300);
+  transport.broadcast(packet({ t: 'bye' }));
+  transport.stop();
+  void transport.whenClosed().then(() => process.exit(0));
 });

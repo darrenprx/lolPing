@@ -11,9 +11,8 @@ const AAD = Buffer.from([FORMAT]);
 export interface RoomKeys {
   /** Encrypts every room message. Never leaves the main process. */
   msgKey: Buffer;
-  /** Signaling room ID and password for the internet transport (M2). */
-  sigRoomId: string;
-  sigPassword: string;
+  /** The relay topic: 64 hex characters that say nothing without the code. */
+  relayTopic: string;
 }
 
 /** Room code → keys. scrypt makes guessing a code from a relay topic impractical; HKDF gives each key one job. */
@@ -22,7 +21,8 @@ export function deriveRoomKeys(canonical: string): Promise<RoomKeys> {
     scrypt(canonical, 'lolping/room/v1', 32, { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (err, master) => {
       if (err) return reject(err);
       const sub = (info: string): Buffer => Buffer.from(hkdfSync('sha256', master, Buffer.alloc(0), info, 32));
-      resolve({ msgKey: sub('msg'), sigRoomId: sub('sig-room').toString('hex'), sigPassword: sub('sig-pw').toString('hex') });
+      // "sig-room" dates from a WebRTC design; kept so the keys, and the test vectors, stay the same.
+      resolve({ msgKey: sub('msg'), relayTopic: sub('sig-room').toString('hex') });
     });
   });
 }

@@ -1,15 +1,15 @@
-/** Token bucket per key: `perSecond` tokens, refilled continuously. Excess calls are refused, never queued. */
+/** Token bucket per key: `burst` tokens (one second's worth by default), refilled continuously at `perSecond`. Excess calls are refused, never queued. */
 export class RateLimiter {
   private readonly buckets = new Map<string, { tokens: number; at: number }>();
 
   constructor(private readonly now: () => number) {}
 
   /** `perSecond` 0 means unlimited. */
-  allow(key: string, perSecond: number): boolean {
+  allow(key: string, perSecond: number, burst = perSecond): boolean {
     if (perSecond <= 0) return true;
     const now = this.now();
-    const b = this.buckets.get(key) ?? { tokens: perSecond, at: now };
-    b.tokens = Math.min(perSecond, b.tokens + ((now - b.at) / 1000) * perSecond);
+    const b = this.buckets.get(key) ?? { tokens: burst, at: now };
+    b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * perSecond);
     b.at = now;
     this.buckets.set(key, b);
     if (b.tokens < 1) return false;

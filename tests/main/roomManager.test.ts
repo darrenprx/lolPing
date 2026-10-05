@@ -5,7 +5,7 @@ import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
-const KEYS: RoomKeys = { msgKey: Buffer.alloc(32, 1), sigRoomId: 'room', sigPassword: 'pw' };
+const KEYS: RoomKeys = { msgKey: Buffer.alloc(32, 1), relayTopic: 'room' };
 const CODE = makeRoomCode(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]));
 const SELF = 'abababababababab';
 
@@ -422,7 +422,7 @@ describe('two transports', () => {
     lan.sent = [];
     net.sent = [];
     both.sendPing('omw', { d: 1, x: 0, y: 0 });
-    expect([lan.sent.length, net.sent.map((s) => s.to)]).toEqual([0, ['net:x']]);
+    expect([lan.sent.length, net.sent.map((s) => s.to)]).toEqual([0, ['*']]); // relays: one send reaches everyone
     alex.presence();
     expect(both.state().members[1].path).toBe('lan');
   });
@@ -436,14 +436,199 @@ describe('two transports', () => {
     expect(got).toHaveLength(1);
   });
 
-  it('unicasts presence only on LAN (an internet broadcast already reaches each peer)', () => {
+  it('unicasts presence only on LAN (one relay send already reaches everyone)', () => {
     new Remote('1111111111111111', 'lan:a', lan).presence();
     net.deliver('net:x', new Remote('2222222222222222', 'net:x', lan).packet({ t: 'presence', proto: 1, app: '1', name: 'B', color: 1, status: 'on' }));
+    vi.advanceTimersByTime(1000); // relays: at most one presence a second
     lan.sent = [];
     net.sent = [];
     both.profileChanged();
     expect(lan.sent.map((s) => s.to).sort()).toEqual(['*', 'lan:a']);
     expect(net.sent.map((s) => s.to)).toEqual(['*']);
+  });
+});
+
+describe('internet over a shared transport', () => {
+  let net: FakeTransport;
+  let inet: RoomManager;
+  let gone: RoomToast[];
+  const make = (transports: FakeTransport[]): RoomManager => {
+    const r = new RoomManager({
+      transports, now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xef),
+      deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => profile,
+      resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
+    });
+    r.on('toast', (t: RoomToast) => gone.push(t));
+    return r;
+  };
+  const decode = (t: FakeTransport): RoomMessage[] => t.sent.map((s) => decodeMessage(open(KEYS.msgKey, s.packet)!)!);
+  const netPresence = (r: Remote, extra: Record<string, unknown> = {}): void =>
+    net.deliver(r.key, r.packet({ t: 'presence', proto: 1, app: '0.4.0', name: `P${r.peer[0]}`, color: 3, status: 'on', ...extra }));
+
+  beforeEach(() => {
+    net = new FakeTransport('internet');
+    gone = [];
+    inet = make([lan, net]);
+  });
+  afterEach(() => inet.quit());
+
+  async function joinNow(): Promise<void> {
+    await inet.join(CODE);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(inet.state().phase).toBe('active');
+  }
+
+  it('sends a ping once over a shared transport, however many members use it', async () => {
+    await joinNow();
+    netPresence(new Remote('1111111111111111', 'net:a', lan));
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    net.sent = [];
+    inet.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
+    expect(net.sent.map((s) => s.to)).toEqual(['*']);
+    expect(decode(net)[0]).toMatchObject({ t: 'ping', ping: 'omw' });
+  });
+
+  it('caps pings over a shared transport at 5/s with bursts of 10, while LAN members still get every ping', async () => {
+    await joinNow();
+    new Remote('1111111111111111', 'lan:a', lan).presence();
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    lan.sent = [];
+    net.sent = [];
+    for (let i = 0; i < 15; i++) inet.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
+    expect(lan.sent.filter((s) => s.to === 'lan:a')).toHaveLength(15);
+    expect(decode(net).filter((m) => m.t === 'ping')).toHaveLength(10);
+    net.sent = [];
+    vi.advanceTimersByTime(1000);
+    for (let i = 0; i < 15; i++) inet.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
+    expect(decode(net).filter((m) => m.t === 'ping')).toHaveLength(5);
+  });
+
+  it('never caps presence or bye over a shared transport', async () => {
+    await joinNow();
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    for (let i = 0; i < 20; i++) inet.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
+    vi.advanceTimersByTime(1000);
+    net.sent = [];
+    inet.setStatusFlags({ paused: false, roomMuted: true });
+    inet.leave();
+    expect(decode(net).map((m) => m.t)).toEqual(['presence', 'bye']);
+  });
+
+  it('answers linkUp and new members with presence at once, then at most once a second, the latest state winning', async () => {
+    await joinNow();
+    vi.advanceTimersByTime(1500);
+    net.sent = [];
+    net.linkUp();
+    expect(decode(net).map((m) => m.t)).toEqual(['presence']);
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    profile.name = 'Later';
+    inet.profileChanged();
+    expect(decode(net)).toHaveLength(1);
+    vi.advanceTimersByTime(999);
+    expect(decode(net)).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(decode(net).map((m) => m.t === 'presence' && m.name)).toEqual(['Me', 'Later']);
+  });
+
+  it('joining over relays only announces as soon as the first relay is live, not at the 10 s round', async () => {
+    const only = make([net]);
+    net.startStatus = 'starting';
+    await only.join(CODE);
+    vi.advanceTimersByTime(300);
+    net.sent = [];
+    net.linkUp();
+    vi.advanceTimersByTime(700);
+    expect(decode(net).map((m) => m.t)).toContain('presence');
+    only.quit();
+  });
+
+  it('settles 3 s after the internet transport leaves starting', async () => {
+    net.startStatus = 'starting';
+    await inet.join(CODE);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inet.state().phase).toBe('joining');
+    net.setStatus('ok');
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(inet.state().phase).toBe('joining');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(inet.state().phase).toBe('active');
+  });
+
+  it('settles at the 15 s cap when the internet never leaves starting', async () => {
+    net.startStatus = 'starting';
+    await inet.join(CODE);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(inet.state().phase).toBe('joining');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(inet.state().phase).toBe('active');
+  });
+
+  it('never settles later than the cap when the internet comes up late', async () => {
+    net.startStatus = 'starting';
+    await inet.join(CODE);
+    await vi.advanceTimersByTimeAsync(13_000);
+    net.setStatus('ok');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(inet.state().phase).toBe('active');
+  });
+
+  it('settles after 3 s when internet is not allowed', async () => {
+    inet.setInternetAllowed(false);
+    net.startStatus = 'starting';
+    await inet.join(CODE);
+    expect(net.starts).toBe(0);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(inet.state().phase).toBe('active');
+    expect(inet.state().internet).toBe('off');
+  });
+
+  it('keeps an internet path alive for 25 s and drops an internet member after 30 s', async () => {
+    await joinNow();
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    new Remote('1111111111111111', 'lan:a', lan).presence();
+    await vi.advanceTimersByTimeAsync(24_000);
+    expect(inet.state().members.find((m) => m.peer === '2222222222222222')?.path).toBe('internet');
+    expect(inet.state().members.find((m) => m.peer === '1111111111111111')).toBeUndefined(); // LAN only: 15 s
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(inet.state().members.find((m) => m.peer === '2222222222222222')?.path).not.toBe('internet');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(inet.state().members).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(inet.state().members).toHaveLength(1);
+    expect(gone.filter((t) => t.kind === 'disconnected')).toHaveLength(2);
+  });
+
+  it('setInternetAllowed(false) mid-room stops the relay transport without a bye and forgets internet paths', async () => {
+    await joinNow();
+    netPresence(new Remote('2222222222222222', 'net:b', lan));
+    net.sent = [];
+    inet.setInternetAllowed(false);
+    expect(net.sent).toEqual([]);
+    expect(net.started).toBeNull();
+    expect(inet.state().internet).toBe('off');
+    expect(inet.state().members[1].path).not.toBe('internet');
+    inet.sendPing('omw', { d: 1, x: 0.5, y: 0.5 });
+    expect(net.sent).toEqual([]);
+  });
+
+  it('setInternetAllowed(true) mid-room starts it with the current keys and announces', async () => {
+    inet.setInternetAllowed(false);
+    await joinNow();
+    expect(net.starts).toBe(0);
+    inet.setInternetAllowed(true);
+    expect(net.started).toBe(KEYS);
+    expect(decode(net).map((m) => m.t)).toEqual(['presence']);
+    expect(inet.state().internet).toBe('ok');
+  });
+
+  it('toggling internet off/on/off leaves one stopped relay transport', async () => {
+    await joinNow();
+    inet.setInternetAllowed(false);
+    inet.setInternetAllowed(true);
+    inet.setInternetAllowed(false);
+    expect(net.starts - net.stops).toBe(0);
+    expect(net.started).toBeNull();
+    expect(inet.state().internet).toBe('off');
   });
 });
 

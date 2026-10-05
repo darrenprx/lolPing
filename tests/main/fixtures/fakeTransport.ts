@@ -7,19 +7,32 @@ export class FakeTransport extends EventEmitter implements Transport {
   status: TransportStatus = 'off';
   started: RoomKeys | null = null;
   sent: { to: PeerKey | '*'; packet: Uint8Array }[] = [];
+  starts = 0;
+  stops = 0;
+  /** What start() reports: 'starting' holds it there, like relays that haven't answered yet. */
+  startStatus: TransportStatus = 'ok';
 
-  constructor(readonly kind: 'lan' | 'internet' = 'lan') {
+  constructor(
+    readonly kind: 'lan' | 'internet' = 'lan',
+    readonly shared = kind === 'internet',
+  ) {
     super();
   }
 
   start(keys: RoomKeys): void {
+    this.starts++;
     this.started = keys;
-    this.setStatus('ok');
+    this.setStatus(this.startStatus);
   }
 
   stop(): void {
+    this.stops++;
     this.started = null;
     this.setStatus('off');
+  }
+
+  whenClosed(): Promise<void> {
+    return Promise.resolve();
   }
 
   sendTo(peer: PeerKey, packet: Uint8Array): void {
@@ -37,5 +50,9 @@ export class FakeTransport extends EventEmitter implements Transport {
   setStatus(s: TransportStatus): void {
     this.status = s;
     this.emit('status', s);
+  }
+
+  linkUp(): void {
+    this.emit('linkUp');
   }
 }
