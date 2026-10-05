@@ -87,6 +87,8 @@ export interface SettingsApi {
   /** The room code on the clipboard, if there is one. The clipboard is read only when this is called. */
   clipboardRoomCode(): Promise<string | null>;
   copyRoomCode(): Promise<void>;
+  /** Reconnects to every relay now (the Room page's Retry). */
+  retryInternet(): Promise<void>;
   /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
   onShowSection(cb: (id: string) => void): () => void;
 }

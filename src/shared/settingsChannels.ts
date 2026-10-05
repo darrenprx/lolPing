@@ -21,5 +21,6 @@ export const SETTINGS_CH = {
   roomMute: 'room:mute',
   roomClipboard: 'room:clipboardCode',
   roomCopy: 'room:copyCode',
+  roomRetryInternet: 'room:retryInternet',
   showSection: 'settings:showSection',
 } as const;

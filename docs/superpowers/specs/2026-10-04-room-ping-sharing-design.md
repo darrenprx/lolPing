@@ -238,6 +238,8 @@ Transports move **sealed packets only**. Keys, validation and every decision sta
 
 ### 5.5 Internet transport (M2)
 
+> Replaced by [2026-10-05-internet-rooms-design.md](2026-10-05-internet-rooms-design.md): relays instead of WebRTC.
+
 - **Hidden net window:** a `BrowserWindow` with `show: false`, `backgroundThrottling: false`, `sandbox: true`, `contextIsolation: true`, no Node integration. Its own renderer entry, `src/renderer/net/index.html`, served like the other renderers.
   - **CSP:** `default-src 'self'; connect-src` limited to the pinned relay list (`wss://…`). WebRTC itself isn't governed by CSP.
 - **Trystero:**

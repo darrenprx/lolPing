@@ -82,12 +82,12 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 2. They copy the code, such as `PING-7KQ4M-2HXTR`, and send it to friends.
 3. Each friend copies it and clicks **Join from clipboard** in the tray menu, or pastes it into the Room page and clicks **Join**.
 
-- Rooms work on the same local network. The first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
-- Friends somewhere else can join through a virtual LAN that carries broadcast, such as [ZeroTier](https://www.zerotier.com) or Radmin VPN. Tailscale doesn't carry broadcast, so rooms can't find each other over it. Joining over the internet without a VPN is planned.
+- **Same network:** the first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
+- **Different networks:** with **Allow internet connections** on (the default), friends anywhere join with the same code. Their pings travel through free public [Nostr](https://nostr.com) relays and take a moment longer than on a local network, which is still used whenever it works. Virtual LANs such as ZeroTier or Radmin VPN work too, and Tailscale users simply connect over the internet.
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
 - **Mute room**, muting one person, and an **Incoming ping limit** (up to Unlimited) keep the spam under control. Pausing lolPing with the shortcut pauses room pings too.
 - A room holds up to 8 people. Leave and create a new room to get rid of someone.
-- **Privacy:** pings are end-to-end encrypted with a key made from the room code and go directly between devices. Nothing passes through a server. People in the room can see your IP address.
+- **Privacy:** pings and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings or your name. Turn **Allow internet connections** off to stay on your local network.
 
 ## Known limitations
 
@@ -121,7 +121,8 @@ npm run dev
 | `npm run dist:mac` | Builds the Mac disk image into `release/` (on a Mac) |
 | `npm run dev:site` | Serves a browser demo of the wheel (`site/`) |
 | `npm run media` | Re-records `docs/media/demo.gif` and `docs/media/og.png` from that demo (needs ffmpeg) |
-| `node tools/room-peer/run.mjs <code>` | Joins a room as a fake member that pings at random, to try rooms with one computer (see [`tools/room-peer`](tools/room-peer)) |
+| `node tools/room-peer/run.mjs <code>` | Joins a room as a fake member that pings at random, to try rooms with one computer; `--relay` joins through the relays (see [`tools/room-peer`](tools/room-peer)) |
+| `node tools/relay-probe/run.mjs` | Tests which public Nostr relays can carry rooms; it chose the list in `src/main/relays.ts` (see [`tools/relay-probe`](tools/relay-probe)) |
 
 ### Releasing
 
@@ -131,7 +132,7 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 
 - **Input:** [`native/hook-helper`](native/hook-helper) is a small C++ process that owns the low-level mouse and keyboard hooks on Windows, or an event tap on macOS. It swallows the Alt + drag so the app underneath never sees it, and talks to Electron in JSON lines over stdin and stdout.
 - **Display:** Electron draws the wheel and pings in one transparent, click-through, always-on-top window per monitor ([`src/renderer/overlay`](src/renderer/overlay)), and plays the sounds through Web Audio.
-- **Rooms:** [`src/main/roomManager.ts`](src/main/roomManager.ts) keeps the room's members and encrypts every message (AES-256-GCM, key from scrypt over the room code). [`src/main/lanTransport.ts`](src/main/lanTransport.ts) carries the encrypted packets over UDP on the local network.
+- **Rooms:** [`src/main/roomManager.ts`](src/main/roomManager.ts) keeps the room's members and encrypts every message (AES-256-GCM, key from scrypt over the room code). [`src/main/lanTransport.ts`](src/main/lanTransport.ts) carries the encrypted packets over UDP on the local network, and [`src/main/relayTransport.ts`](src/main/relayTransport.ts) through public Nostr relays as ephemeral events.
 - **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows, restyled like System Settings on macOS.
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.
 - **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths. [docs/design-macos.md](docs/design-macos.md) covers the Mac port.

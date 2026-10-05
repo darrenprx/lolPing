@@ -1,7 +1,7 @@
 import { Button, Input, Slider, Spinner } from '@fluentui/react-components';
 import {
-  ArrowSync24Regular, Color24Regular, Desktop24Regular, Person24Regular, PeopleCommunity24Regular, SpeakerMute24Regular,
-  TopSpeed24Regular, Warning24Regular,
+  ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
+  SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import type { RoomMember, RoomState } from '../../../shared/room';
@@ -100,7 +100,7 @@ function MemberRow({ m }: { m: RoomMember }) {
   );
 }
 
-function InRoom({ room }: { room: RoomState }) {
+function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boolean }) {
   const t = useText();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -135,9 +135,26 @@ function InRoom({ room }: { room: RoomState }) {
           </div>
         </div>
       ) : null}
+      {room.internet === 'unavailable' ? (
+        <div className="card permission">
+          <span className="icon"><Warning24Regular /></span>
+          <div className="lbl">
+            <b>{t.roomInternetUnavailable}</b>
+            <span className="desc">{t.roomInternetUnavailableDesc}</span>
+            <div className="actions">
+              <Button onClick={() => void api.retryInternet()}>{t.roomRetry}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="card members">
         {room.members.map((m) => <MemberRow key={m.peer} m={m} />)}
-        {alone ? <div className="desc roomWaiting">{room.lonely ? `${t.roomWaiting} ${t.roomLonely}` : t.roomWaiting}</div> : null}
+        {alone ? (
+          <div className="desc roomWaiting">
+            {room.lonely ? `${t.roomWaiting} ${t.roomLonely}` : t.roomWaiting}
+            {room.lonely && !allowInternet ? <span className="warnText"> {t.roomLonelyInternetOff}</span> : null}
+          </div>
+        ) : null}
         {room.clockSkew ? <div className="desc roomWaiting warnText">{t.roomClockSkew}</div> : null}
       </div>
     </>
@@ -159,7 +176,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           ))}
         </div>
       </SettingRow>
-      {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} />}
+      {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />
       <SettingRow icon={<TopSpeed24Regular />} title={t.roomLimit} description={t.roomLimitDesc} dim={s.roomMuted}>
@@ -167,6 +184,8 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           onChange={(_, d) => void update({ incomingPingLimit: fromSlider(d.value) })} />
         <span className="value">{t.roomLimitValue(s.incomingPingLimit)}</span>
       </SettingRow>
+      <SwitchRow icon={<Globe24Regular />} title={t.roomInternet} description={t.roomInternetDesc}
+        checked={s.allowInternet} onChange={(v) => void update({ allowInternet: v })} />
       <SwitchRow icon={<ArrowSync24Regular />} title={t.roomRejoin} checked={s.rejoinRoom} onChange={(v) => void update({ rejoinRoom: v })} />
       <SettingRow icon={<Desktop24Regular />} title={t.roomDisplays} description={t.roomDisplaysDesc}>
         <span className="displays">

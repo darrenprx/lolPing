@@ -32,6 +32,7 @@ const api: SettingsApi = {
   muteMember: (peer, on) => ipcRenderer.invoke(SETTINGS_CH.roomMute, peer, on),
   clipboardRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomClipboard),
   copyRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomCopy),
+  retryInternet: () => ipcRenderer.invoke(SETTINGS_CH.roomRetryInternet),
   onShowSection: (cb) => subscribe(SETTINGS_CH.showSection, cb),
 };
 

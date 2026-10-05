@@ -13,6 +13,8 @@ import { registerAppScheme, serveRenderer } from './appProtocol';
 import { resolveTarget, toShared } from './displayNumbers';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
+import { RELAYS } from './relays';
+import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
@@ -44,6 +46,16 @@ function osUserName(): string {
   }
 }
 
+/**
+ * The relays to use. Development builds take a comma-separated LOLPING_RELAYS instead, so "no relay reachable" can
+ * be tried without touching the firewall; packaged builds always use the pinned list.
+ */
+function relayUrls(): readonly string[] {
+  const custom = app.isPackaged ? undefined : process.env.LOLPING_RELAYS;
+  const urls = custom?.split(',').map((u) => u.trim()).filter((u) => u.startsWith('wss://')) ?? [];
+  return urls.length > 0 ? urls : RELAYS;
+}
+
 /** macOS: the app, Edit and Window menus, so Cmd+Q, Cmd+W and the clipboard shortcuts work in the settings window. */
 function setMacMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
@@ -67,10 +79,11 @@ function start(): void {
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
 
-  // Room: pings shared with other lolPing users on the network.
+  // Room: pings shared with other lolPing users, on the network and through public relays.
   const lan = new LanTransport();
+  const relay = new RelayTransport({ urls: relayUrls() });
   const room = new RoomManager({
-    transports: [lan],
+    transports: [lan, relay],
     now: Date.now,
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
@@ -182,7 +195,10 @@ function start(): void {
     else if (n.kind === 'left') overlays.toast(t.toastMemberLeft(n.name), code);
     else overlays.toast(t.toastMemberLost(n.name), code);
   });
-  powerMonitor.on('resume', () => lan.rebind());
+  powerMonitor.on('resume', () => {
+    lan.rebind();
+    relay.wake();
+  });
 
   function pushStatus(): void {
     if (quitting) return;
@@ -239,6 +255,10 @@ function start(): void {
       syncRoomFlags();
       pushRoom();
     }
+    if (s.allowInternet !== previous.allowInternet) {
+      room.setInternetAllowed(s.allowInternet);
+      pushRoom();
+    }
     if (app.isPackaged && s.launchAtStartup !== previous.launchAtStartup) {
       // macOS ignores args, and a Mac launch starts in the menu bar anyway.
       app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
@@ -271,6 +291,7 @@ function start(): void {
       mute: (peer, on) => room.muteMember(peer, on),
       clipboardCode,
       copyCode: copyRoomCode,
+      retryInternet: () => relay.retryNow(),
     },
   });
   // The page can't report that it went away mid-capture (window closed, renderer crashed): release the suspend here.
@@ -285,6 +306,7 @@ function start(): void {
   else waitForAccess();
   pushStatus();
   syncRoomFlags();
+  room.setInternetAllowed(settings.allowInternet);
   pushRoom();
   if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
   if (IS_MAC) {
@@ -306,6 +328,6 @@ function start(): void {
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();
-    void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed()]).then(() => app.exit(0));
+    void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));
   });
 }

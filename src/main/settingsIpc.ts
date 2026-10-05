@@ -30,6 +30,7 @@ export interface SettingsIpcDeps {
     mute(peer: string, on: boolean): void;
     clipboardCode(): Promise<string | null>;
     copyCode(): void;
+    retryInternet(): void;
   };
 }
 
@@ -82,4 +83,5 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   });
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
+  ipcMain.handle(SETTINGS_CH.roomRetryInternet, () => d.room.retryInternet());
 }

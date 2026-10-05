@@ -9,26 +9,33 @@
   :root {
     --bg: #202020; --card: rgba(255,255,255,.05); --stroke: rgba(255,255,255,.07); --text: #fff; --text3: rgba(255,255,255,.55);
     --accent: #60cdff; --accent-text: #000; --ctrl: rgba(255,255,255,.06); --ctrl-stroke: rgba(255,255,255,.09); --warn: #ff9c48;
+    --lan: #4caf50; --net: #4ea8de;
   }
   @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
     --bg: #f3f3f3; --card: rgba(255,255,255,.7); --stroke: rgba(0,0,0,.06); --text: #1a1a1a; --text3: rgba(0,0,0,.5);
-    --accent: #005fb8; --accent-text: #fff; --ctrl: rgba(255,255,255,.7); --ctrl-stroke: rgba(0,0,0,.1); --warn: #c25e00; } }
+    --accent: #005fb8; --accent-text: #fff; --ctrl: rgba(255,255,255,.7); --ctrl-stroke: rgba(0,0,0,.1); --warn: #c25e00;
+    --lan: #2e7d32; --net: #1769aa; } }
   :root[data-theme="light"] {
     --bg: #f3f3f3; --card: rgba(255,255,255,.7); --stroke: rgba(0,0,0,.06); --text: #1a1a1a; --text3: rgba(0,0,0,.5);
-    --accent: #005fb8; --accent-text: #fff; --ctrl: rgba(255,255,255,.7); --ctrl-stroke: rgba(0,0,0,.1); --warn: #c25e00; }
+    --accent: #005fb8; --accent-text: #fff; --ctrl: rgba(255,255,255,.7); --ctrl-stroke: rgba(0,0,0,.1); --warn: #c25e00;
+    --lan: #2e7d32; --net: #1769aa; }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; padding: 16px; font: 14px/20px "Segoe UI Variable Text", "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
   main { max-width: 760px; margin: 0 auto; }
   h2 { font: 600 14px "Segoe UI"; margin: 22px 0 8px; }
   .bar { display: flex; gap: 8px; flex-wrap: wrap; }
   .card { display: flex; align-items: center; gap: 16px; min-height: 68px; padding: 12px 20px; border-radius: 4px; margin-bottom: 3px; background: var(--card); border: 1px solid var(--stroke); flex-wrap: wrap; }
   .card.warn { border-color: var(--warn); }
+  .card.new { box-shadow: inset 3px 0 0 var(--accent); }
   .lbl { flex: 1; min-width: 200px; } .desc { display: block; color: var(--text3); font-size: 12px; line-height: 16px; }
   .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  button { font: inherit; padding: 5px 12px; border-radius: 4px; border: 1px solid var(--ctrl-stroke); background: var(--ctrl); color: var(--text); }
+  button { font: inherit; padding: 5px 12px; border-radius: 4px; border: 1px solid var(--ctrl-stroke); background: var(--ctrl); color: var(--text); cursor: pointer; }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  button.demo-on { outline: 2px solid var(--accent); }
   input { font: inherit; padding: 5px 10px; border-radius: 4px; border: 1px solid var(--ctrl-stroke); background: var(--ctrl); color: var(--text); width: 190px; }
   .err { color: var(--warn); font-size: 12px; }
+  .warnText { color: var(--warn); }
   .swatches { display: flex; gap: 6px; }
   .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; }
   .sw.sel { border-color: var(--text); }
@@ -38,21 +45,30 @@
   .member:last-child { border-bottom: 0; }
   .member .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dotc { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-  .badge { font-size: 11px; padding: 0 6px; border-radius: 10px; border: 1px solid var(--ctrl-stroke); color: var(--text3); white-space: nowrap; }
-  .badge.lan { color: #6ccb5f; border-color: #6ccb5f66; } .badge.bad { color: var(--warn); border-color: var(--warn); }
+  .badge { font-size: 11px; padding: 0 7px; line-height: 18px; border-radius: 9px; border: 1px solid var(--ctrl-stroke); color: var(--text3); white-space: nowrap; }
+  .badge.lan { color: var(--lan); border-color: color-mix(in srgb, var(--lan) 50%, transparent); }
+  .badge.internet { color: var(--net); border-color: color-mix(in srgb, var(--net) 50%, transparent); }
+  .badge.bad { color: var(--warn); border-color: var(--warn); }
   .you { color: var(--text3); font-size: 12px; }
   .note { color: var(--text3); font-size: 12px; line-height: 16px; margin: 10px 2px; }
+  .toggle { min-width: 52px; }
+  .toggle.on { background: var(--accent); color: var(--accent-text); border-color: transparent; }
   .demo { margin-bottom: 12px; padding: 8px; border: 1px dashed var(--ctrl-stroke); border-radius: 6px; font-size: 12px; }
+  .demo .hint { flex-basis: 100%; color: var(--text3); }
 </style>
 </head>
 <body>
 <main>
   <div class="demo bar">
-    <button onclick="show('out')">Not in a room</button>
-    <button onclick="show('in')">In a room</button>
-    <button onclick="show('alone')">Alone</button>
-    <button onclick="show('lanbad')">LAN unavailable</button>
+    <button data-s="out">Not in a room</button>
+    <button data-s="in">LAN friends</button>
+    <button data-s="net">Internet friends</button>
+    <button data-s="netbad">Internet unavailable</button>
+    <button data-s="alone">Alone</button>
+    <button data-s="aloneoff">Alone, internet off</button>
+    <button data-s="lanbad">LAN unavailable</button>
     <button onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'">Theme</button>
+    <span class="hint">v0.4.0 changes are marked with a blue edge.</span>
   </div>
 
   <h2>Room</h2>
@@ -79,39 +95,71 @@
       <div class="ctl"><button>Copy code</button><button>Leave room</button></div>
     </div>
     <div class="card warn" id="lanbad" hidden>
-      <div class="lbl">LAN unavailable<span class="desc">Another app may be using UDP port 47474, or the firewall blocks lolPing.</span></div>
+      <div class="lbl">LAN unavailable<span class="desc">lolPing couldn’t open UDP port 47474. Another app may be using it; restarting lolPing can help.</span></div>
+    </div>
+    <div class="card warn new" id="netbad" hidden>
+      <div class="lbl">Internet unavailable<span class="desc">Can’t reach any relay. Retrying in the background.</span></div>
+      <div class="ctl"><button>Retry</button></div>
     </div>
     <div class="card members" id="list"></div>
   </div>
 
   <h2>Room options</h2>
-  <div class="card"><div class="lbl">Mute room<span class="desc">Keep pinging, but hide everyone else’s pings</span></div><div class="ctl"><button>Off</button></div></div>
+  <div class="card"><div class="lbl">Mute room<span class="desc">Keep pinging, but hide everyone else’s pings</span></div><div class="ctl"><button class="toggle">Off</button></div></div>
   <div class="card"><div class="lbl">Incoming ping limit<span class="desc">Per person. Unlimited lets friends spam you</span></div><div class="ctl"><input type="range" min="1" max="21" value="5" style="width:200px"><span>5 / s</span></div></div>
-  <div class="card"><div class="lbl">Rejoin last room on launch</div><div class="ctl"><button>On</button></div></div>
-  <div class="card"><div class="lbl">Displays<span class="desc">A ping lands on the display with the same number, or #1</span></div><div class="ctl"><span class="desc">#1 Primary · 2560×1440 &nbsp; #2 · 1920×1080</span></div></div>
-  <p class="note">Room members can see your IP address. Pings travel encrypted, directly between devices.</p>
+  <div class="card new"><div class="lbl">Allow internet connections<span class="desc">Meet friends on other networks through public relays. Off: same network only.</span></div><div class="ctl"><button class="toggle on" id="net">On</button></div></div>
+  <div class="card"><div class="lbl">Rejoin last room on launch</div><div class="ctl"><button class="toggle on">On</button></div></div>
+  <div class="card"><div class="lbl">Displays<span class="desc">A ping lands on the display with the same number, or on #1</span></div><div class="ctl"><span class="desc">#1 Primary · 2560×1440 &nbsp; #2 · 1920×1080</span></div></div>
+  <p class="note" id="privacy"></p>
 </main>
 <script>
   const COLORS = ['#4fc3f7', '#ff8a65', '#aed581', '#ba68c8', '#ffd54f', '#4db6ac', '#f06292', '#e0e0e0'];
+  const PRIVACY = 'Pings and names are end-to-end encrypted. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings or your name.';
+  const HELP = 'Can’t see a friend? Check that you both typed the same code. On the same network, lolPing must be allowed through the firewall; on different networks, you both need Allow internet connections on.';
+  document.getElementById('privacy').textContent = `${PRIVACY} ${HELP}`;
   document.getElementById('sw').innerHTML = COLORS.map((c, i) => `<span class="sw${i === 3 ? ' sel' : ''}" style="background:${c}"></span>`).join('');
-  const people = [
-    ['Darren', 3, 'you'], ['Alex', 0, 'LAN'], ['Mia', 6, 'LAN', 'paused'], ['Sam', 2, 'Connecting…', 'needs update'], ['Very long name here', 1, 'LAN', 'muted'],
-  ];
-  function list(alone) {
+
+  const LAN_ROOM = [['Darren', 3, 'you'], ['Alex', 0, 'LAN'], ['Mia', 6, 'LAN', 'paused'], ['Sam', 2, 'Connecting…', 'needs update'], ['Very long name here', 1, 'LAN', 'muted']];
+  const NET_ROOM = [['Darren', 3, 'you'], ['Alex', 0, 'LAN'], ['Mia', 6, 'Internet'], ['Kai', 4, 'Internet', 'muted'], ['Lena', 5, 'Can’t reach']];
+  const PATH_CLASS = { LAN: 'lan', Internet: 'internet', 'Can’t reach': 'bad' };
+
+  function list(people, alone, internetOn) {
     const rows = (alone ? people.slice(0, 1) : people).map(([n, c, path, extra]) => `<div class="member"><span class="dotc" style="background:${COLORS[c]}"></span>
       <span class="name">${n}${path === 'you' ? ' <span class="you">(you)</span>' : ''}</span>
-      ${path === 'you' ? '' : `<span class="badge ${path === 'LAN' ? 'lan' : ''}">${path}</span>`}
+      ${path === 'you' ? '' : `<span class="badge ${PATH_CLASS[path] ?? ''}">${path}</span>`}
       ${extra ? `<span class="badge ${extra === 'needs update' ? 'bad' : ''}">${extra}</span>` : ''}
       ${path === 'you' ? '' : '<button>Mute</button>'}</div>`).join('');
-    return rows + (alone ? '<div class="note">Waiting for others… Nobody here yet. Check that your friends typed the same code.</div>' : '');
+    if (!alone) return rows;
+    const off = internetOn ? '' : ' <span class="warnText">Friends on another network? Turn on Allow internet connections.</span>';
+    return rows + `<div class="note">Waiting for others… Nobody here yet. Check that your friends typed the same code.${off}</div>`;
   }
+
+  const net = document.getElementById('net');
+  function setNet(on) {
+    net.classList.toggle('on', on);
+    net.textContent = on ? 'On' : 'Off';
+  }
+  let state = 'out';
   function show(which) {
+    state = which;
+    if (which === 'aloneoff') setNet(false);
+    else if (which !== 'out' && which !== 'alone') setNet(true);
+    const internetOn = net.classList.contains('on');
     document.getElementById('out').hidden = which !== 'out';
     document.getElementById('in').hidden = which === 'out';
     document.getElementById('lanbad').hidden = which !== 'lanbad';
-    document.getElementById('list').innerHTML = list(which === 'alone');
+    document.getElementById('netbad').hidden = which !== 'netbad' || !internetOn;
+    const people = which === 'net' || which === 'netbad' ? (which === 'netbad' ? LAN_ROOM.slice(0, 2) : NET_ROOM) : LAN_ROOM;
+    document.getElementById('list').innerHTML = list(people, which === 'alone' || which === 'aloneoff', internetOn);
+    document.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('demo-on', b.dataset.s === which));
   }
-  show('out');
+  document.querySelectorAll('[data-s]').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+  document.querySelectorAll('.toggle').forEach((b) => b.addEventListener('click', () => {
+    b.classList.toggle('on');
+    b.textContent = b.classList.contains('on') ? 'On' : 'Off';
+    if (b === net) show(state === 'aloneoff' && net.classList.contains('on') ? 'alone' : state === 'alone' && !net.classList.contains('on') ? 'aloneoff' : state);
+  }));
+  show('net');
 </script>
 </body>
 </html>

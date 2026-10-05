@@ -16,6 +16,16 @@ describe('language', () => {
     expect(resolveLang('zh-CN', 'en-US')).toBe('zh-CN');
   });
 
+  it('room privacy text describes relays, not direct connections', () => {
+    const en = strings('en');
+    const zh = strings('zh-CN');
+    expect(en.roomPrivacy).toContain('relays');
+    expect(en.roomPrivacy).not.toContain('directly');
+    expect(zh.roomPrivacy).toContain('中继');
+    expect(en.roomInternet).toBe('Allow internet connections');
+    expect(zh.roomInternet).toBe('允许互联网连接');
+  });
+
   it('has every string in both languages', () => {
     const en = strings('en');
     const zh = strings('zh-CN');
