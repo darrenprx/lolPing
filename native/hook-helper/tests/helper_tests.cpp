@@ -532,7 +532,8 @@ static void test_emote_click_on_and_off() {
     Decision on = withEmote(Trigger::Ctrl, 0, true);
     on.onEvent(kd(CTRL));
     on.onEvent(md(Btn::Left, 100, 100));
-    const Emit* c = findEmit(on.onEvent(ku(CTRL)), Emit::Kind::Click);
+    const Result up = on.onEvent(ku(CTRL));  // keep the Result alive: c points into it
+    const Emit* c = findEmit(up, Emit::Kind::Click);
     CHECK(emitIs(c, WheelKind::Emote) && c->x == 100);
     CHECK(on.onEvent(mu(Btn::Left, 100, 100)).swallow);
     Decision off = withEmote();
