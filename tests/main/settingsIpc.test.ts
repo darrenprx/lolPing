@@ -8,13 +8,17 @@ import { registerSettingsIpc, type SettingsIpcDeps } from '../../src/main/settin
 import { SettingsStore } from '../../src/main/settingsStore';
 import { strings } from '../../src/shared/i18n';
 import { SETTINGS_CH } from '../../src/shared/ipc';
+import type { UpdateState } from '../../src/shared/update';
 
-const h = vi.hoisted(() => ({ handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>() }));
+const h = vi.hoisted(() => ({
+  handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  opened: [] as string[],
+}));
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => h.handlers.set(channel, fn) },
   globalShortcut: { register: () => true, unregister: () => undefined },
-  shell: {},
+  shell: { openExternal: async (url: string) => void h.opened.push(url) },
   net: {},
   protocol: {},
 }));
@@ -34,15 +38,21 @@ const call = (channel: string, ...args: unknown[]): Promise<unknown> => Promise.
 
 beforeEach(() => {
   h.handlers.clear();
+  h.opened.length = 0;
   const dir = mkdtempSync(join(tmpdir(), 'lolping-ipc-'));
   store = new SettingsStore(dir, 60_000);
   store.load();
   library = new EmoteLibrary(join(dir, 'emotes'));
-  const deps = {
-    store, library, text: () => strings('en'), platform: 'win', room: {},
-  } as unknown as SettingsIpcDeps;
-  registerSettingsIpc(deps);
+  registerWith();
 });
+
+/** Registers the handlers again, with or without an update checker. */
+function registerWith(update?: SettingsIpcDeps['update']): void {
+  h.handlers.clear();
+  registerSettingsIpc({
+    store, library, text: () => strings('en'), platform: 'win', room: {}, update,
+  } as unknown as SettingsIpcDeps);
+}
 
 describe('settings IPC', () => {
   it('setSettings ignores customEmotes from the window', async () => {
@@ -99,5 +109,98 @@ describe('settings IPC', () => {
     await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });
     for (const raw of [null, 'facepalm', '../settings', { id: idOf(s) }]) await call(SETTINGS_CH.emoteRemove, raw);
     expect(store.get().customEmotes).toHaveLength(1);
+  });
+});
+
+describe('update IPC', () => {
+  const AVAILABLE: UpdateState = { phase: 'available', version: '0.5.1', notesUrl: 'https://github.com/darrenprx/lolPing/releases/tag/v0.5.1' };
+
+  const NOTES = 'https://github.com/darrenprx/lolPing/releases/tag/v0.5.1';
+
+  /** `notesUrl`: the release notes of the update the checker knows about, if it knows one. */
+  function fakeUpdate(state: UpdateState, notesUrl: string | null = null) {
+    return { state: vi.fn(() => state), notesUrl: vi.fn(() => notesUrl), check: vi.fn(async (): Promise<void> => undefined), start: vi.fn(async (): Promise<void> => undefined) };
+  }
+
+  it('without an update checker, getUpdate says null and the others do nothing', async () => {
+    expect(await call(SETTINGS_CH.updateGet)).toBeNull();
+    await call(SETTINGS_CH.updateCheck);
+    await call(SETTINGS_CH.updateStart);
+    await call(SETTINGS_CH.updateOpenRelease);
+    expect(h.opened).toEqual([]);
+  });
+
+  it('getUpdate returns the state of the update checker', async () => {
+    registerWith(fakeUpdate(AVAILABLE));
+    expect(await call(SETTINGS_CH.updateGet)).toEqual(AVAILABLE);
+  });
+
+  it('checkForUpdates runs a check and waits for it', async () => {
+    const u = fakeUpdate(AVAILABLE);
+    let finish!: () => void;
+    u.check.mockImplementation(() => new Promise<void>((r) => (finish = r)));
+    registerWith(u);
+    let done = false;
+    const p = call(SETTINGS_CH.updateCheck).then(() => (done = true));
+    await Promise.resolve();
+    expect(u.check).toHaveBeenCalledTimes(1);
+    expect(done).toBe(false);
+    finish();
+    await p;
+    expect(done).toBe(true);
+  });
+
+  it('startUpdate starts the update and returns at once', async () => {
+    const u = fakeUpdate(AVAILABLE);
+    u.start.mockImplementation(() => new Promise<void>(() => undefined)); // an update takes minutes
+    registerWith(u);
+    await call(SETTINGS_CH.updateStart);
+    expect(u.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('startUpdate does not leave a rejection unhandled', async () => {
+    const u = fakeUpdate(AVAILABLE);
+    u.start.mockRejectedValue(new Error('boom'));
+    registerWith(u);
+    await expect(call(SETTINGS_CH.updateStart)).resolves.toBeUndefined();
+  });
+
+  it('openReleasePage opens the release notes of the version found', async () => {
+    registerWith(fakeUpdate(AVAILABLE, NOTES));
+    await call(SETTINGS_CH.updateOpenRelease);
+    expect(h.opened).toEqual([NOTES]);
+  });
+
+  it('openReleasePage keeps opening the release notes after the download or the install failed', async () => {
+    for (const state of [
+      { phase: 'error', message: 'The download was damaged. Try again.', retry: 'download' },
+      { phase: 'error', message: 'The update couldn’t be installed. Try again.', retry: 'download' },
+      { phase: 'downloading', version: '0.5.1', percent: 3 },
+      { phase: 'installing', version: '0.5.1' },
+    ] as UpdateState[]) {
+      h.opened.length = 0;
+      registerWith(fakeUpdate(state, NOTES));
+      await call(SETTINGS_CH.updateOpenRelease);
+      expect(h.opened, state.phase).toEqual([NOTES]);
+    }
+  });
+
+  it('openReleasePage opens the latest release when no version is known', async () => {
+    for (const state of [
+      { phase: 'idle', lastCheck: null },
+      { phase: 'checking', manual: true },
+      { phase: 'error', message: 'x', retry: 'check' },
+    ] as UpdateState[]) {
+      h.opened.length = 0;
+      registerWith(fakeUpdate(state, null));
+      await call(SETTINGS_CH.updateOpenRelease);
+      expect(h.opened, state.phase).toEqual(['https://github.com/darrenprx/lolPing/releases/latest']);
+    }
+  });
+
+  it('openReleasePage never opens a link that is not a web page', async () => {
+    registerWith(fakeUpdate(AVAILABLE, 'file:///C:/Windows/System32/calc.exe'));
+    await call(SETTINGS_CH.updateOpenRelease);
+    expect(h.opened).toEqual(['https://github.com/darrenprx/lolPing/releases/latest']);
   });
 });

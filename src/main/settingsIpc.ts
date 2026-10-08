@@ -7,10 +7,13 @@ import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
 import { patchClashes, rendererPatch } from '../shared/settings';
+import type { UpdateState } from '../shared/update';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
 
 const PROJECT_URL = 'https://github.com/darrenprx/lolPing';
+/** Where "What's new" goes when no update is known. */
+export const LATEST_RELEASE_URL = `${PROJECT_URL}/releases/latest`;
 
 export interface SettingsIpcDeps {
   store: SettingsStore;
@@ -27,6 +30,16 @@ export interface SettingsIpcDeps {
   /** Strings in the app's current language. */
   text(): Strings;
   platform: Platform;
+  /** The update checker. Absent in a development build without LOLPING_UPDATE_TEST_URL: the page then shows no update controls. */
+  update?: {
+    state(): UpdateState;
+    /** The release notes link of the update that was found, kept through a failed download or install; null when none is known. */
+    notesUrl(): string | null;
+    /** A manual check. */
+    check(): Promise<void>;
+    /** Downloads and installs; settles when the install has been handed over, which is minutes later. */
+    start(): Promise<void>;
+  };
   room: {
     state(): RoomState;
     create(): Promise<void>;
@@ -118,4 +131,27 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
   ipcMain.handle(SETTINGS_CH.roomRetryInternet, () => d.room.retryInternet());
+
+  ipcMain.handle(SETTINGS_CH.updateGet, (): UpdateState | null => d.update?.state() ?? null);
+  ipcMain.handle(SETTINGS_CH.updateCheck, async () => {
+    await d.update?.check();
+  });
+  ipcMain.handle(SETTINGS_CH.updateStart, () => {
+    // Not awaited: the page follows the download through update:state, and this call would otherwise stay open for minutes.
+    d.update?.start().catch(() => undefined);
+  });
+  ipcMain.handle(SETTINGS_CH.updateOpenRelease, async () => {
+    if (!d.update) return;
+    const notes = d.update.notesUrl();
+    await shell.openExternal(notes !== null && isWebUrl(notes) ? notes : LATEST_RELEASE_URL);
+  });
+}
+
+function isWebUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
 }

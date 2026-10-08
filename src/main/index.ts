@@ -1,4 +1,4 @@
-import { app, clipboard, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
+import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -23,7 +24,11 @@ import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
-import { AppTray, type TrayMode } from './tray';
+import { AppTray, trayUpdateFrom, type TrayMode } from './tray';
+import { trayUpdateHandlers } from './trayUpdate';
+import { MacBackend, RELEASES_API } from './updateMac';
+import { WinBackend } from './updateWin';
+import { Updater } from './updater';
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 
@@ -86,6 +91,41 @@ function start(): void {
   const overlays = new OverlayManager(overlaySettings(settings), (ref, remote) => resolveEmoteArt(ref, settings.customEmotes, remote));
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
+
+  // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
+  const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
+  const updater = app.isPackaged || testUrl ? createUpdater() : null;
+  function createUpdater(): Updater {
+    const backend = IS_MAC
+      ? new MacBackend({
+        apiBase: testUrl ?? RELEASES_API,
+        currentVersion: app.getVersion(),
+        fetch,
+        downloadsDir: app.getPath('downloads'),
+        focus: () => app.focus({ steal: true }), // the dialog is shown from a menu bar app, which is not the active one
+        showDialog: (message) => dialog.showMessageBox({ message, buttons: ['OK'] }).then(() => undefined),
+        openPath: (path) => shell.openPath(path),
+        dialogText: () => text().updateMacDialog,
+        quit: () => app.quit(),
+      })
+      : new WinBackend({
+        testUrl,
+        log: (line) => console.log('[update]', line),
+        toast: () => overlays.toast(text().restartingToUpdate, ''),
+        isQuitting: () => quitting,
+      });
+    return new Updater({
+      backend,
+      now: Date.now,
+      autoCheck: () => settings.autoUpdateCheck,
+      notifiedVersion: () => settings.updateNotifiedVersion,
+      setNotifiedVersion: (version) => void store.update({ updateNotifiedVersion: version }),
+      errorText: (kind, reason) => {
+        console.warn('[update]', kind, reason); // the whole reason goes to the log; the card shows its first line
+        return updateErrorText(text(), kind, reason);
+      },
+    });
+  }
 
   // Room: pings shared with other lolPing users, on the network and through public relays.
   const lan = new LanTransport();
@@ -175,10 +215,30 @@ function start(): void {
         leave: () => room.leave(),
         openSettings: () => openSettingsWindow('room'),
       },
+      // The tray has no card to show a result on, so the handlers toast it. Nothing to toast on once the overlays are gone.
+      update: updater
+        ? trayUpdateHandlers({ updater, toast: (title, body) => { if (!quitting) overlays.toast(title, body); }, text })
+        : { check: () => undefined, start: () => undefined },
     },
     text(),
     IS_MAC ? { on: buildResourcePath('trayTemplate.png'), off: buildResourcePath('trayOffTemplate.png') } : undefined,
   );
+  /** Sends to the settings window if there is one that is still alive (the updater also reports while the app quits). */
+  function sendToSettings(channel: string, payload: unknown): void {
+    const w = settingsWindow();
+    if (w && !w.webContents.isDestroyed()) w.webContents.send(channel, payload);
+  }
+  if (updater) {
+    updater.on('state', (s: UpdateState) => {
+      if (quitting) return; // the tray and windows are going away
+      tray.setUpdate(trayUpdateFrom(s));
+      sendToSettings(SETTINGS_CH.updateState, s);
+    });
+    updater.on('notify', (version: string) => {
+      if (!quitting) overlays.toast(text().updateToastTitle, text().updateToastBody(version));
+    });
+    tray.setUpdate(trayUpdateFrom(updater.state));
+  }
   function pushRoom(): void {
     if (quitting) return;
     const s = roomState();
@@ -268,6 +328,7 @@ function start(): void {
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
     if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();
       pushRoom();
@@ -302,6 +363,9 @@ function start(): void {
     },
     text,
     platform: PLATFORM,
+    update: updater
+      ? { state: () => updater.state, notesUrl: () => updater.notesUrl, check: () => updater.check(true), start: () => updater.startUpdate() }
+      : undefined,
     room: {
       state: roomState,
       create: () => room.create(),
@@ -336,6 +400,8 @@ function start(): void {
     openSettingsWindow();
   }
 
+  updater?.start();
+
   app.on('window-all-closed', () => {
     /* stay running: the overlays are the app */
   });
@@ -343,6 +409,7 @@ function start(): void {
     if (quitting) return;
     quitting = true;
     event.preventDefault();
+    updater?.stop(); // aborts a download and drops a check in flight; an install that is quitting the app is left alone
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
     stopWaitingForAccess();
     tray.destroy();

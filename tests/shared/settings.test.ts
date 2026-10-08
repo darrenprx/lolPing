@@ -346,6 +346,12 @@ describe('rendererPatch', () => {
     expect(rendererPatch({ emoteWheel: [...DEFAULT_EMOTE_WHEEL] })).toEqual({ emoteWheel: [...DEFAULT_EMOTE_WHEEL] });
   });
 
+  it('leaves out updateNotifiedVersion, which only the main process sets, but keeps autoUpdateCheck', () => {
+    expect(rendererPatch({ volume: 3, updateNotifiedVersion: '9.9.9' })).toEqual({ volume: 3 });
+    expect(rendererPatch({ updateNotifiedVersion: null })).toEqual({});
+    expect(rendererPatch({ autoUpdateCheck: false })).toEqual({ autoUpdateCheck: false });
+  });
+
   it('turns a patch that is not an object into no change', () => {
     for (const raw of [null, undefined, 'volume', 3, [1, 2]]) expect(rendererPatch(raw)).toEqual({});
   });
@@ -390,5 +396,32 @@ describe('helpers', () => {
     expect(o.emoteWheel).toEqual(s.emoteWheel);
     expect(o.emoteWheel).not.toBe(s.emoteWheel);
     expect(o.customEmotes).not.toBe(s.customEmotes);
+  });
+});
+
+describe('update settings', () => {
+  it('defaults: automatic checks on, nothing notified yet', () => {
+    const s = normalizeSettings(undefined);
+    expect([s.autoUpdateCheck, s.updateNotifiedVersion]).toEqual([true, null]);
+    expect([DEFAULT_SETTINGS.autoUpdateCheck, DEFAULT_SETTINGS.updateNotifiedVersion]).toEqual([true, null]);
+  });
+
+  it('keeps autoUpdateCheck when it is a boolean and falls back to on otherwise', () => {
+    expect(normalizeSettings({ autoUpdateCheck: false }).autoUpdateCheck).toBe(false);
+    expect(normalizeSettings({ autoUpdateCheck: true }).autoUpdateCheck).toBe(true);
+    for (const raw of [0, 'no', null, {}]) expect(normalizeSettings({ autoUpdateCheck: raw }).autoUpdateCheck).toBe(true);
+  });
+
+  it('updateNotifiedVersion is kept only as x.y.z', () => {
+    expect(normalizeSettings({ updateNotifiedVersion: '0.5.1' }).updateNotifiedVersion).toBe('0.5.1');
+    for (const raw of ['x', '', '0.5', 'v0.5.1', '0.5.1-beta', '0.5.1\n', ' 0.5.1', 5, {}, ['0.5.1'], undefined]) {
+      expect(normalizeSettings({ updateNotifiedVersion: raw }).updateNotifiedVersion).toBeNull();
+    }
+  });
+
+  it('merges a patch through the same rules', () => {
+    const s = mergeSettings(DEFAULT_SETTINGS, { updateNotifiedVersion: '0.6.0', autoUpdateCheck: false });
+    expect([s.autoUpdateCheck, s.updateNotifiedVersion]).toEqual([false, '0.6.0']);
+    expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
   });
 });

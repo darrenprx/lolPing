@@ -37,6 +37,11 @@ const api: SettingsApi = {
   copyRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomCopy),
   retryInternet: () => ipcRenderer.invoke(SETTINGS_CH.roomRetryInternet),
   onShowSection: (cb) => subscribe(SETTINGS_CH.showSection, cb),
+  getUpdate: () => ipcRenderer.invoke(SETTINGS_CH.updateGet),
+  onUpdate: (cb) => subscribe(SETTINGS_CH.updateState, cb),
+  checkForUpdates: () => ipcRenderer.invoke(SETTINGS_CH.updateCheck),
+  startUpdate: () => ipcRenderer.invoke(SETTINGS_CH.updateStart),
+  openReleasePage: () => ipcRenderer.invoke(SETTINGS_CH.updateOpenRelease),
 };
 
 contextBridge.exposeInMainWorld('settingsApi', api);

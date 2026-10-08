@@ -4,6 +4,7 @@ import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
 import type { OverlaySettings, Settings } from './settings';
+import type { UpdateState } from './update';
 
 export interface Point {
   x: number;
@@ -105,4 +106,13 @@ export interface SettingsApi {
   retryInternet(): Promise<void>;
   /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
   onShowSection(cb: (id: string) => void): () => void;
+  /** Where the update checker is, or null when this build has none (a development build): then the page shows no update controls. */
+  getUpdate(): Promise<UpdateState | null>;
+  onUpdate(cb: (s: UpdateState) => void): () => void;
+  /** A manual check for a new version. Does nothing while a check, a download or an install is already running. */
+  checkForUpdates(): Promise<void>;
+  /** Downloads and installs the version that was found. Returns at once; progress arrives through onUpdate. */
+  startUpdate(): Promise<void>;
+  /** Opens the release notes of the version that was found, or else the page of the latest release. */
+  openReleasePage(): Promise<void>;
 }

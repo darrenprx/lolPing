@@ -25,5 +25,10 @@ export const SETTINGS_CH = {
   roomClipboard: 'room:clipboardCode',
   roomCopy: 'room:copyCode',
   roomRetryInternet: 'room:retryInternet',
+  updateGet: 'update:get',
+  updateState: 'update:state',
+  updateCheck: 'update:check',
+  updateStart: 'update:start',
+  updateOpenRelease: 'update:openRelease',
   showSection: 'settings:showSection',
 } as const;

@@ -44,6 +44,34 @@ describe('language', () => {
     expect(strings('en', 'mac')).toBe(en); // stable identity: the settings page uses it as a React dependency
   });
 
+  it('words the update checker as specified, with a menu bar toast on a Mac', () => {
+    const en = strings('en');
+    expect(en.updateAvailable('0.5.1')).toBe('lolPing 0.5.1 is available');
+    expect(en.updateToastTitle).toBe('Update available');
+    expect(en.updateToastBody('0.5.1')).toBe('lolPing 0.5.1 is ready to download. Update from the tray menu or Settings.');
+    expect(en.updateMacSteps).toBe('lolPing downloads the update and opens it. Drag lolPing into Applications, choose Replace, then open it and allow Accessibility again.');
+    expect(en.updateMacDialog).toBe('Drag lolPing into Applications and choose Replace. Then open it and allow Accessibility again. lolPing will quit now.');
+    expect(en.updateErrDamaged).toBe('The download was damaged. Try again.');
+    expect(en.autoUpdateCheckDesc).toBe('Checks GitHub for a new version every few hours. Nothing downloads until you click Update.');
+    expect(en.restartingToUpdate).toBe('Restarting to update…');
+    expect(en.trayUpdateTo('0.5.1')).toBe('Update to 0.5.1…');
+    expect(en.trayDownloading(42)).toBe('Downloading update… 42%');
+    expect(strings('en', 'mac').updateToastBody('0.5.1')).toContain('menu bar');
+    expect(strings('zh-CN', 'mac').updateToastBody('0.5.1')).toContain('菜单栏');
+    expect(strings('zh-CN').updateToastBody('0.5.1')).toContain('托盘');
+  });
+
+  it('says that mute and the incoming limit cover emotes as well as pings, and titles update error toasts', () => {
+    for (const lang of ['en', 'zh-CN'] as const) {
+      const t = strings(lang);
+      const emote = lang === 'en' ? 'emote' : '表情';
+      expect(t.roomMuteDesc).toContain(emote);
+      expect(t.roomLimit).toContain(emote);
+      expect(t.roomLimitDesc).toContain(emote);
+      expect(t.updateErrorToastTitle).not.toBe('');
+    }
+  });
+
   it('defaults to auto and rejects unknown values', () => {
     expect(normalizeSettings({}).language).toBe('auto');
     expect(normalizeSettings({ language: 'zh-CN' }).language).toBe('zh-CN');

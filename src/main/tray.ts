@@ -1,5 +1,6 @@
 import { Menu, Tray, nativeImage, type MenuItemConstructorOptions, type NativeImage } from 'electron';
 import { strings, type Strings } from '../shared/i18n';
+import type { UpdateState } from '../shared/update';
 
 export type TrayMode = 'on' | 'off' | 'failed' | 'noAccess';
 
@@ -14,6 +15,12 @@ export interface TrayHandlers {
   setEnabled(on: boolean): void;
   retryHelper(): void;
   quit(): void;
+  update: {
+    /** A manual check for a new version. */
+    check(): void;
+    /** Downloads and installs the version that was found. */
+    start(): void;
+  };
   room: {
     joinClipboard(): void;
     create(): void;
@@ -31,6 +38,19 @@ export interface TrayRoom {
   count: number;
   muted: boolean;
 }
+
+/**
+ * What the tray shows about updates: the phase of the update checker, with the version found and the download's percent.
+ * `null` when there is no update checker (a development build), so the menu has no update item.
+ */
+export type TrayUpdate = { phase: UpdateState['phase']; version?: string; percent?: number } | null;
+
+/** The part of the update checker's state that the menu shows. */
+export const trayUpdateFrom = (s: UpdateState): TrayUpdate => ({
+  phase: s.phase,
+  version: 'version' in s ? s.version : undefined,
+  percent: s.phase === 'downloading' ? s.percent : undefined,
+});
 
 /** Re-colours a premultiplied BGRA bitmap pixel by pixel. */
 function recolor(base: NativeImage, fn: (r: number, g: number, b: number, a: number) => [number, number, number, number]): NativeImage {
@@ -52,6 +72,7 @@ export class AppTray {
   private mode: TrayMode = 'on';
   private enabled = true;
   private room: TrayRoom = { code: null, count: 0, muted: false };
+  private update: TrayUpdate = null;
   private destroyed = false;
 
   /** `mac` switches to menu bar behaviour: template icons, and a click opens the menu (which has Settings…). */
@@ -104,6 +125,14 @@ export class AppTray {
     this.render();
   }
 
+  setUpdate(update: TrayUpdate): void {
+    if (this.destroyed) return;
+    const u = this.update;
+    if (u === update || (u && update && u.phase === update.phase && u.version === update.version && u.percent === update.percent)) return; // progress changes often
+    this.update = update;
+    this.render();
+  }
+
   /** Switches the tooltip and menu to another language. */
   setText(text: Strings): void {
     if (this.destroyed) return;
@@ -124,12 +153,13 @@ export class AppTray {
     this.tray.setImage(this.icons[this.mode === 'noAccess' ? 'failed' : this.mode]);
     const t = this.text;
     this.tray.setToolTip(failed ? t.trayTipFailed : noAccess ? t.trayTipNoAccess : t.trayTip(this.enabled));
-    const items: MenuItemConstructorOptions[] = [
-      {
-        label: t.trayEnabled, type: 'checkbox', checked: this.enabled, enabled: !failed && !noAccess,
-        click: (item) => this.handlers.setEnabled(item.checked),
-      },
-    ];
+    const items: MenuItemConstructorOptions[] = [];
+    const updateItem = this.updateItem();
+    if (updateItem) items.push(updateItem, { type: 'separator' });
+    items.push({
+      label: t.trayEnabled, type: 'checkbox', checked: this.enabled, enabled: !failed && !noAccess,
+      click: (item) => this.handlers.setEnabled(item.checked),
+    });
     if (failed) items.push({ label: t.trayRestart, click: () => this.handlers.retryHelper() });
     items.push(
       { type: 'separator' },
@@ -138,6 +168,18 @@ export class AppTray {
       { label: t.trayQuit, click: () => this.handlers.quit() },
     );
     this.tray.setContextMenu(Menu.buildFromTemplate(items));
+  }
+
+  /** The item at the top of the menu for the update checker's phase, or null without one. */
+  private updateItem(): MenuItemConstructorOptions | null {
+    const u = this.update;
+    if (!u) return null;
+    const t = this.text;
+    const h = this.handlers.update;
+    if (u.phase === 'available' && u.version) return { label: t.trayUpdateTo(u.version), click: () => h.start() };
+    if (u.phase === 'downloading') return { label: t.trayDownloading(u.percent ?? 0), enabled: false };
+    if (u.phase === 'installing') return { label: t.trayInstalling, enabled: false };
+    return { label: t.trayCheckForUpdates, click: () => h.check() };
   }
 
   private roomMenu(): MenuItemConstructorOptions[] {

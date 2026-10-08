@@ -1,6 +1,6 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -24,6 +24,7 @@ import { WheelEditor, type PoolItem } from './components/WheelEditor';
 import { TextContext, useText } from './text';
 import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
+import { useUpdateState } from './useUpdateState';
 
 const PLATFORM = api.platform;
 const MAC = PLATFORM === 'mac';
@@ -87,6 +88,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
     document.documentElement.lang = t.lang; // picks the right CJK glyphs
   }, [t]);
   const mainRef = useRef<HTMLElement>(null);
+  const updateState = useUpdateState() ?? null; // no update checker in this build, or not known yet: no update controls
   const [active, setActive] = useState(SECTIONS[0].id);
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
@@ -213,7 +215,11 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             ))}
           </Dropdown>
         </SettingRow>
-        <AboutSection icon={<Info24Regular />} />
+        {updateState ? (
+          <SwitchRow icon={<ArrowSync24Regular />} title={t.autoUpdateCheck} description={t.autoUpdateCheckDesc}
+            checked={s.autoUpdateCheck} onChange={(v) => void update({ autoUpdateCheck: v })} />
+        ) : null}
+        <AboutSection icon={<Info24Regular />} update={updateState} />
       </main>
     </div>
   );

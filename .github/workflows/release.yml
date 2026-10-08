@@ -15,18 +15,23 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check the tag matches package.json
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      # A draft: installed apps look for latest.yml in the newest published release, so it must not show up before the Windows job has
+      # uploaded it (every check would fail with "Cannot find latest.yml" meanwhile). The publish job at the end makes it public.
+      # A draft is not found by `gh release view`, so look for the tag in the list. A re-run keeps the release it already has.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --title "lolPing $GITHUB_REF_NAME" --generate-notes
+          gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fx "$GITHUB_REF_NAME" > /dev/null \
+            || gh release create "$GITHUB_REF_NAME" --title "lolPing $GITHUB_REF_NAME" --generate-notes --draft
 
   windows:
     needs: release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # gh uses GH_TOKEN; nothing here pushes
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -35,17 +40,25 @@ jobs:
       - run: npm run test:helper
       - run: npm test
       - run: npm run dist
-      - name: Upload the installer
+      - name: Upload the installer and its update files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe" --clobber
+        # latest.yml and the blockmap are what electron-updater in an installed lolPing reads to find and fetch this version.
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe" \
+            "release/latest.yml" \
+            "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe.blockmap" \
+            --clobber
 
   mac:
     needs: release
     runs-on: macos-latest # Apple Silicon
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # gh uses GH_TOKEN; nothing here pushes
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -59,3 +72,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" "release/lolPing-${GITHUB_REF_NAME#v}-arm64.dmg" --clobber
+
+  # Both installers and the update files are uploaded: only now does the draft become the latest release.
+  publish:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

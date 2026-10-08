@@ -10,6 +10,7 @@ import type { Platform } from './platform';
 import { isTagColor } from './roomColors';
 import { parseRoomCode } from './roomCode';
 import { sanitizeName } from './roomProtocol';
+import { isVersion } from './update';
 import { isValidWheel } from './wheelLayout';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
@@ -62,6 +63,10 @@ export interface Settings {
   emoteSound: boolean;
   /** Imported emotes, at most MAX_CUSTOM_EMOTES. Their files live in the data folder. */
   customEmotes: CustomEmote[];
+  /** Look for a new version on launch and every few hours. Checking by hand always works. */
+  autoUpdateCheck: boolean;
+  /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
+  updateNotifiedVersion: string | null;
 }
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
@@ -100,6 +105,8 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSizePx: 150,
   emoteSound: true,
   customEmotes: [],
+  autoUpdateCheck: true,
+  updateNotifiedVersion: null,
 };
 
 export const LIMITS = {
@@ -113,7 +120,7 @@ export const LIMITS = {
 
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound';
+  | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -235,6 +242,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     emoteSizePx: num(r.emoteSizePx, 'emoteSizePx'),
     emoteSound: bool(r.emoteSound, 'emoteSound'),
     customEmotes: custom,
+    autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
+    updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
   };
 }
 
@@ -244,11 +253,12 @@ export function mergeSettings(current: Settings, patch: Partial<Settings>, platf
 
 /**
  * A patch from the settings window, before it is merged. Imported emotes are left out: they change only through importing
- * and removing, which check the files behind them. Anything that isn't an object changes nothing.
+ * and removing, which check the files behind them. `updateNotifiedVersion` is the update checker's own note (which version
+ * it already announced), so the window can't set it either. Anything that isn't an object changes nothing.
  */
 export function rendererPatch(raw: unknown): Partial<Settings> {
   if (!isObj(raw)) return {};
-  const { customEmotes: _ignored, ...patch } = raw;
+  const { customEmotes: _emotes, updateNotifiedVersion: _notified, ...patch } = raw;
   return patch as Partial<Settings>;
 }
 
