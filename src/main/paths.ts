@@ -27,9 +27,14 @@ export const assetPath = (...parts: string[]): string =>
 
 export const settingsDir = (): string => join(app.getPath('appData'), 'lolPing');
 
-/** `hash` (without #) is passed to the page, e.g. the settings section to open at. */
-export function loadPage(win: BrowserWindow, page: Page, hash = ''): Promise<void> {
+/** Where `page` is served from: the Vite dev server in development, lolping://app in production. `hash` is without the #. */
+export function pageUrl(page: Page, hash = ''): string {
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   const suffix = hash ? `#${hash}` : '';
-  return devUrl ? win.loadURL(`${devUrl}/${page}/index.html${suffix}`) : win.loadURL(`${APP_SCHEME}://app/${page}/index.html${suffix}`);
+  return devUrl ? `${devUrl}/${page}/index.html${suffix}` : `${APP_SCHEME}://app/${page}/index.html${suffix}`;
+}
+
+/** `hash` (without #) is passed to the page, e.g. the settings section to open at. */
+export function loadPage(win: BrowserWindow, page: Page, hash = ''): Promise<void> {
+  return win.loadURL(pageUrl(page, hash));
 }

@@ -10,7 +10,8 @@ const TRANSIENT_RENAME_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', '
 /** Delay before each retry: 3 attempts in total. */
 const RENAME_RETRY_DELAYS_MS: readonly number[] = [50, 100];
 
-async function renameWithRetry(from: string, to: string): Promise<void> {
+/** Renames, retrying the brief locks Windows can hold on the target. */
+export async function renameWithRetry(from: string, to: string): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(from, to);
@@ -29,6 +30,8 @@ export class SettingsStore extends EventEmitter {
   readonly problems: string[] = [];
   /** True when load() found no settings file: lolPing's first run. */
   firstRun = false;
+  /** True when load() read an emote key that clashed with another lolPing key and turned it off. */
+  emoteKeyClashed = false;
   private current: Settings;
   private timer: NodeJS.Timeout | null = null;
   private writing: Promise<void> = Promise.resolve();
@@ -46,6 +49,7 @@ export class SettingsStore extends EventEmitter {
   }
 
   load(): Settings {
+    this.emoteKeyClashed = false;
     this.firstRun = !existsSync(this.file);
     if (this.firstRun) {
       this.current = normalizeSettings(undefined, this.platform, this.identity);
@@ -56,8 +60,10 @@ export class SettingsStore extends EventEmitter {
       const raw: unknown = JSON.parse(readFileSync(this.file, 'utf8'));
       this.current = normalizeSettings(raw, this.platform, this.identity);
       // A file from an older version lacks the newer keys: write the filled-in values once.
-      const stored = typeof raw === 'object' && raw !== null ? raw : {};
+      const stored: Record<string, unknown> = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
       if (Object.keys(this.current).some((k) => !(k in stored))) this.scheduleSave();
+      // A file with no emote key (an upgrade) isn't flagged: an old Ctrl user just gets the emote key off.
+      this.emoteKeyClashed = 'emoteTrigger' in stored && stored.emoteTrigger !== 'off' && this.current.emoteTrigger === 'off';
     } catch (err) {
       let backup = 'it was backed up to settings.bak.json';
       try {

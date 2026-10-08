@@ -7,6 +7,7 @@
 #include <mutex>
 #include <string>
 
+#include "../src/commands.h"
 #include "../src/decision.h"
 #include "../src/json.h"
 #include "../src/macinput.h"
@@ -27,7 +28,7 @@ static int g_fail = 0;
   } while (0)
 
 namespace {
-constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56;
+constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54;
 using S = Decision::State;
 
 InputEvent key(EvKind k, uint32_t vk) {
@@ -67,12 +68,29 @@ Decision withTrigger(Trigger t, uint32_t vk = 0, bool clickPing = false) {
   d.setConfig(c);
   return d;
 }
+// Pings on Alt (the default), emotes on `emote`.
+Decision withEmote(Trigger emote = Trigger::Ctrl, uint32_t vk = 0, bool emoteClick = false) {
+  Config c;
+  c.emoteTrigger = emote;
+  c.emoteTriggerVk = vk;
+  c.emoteClick = emoteClick;
+  Decision d;
+  d.setConfig(c);
+  return d;
+}
 // Alt held, left pressed at (100,100), dragged to (130,100): the wheel is open.
 void openWheel(Decision& d) {
   d.onEvent(kd(ALT));
   d.onEvent(md(Btn::Left, 100, 100));
   d.onEvent(mv(130, 100));
 }
+// The same drag with Ctrl: the emote wheel is open (with withEmote()).
+void openEmoteWheel(Decision& d) {
+  d.onEvent(kd(CTRL));
+  d.onEvent(md(Btn::Left, 100, 100));
+  d.onEvent(mv(130, 100));
+}
+bool emitIs(const Emit* e, WheelKind w) { return e != nullptr && e->wheel == w; }
 }  // namespace
 
 static void test_alt_drag_opens_wheel_and_releases() {
@@ -427,6 +445,229 @@ static void test_mouse4_trigger_drags_with_side_button() {
   CHECK(findEmit(d.onEvent(mu(Btn::X1, 40, 10)), Emit::Kind::WheelRelease) != nullptr);
 }
 
+static void test_ctrl_drag_opens_emote_wheel() {
+  Decision d = withEmote();
+  CHECK(!d.onEvent(kd(CTRL)).swallow);
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(d.state() == S::Pending);
+  Result r = d.onEvent(mv(130, 100));
+  const Emit* open = findEmit(r, Emit::Kind::WheelOpen);
+  CHECK(emitIs(open, WheelKind::Emote) && open->x == 100 && open->y == 100);
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelMove), WheelKind::Emote));
+  CHECK(emitIs(findEmit(d.onEvent(mv(135, 90)), Emit::Kind::WheelMove), WheelKind::Emote));
+  r = d.onEvent(mu(Btn::Left, 140, 90));
+  CHECK(r.swallow);
+  const Emit* rel = findEmit(r, Emit::Kind::WheelRelease);
+  CHECK(emitIs(rel, WheelKind::Emote) && rel->x == 140 && rel->y == 90);
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_alt_drag_is_still_the_ping_wheel() {
+  Decision d = withEmote();
+  CHECK(!d.onEvent(kd(ALT)).swallow);
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  Result r = d.onEvent(mv(130, 100));
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelOpen), WheelKind::Ping));
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelMove), WheelKind::Ping));
+  r = d.onEvent(mu(Btn::Left, 130, 100));
+  CHECK(r.swallow);
+  CHECK(emitIs(findEmit(r, Emit::Kind::WheelRelease), WheelKind::Ping));
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_both_triggers_held_pass_through() {
+  Decision d = withEmote();
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(CTRL));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow && r.emits.empty() && r.injects.empty());
+  CHECK(d.state() == S::Idle);
+  r = d.onEvent(mv(150, 100));
+  CHECK(!r.swallow && r.emits.empty());
+  r = d.onEvent(mu(Btn::Left, 150, 100));
+  CHECK(!r.swallow && r.emits.empty() && r.injects.empty());
+  r = d.onEvent(ku(ALT));  // nothing was swallowed, so the Alt-up needs no mask
+  CHECK(!r.swallow && r.injects.empty());
+}
+
+static void test_emote_click_on_and_off() {
+  {
+    Decision d = withEmote(Trigger::Ctrl, 0, true);
+    d.onEvent(kd(CTRL));
+    CHECK(d.onEvent(md(Btn::Left, 50, 60)).swallow);
+    Result r = d.onEvent(mu(Btn::Left, 51, 60));
+    CHECK(r.swallow && r.injects.empty());
+    const Emit* c = findEmit(r, Emit::Kind::Click);
+    CHECK(emitIs(c, WheelKind::Emote) && c->x == 50 && c->y == 60);
+  }
+  {
+    Decision d = withEmote();
+    d.onEvent(kd(CTRL));
+    CHECK(d.onEvent(md(Btn::Left, 50, 60)).swallow);
+    Result r = d.onEvent(mu(Btn::Left, 50, 60));
+    CHECK(r.swallow && r.emits.empty());
+    CHECK(r.injects.size() == 2);
+    CHECK(injectIs(r.injects[0], InjectKind::ButtonDown, Btn::Left));
+    CHECK(injectIs(r.injects[1], InjectKind::ButtonUp, Btn::Left));
+  }
+  {
+    // Each wheel follows its own click setting: click pings on, emote click off.
+    Config c;
+    c.clickPing = true;
+    c.emoteTrigger = Trigger::Ctrl;
+    Decision d;
+    d.setConfig(c);
+    d.onEvent(kd(CTRL));
+    d.onEvent(md(Btn::Left, 50, 60));
+    Result r = d.onEvent(mu(Btn::Left, 50, 60));
+    CHECK(r.emits.empty() && r.injects.size() == 2);
+    d.onEvent(ku(CTRL));
+    d.onEvent(kd(ALT));
+    d.onEvent(md(Btn::Left, 50, 60));
+    r = d.onEvent(mu(Btn::Left, 50, 60));
+    CHECK(emitIs(findEmit(r, Emit::Kind::Click), WheelKind::Ping) && r.injects.empty());
+  }
+  {
+    // Ctrl released before the button: the emote click is placed, or the click replayed.
+    Decision on = withEmote(Trigger::Ctrl, 0, true);
+    on.onEvent(kd(CTRL));
+    on.onEvent(md(Btn::Left, 100, 100));
+    const Emit* c = findEmit(on.onEvent(ku(CTRL)), Emit::Kind::Click);
+    CHECK(emitIs(c, WheelKind::Emote) && c->x == 100);
+    CHECK(on.onEvent(mu(Btn::Left, 100, 100)).swallow);
+    Decision off = withEmote();
+    off.onEvent(kd(CTRL));
+    off.onEvent(md(Btn::Left, 100, 100));
+    Result r = off.onEvent(ku(CTRL));
+    CHECK(r.injects.size() == 1 && injectIs(r.injects[0], InjectKind::ButtonDown, Btn::Left));
+    CHECK(off.state() == S::Idle);
+    CHECK(!off.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  }
+}
+
+static void test_escape_and_right_click_cancel_emote_gesture() {
+  Decision d = withEmote();
+  openEmoteWheel(d);
+  Result r = d.onEvent(kd(ESC));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Cancel) != nullptr);
+  CHECK(d.onEvent(ku(ESC)).swallow);
+  r = d.onEvent(mu(Btn::Left, 130, 100));
+  CHECK(r.swallow && r.emits.empty());
+  CHECK(d.state() == S::Idle);
+
+  d.onEvent(md(Btn::Left, 100, 100));  // Ctrl still held
+  CHECK(d.state() == S::Pending);
+  r = d.onEvent(md(Btn::Right, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Cancel) != nullptr);
+  CHECK(d.onEvent(mu(Btn::Right, 100, 100)).swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow && r.emits.empty() && r.injects.empty());
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_emote_trigger_none_ignores_ctrl_drag() {
+  Decision d = withEmote(Trigger::None);
+  d.onEvent(kd(CTRL));
+  CHECK(!d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(d.onEvent(mv(150, 100)).emits.empty());
+  CHECK(!d.onEvent(mu(Btn::Left, 150, 100)).swallow);
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_custom_emote_key_is_swallowed() {
+  Decision d = withEmote(Trigger::CustomVk, KEY_T);
+  CHECK(d.onEvent(kd(KEY_T)).swallow);
+  CHECK(d.onEvent(md(Btn::Left, 0, 0)).swallow);
+  CHECK(emitIs(findEmit(d.onEvent(mv(0, 40)), Emit::Kind::WheelOpen), WheelKind::Emote));
+  CHECK(emitIs(findEmit(d.onEvent(mu(Btn::Left, 0, 40)), Emit::Kind::WheelRelease), WheelKind::Emote));
+  CHECK(d.onEvent(ku(KEY_T)).swallow);
+  CHECK(!d.onEvent(kd(KEY_V)).swallow);  // other keys still type
+  d.onEvent(ku(KEY_V));
+  d.setEnabled(false);
+  CHECK(!d.onEvent(kd(KEY_T)).swallow);  // disabled: typing T works again
+  CHECK(!d.onEvent(ku(KEY_T)).swallow);
+}
+
+static void test_mouse5_emote_beside_alt_ping() {
+  Decision d = withEmote(Trigger::Mouse5);
+  CHECK(!d.onEvent(md(Btn::Left, 0, 0)).swallow);  // no key held: a plain click
+  d.onEvent(mu(Btn::Left, 0, 0));
+  CHECK(d.onEvent(md(Btn::X2, 10, 10)).swallow);
+  CHECK(emitIs(findEmit(d.onEvent(mv(40, 10)), Emit::Kind::WheelOpen), WheelKind::Emote));
+  Result r = d.onEvent(mu(Btn::X2, 40, 10));
+  CHECK(r.swallow && emitIs(findEmit(r, Emit::Kind::WheelRelease), WheelKind::Emote));
+
+  d.onEvent(kd(ALT));
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(emitIs(findEmit(d.onEvent(mv(130, 100)), Emit::Kind::WheelOpen), WheelKind::Ping));
+  CHECK(emitIs(findEmit(d.onEvent(mu(Btn::Left, 130, 100)), Emit::Kind::WheelRelease), WheelKind::Ping));
+
+  // With Alt still held, the side button is only the emote trigger.
+  CHECK(d.onEvent(md(Btn::X2, 10, 10)).swallow);
+  CHECK(emitIs(findEmit(d.onEvent(mv(40, 10)), Emit::Kind::WheelOpen), WheelKind::Emote));
+  d.onEvent(mu(Btn::X2, 40, 10));
+  CHECK(d.state() == S::Idle);
+
+  // A side-button click without a drag is replayed (emote click off), so browser Forward still works.
+  d.onEvent(md(Btn::X2, 10, 10));
+  r = d.onEvent(mu(Btn::X2, 10, 10));
+  CHECK(r.swallow && r.injects.size() == 2);
+  CHECK(injectIs(r.injects[0], InjectKind::ButtonDown, Btn::X2));
+  CHECK(injectIs(r.injects[1], InjectKind::ButtonUp, Btn::X2));
+}
+
+static void test_pause_stops_both_wheels() {
+  Decision d = withEmote();
+  d.onEvent(kd(CTRL));
+  d.onEvent(kd(ALT));
+  CHECK(findEmit(d.onEvent(kd(KEY_P)), Emit::Kind::Toggled) != nullptr);
+  CHECK(!d.enabled());
+  d.onEvent(ku(KEY_P));
+  d.onEvent(ku(ALT));  // Ctrl alone is still held
+  CHECK(!d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(d.onEvent(mv(150, 100)).emits.empty());
+  CHECK(!d.onEvent(mu(Btn::Left, 150, 100)).swallow);
+  d.onEvent(ku(CTRL));
+  d.onEvent(kd(ALT));
+  CHECK(!d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+}
+
+static void test_releasing_emote_trigger_mid_wheel_cancels() {
+  Decision d = withEmote();
+  openEmoteWheel(d);
+  d.onEvent(kd(ALT));  // the other wheel's trigger doesn't touch this gesture
+  CHECK(findEmit(d.onEvent(ku(ALT)), Emit::Kind::Cancel) == nullptr);
+  CHECK(d.state() == S::Wheel);
+  Result r = d.onEvent(ku(CTRL));
+  CHECK(findEmit(r, Emit::Kind::Cancel) != nullptr);
+  CHECK(d.state() == S::SwallowUp);
+  CHECK(d.onEvent(mu(Btn::Left, 130, 100)).swallow);
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_parse_config_emote_fields() {
+  const Config cur;
+  Command c = parseCommand(R"({"type":"config","emoteTrigger":"off"})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.emoteTrigger == Trigger::None);
+  c = parseCommand(R"({"type":"config","emoteTrigger":"mouse5","emoteClick":true})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.emoteTrigger == Trigger::Mouse5 && c.config.emoteClick);
+  c = parseCommand(R"({"type":"config","emoteTrigger":"vk","emoteTriggerVk":84,"emoteClick":false})", cur);
+  CHECK(c.config.emoteTrigger == Trigger::CustomVk && c.config.emoteTriggerVk == 84 && !c.config.emoteClick);
+  c = parseCommand(R"({"type":"config","trigger":"alt","emoteTrigger":"ctrl"})", cur);
+  CHECK(c.config.trigger == Trigger::Alt && c.config.emoteTrigger == Trigger::Ctrl);
+  Config set;
+  set.emoteTrigger = Trigger::Shift;
+  set.emoteTriggerVk = 7;
+  set.emoteClick = true;
+  c = parseCommand(R"({"type":"config"})", set);  // missing fields keep their current values
+  CHECK(c.config.emoteTrigger == Trigger::Shift && c.config.emoteTriggerVk == 7 && c.config.emoteClick);
+  CHECK(parseCommand(R"({"type":"config","emoteTrigger":"bogus"})", cur).kind == Command::Kind::Invalid);
+  CHECK(parseCommand(R"({"type":"config","trigger":"off"})", cur).kind == Command::Kind::Invalid);  // pings always have a trigger
+}
+
 static void test_json_parses_flat_objects() {
   std::map<std::string, std::string> m;
   CHECK(parseFlatJson(R"({"type":"config","enabled":true,"dragThresholdPx":8,"trigger":"alt"})", m));
@@ -451,11 +692,30 @@ static void test_format_emit() {
   Emit open{Emit::Kind::WheelOpen};
   open.x = 1;
   open.y = -2;
-  CHECK(formatEmit(open) == R"({"type":"wheelOpen","x":1,"y":-2})");
+  CHECK(formatEmit(open) == R"({"type":"wheelOpen","x":1,"y":-2,"wheel":"ping"})");
   Emit toggled{Emit::Kind::Toggled};
   toggled.enabled = true;
   CHECK(formatEmit(toggled) == R"({"type":"toggled","enabled":true})");
   CHECK(formatEmit(Emit{Emit::Kind::Cancel}) == R"({"type":"cancel"})");
+}
+
+static void test_format_emit_includes_wheel() {
+  Emit open{Emit::Kind::WheelOpen};
+  open.x = 1;
+  open.y = 2;
+  open.wheel = WheelKind::Emote;
+  CHECK(formatEmit(open) == R"({"type":"wheelOpen","x":1,"y":2,"wheel":"emote"})");
+  Emit click{Emit::Kind::Click};
+  click.x = 3;
+  click.y = 4;
+  CHECK(formatEmit(click) == R"({"type":"click","x":3,"y":4,"wheel":"ping"})");
+  click.wheel = WheelKind::Emote;
+  CHECK(formatEmit(click) == R"({"type":"click","x":3,"y":4,"wheel":"emote"})");
+  for (const auto k : {Emit::Kind::WheelMove, Emit::Kind::WheelRelease}) {
+    Emit e{k};
+    e.wheel = WheelKind::Emote;
+    CHECK(formatEmit(e).find(R"(,"wheel":"emote"})") != std::string::npos);
+  }
 }
 
 // Review focus: a frozen Electron must never stall the hook thread.
@@ -559,6 +819,8 @@ int main() {
   test_json_rejects_bad_input();
   test_json_escape();
   test_format_emit();
+  test_format_emit_includes_wheel();
+  test_parse_config_emote_fields();
   test_output_never_blocks_producer();
   test_alt_drag_opens_wheel_and_releases();
   test_plain_click_passes_through();
@@ -592,6 +854,16 @@ int main() {
   test_capslock_trigger_swallows_key();
   test_custom_key_trigger();
   test_mouse4_trigger_drags_with_side_button();
+  test_ctrl_drag_opens_emote_wheel();
+  test_alt_drag_is_still_the_ping_wheel();
+  test_both_triggers_held_pass_through();
+  test_emote_click_on_and_off();
+  test_escape_and_right_click_cancel_emote_gesture();
+  test_emote_trigger_none_ignores_ctrl_drag();
+  test_custom_emote_key_is_swallowed();
+  test_mouse5_emote_beside_alt_ping();
+  test_pause_stops_both_wheels();
+  test_releasing_emote_trigger_mid_wheel_cancels();
   test_mask_menu_keys_off_leaves_alt_up_alone();
   test_mac_keycodes_map_to_vks();
   test_mac_modifier_held();

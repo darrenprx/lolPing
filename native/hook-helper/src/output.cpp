@@ -6,7 +6,8 @@ namespace lp {
 
 std::string formatEmit(const Emit& e) {
   auto pt = [&](const char* type) {
-    return std::string("{\"type\":\"") + type + "\",\"x\":" + std::to_string(e.x) + ",\"y\":" + std::to_string(e.y) + "}";
+    return std::string("{\"type\":\"") + type + "\",\"x\":" + std::to_string(e.x) + ",\"y\":" + std::to_string(e.y) +
+           ",\"wheel\":\"" + (e.wheel == WheelKind::Emote ? "emote" : "ping") + "\"}";
   };
   switch (e.kind) {
     case Emit::Kind::WheelOpen: return pt("wheelOpen");
@@ -38,7 +39,8 @@ void Output::line(std::string s) {
 
 void Output::emit(const Emit& e) { line(formatEmit(e)); }
 
-void Output::ready() { line("{\"type\":\"ready\",\"version\":1}"); }
+// Version 2: point events say which wheel they belong to, and the config takes an emote trigger.
+void Output::ready() { line("{\"type\":\"ready\",\"version\":2}"); }
 
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 

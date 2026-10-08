@@ -49,6 +49,48 @@ describe('SettingsStore', () => {
     expect(s.trigger).toBe('ctrl');
   });
 
+  it('flags an emote key clash from a hand-edited file', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'ctrl', emoteTrigger: 'ctrl' }));
+    const store = new SettingsStore(dir);
+    expect(store.load().emoteTrigger).toBe('off');
+    expect(store.emoteKeyClashed).toBe(true);
+  });
+
+  it('does not flag an upgrading Ctrl user, whose emote key just ends up off', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ trigger: 'ctrl' })); // a 0.4.0 file: no emote keys
+    const store = new SettingsStore(dir);
+    expect(store.load().emoteTrigger).toBe('off');
+    expect(store.emoteKeyClashed).toBe(false);
+  });
+
+  it('does not flag an emote key that was already off, or one without a clash', () => {
+    for (const file of [{ trigger: 'ctrl', emoteTrigger: 'off' }, { trigger: 'alt', emoteTrigger: 'ctrl' }, {}]) {
+      const dir = tempDir();
+      writeFileSync(join(dir, 'settings.json'), JSON.stringify(file));
+      const store = new SettingsStore(dir);
+      store.load();
+      expect(store.emoteKeyClashed).toBe(false);
+    }
+  });
+
+  it('flags a clash with the pause key too', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ emoteTrigger: { vk: 0x50 } }));
+    const store = new SettingsStore(dir);
+    store.load();
+    expect(store.emoteKeyClashed).toBe(true);
+  });
+
+  it('saves the emote fields it filled in for an older file', async () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, volume: 30 }));
+    new SettingsStore(dir, 10).load();
+    await sleep(80);
+    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))).toMatchObject({ emoteTrigger: 'ctrl', emoteSizePx: 150, customEmotes: [] });
+  });
+
   it('emits change with the normalized value', () => {
     const store = new SettingsStore(tempDir());
     store.load();

@@ -1,20 +1,24 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
 
 /* ---------- wheel ---------- */
-#wheel {
+#wheel, #emoteWheel {
   position: absolute; left: 0; top: 0; width: 600px; height: 600px; margin: -300px 0 0 -300px;
   pointer-events: none; opacity: 0; transform: scale(.85); transition: opacity .12s ease-out, transform .12s ease-out;
 }
-#wheel.open { opacity: 1; transform: scale(1); }
-#wheel .wedge { transition: fill-opacity .08s; }
-#wheel .icon {
+#wheel.open, #emoteWheel.open { opacity: 1; transform: scale(1); }
+#wheel .wedge, #emoteWheel .wedge { transition: fill-opacity .08s; }
+#wheel .icon, #emoteWheel .icon {
   transition: filter .1s, transform .1s; transform-box: fill-box; transform-origin: center;
   filter: grayscale(1) sepia(.75) saturate(1.3) brightness(1.15);
 }
-#wheel .icon.hot { filter: none; transform: scale(1.18); }
-#wheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
-#wheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+#wheel .icon.hot, #emoteWheel .icon.hot { filter: none; transform: scale(1.18); }
+#wheel .centerTxt, #emoteWheel .centerTxt { font: 600 15px "Segoe UI", sans-serif; letter-spacing: 1px; fill: #1fa9e0; }
+#wheel .backTxt, #emoteWheel .backTxt { font: 600 9px "Segoe UI", sans-serif; fill: #6c7a7c; letter-spacing: .5px; }
+/* Emote art is square: draw it round, like the League emote wheel. It keeps its own colours (only ping icons are tinted
+   until hovered), so the hot slice shows by its wedge and the larger icon. */
+#emoteWheel .icon, #emoteWheel .hub { clip-path: circle(50%); }
+#emoteWheel .icon { filter: none; }
 
 /* ---------- pings (sizes scale with --size, timing with --dur) ---------- */
 .ping { position: absolute; width: 0; height: 0; pointer-events: none; --size: 110px; --dur: 3.2s; }
@@ -43,7 +47,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   position: absolute; left: 25%; top: 25%; width: 50%; height: 50%; border-radius: 50%;
   background: radial-gradient(closest-side, #fff, var(--c) 40%, transparent); opacity: 0; animation: flash .35s ease-out .2s forwards;
 }
-.ping .tag {
+.ping .tag, .emote .tag {
   position: absolute; left: 0; top: calc(var(--size) * 0.5); transform: translateX(-50%); white-space: nowrap;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
   padding: 1px 7px; border-radius: 4px; background: rgba(8, 12, 16, .62); color: var(--tag);
@@ -60,6 +64,34 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @keyframes slide2 { 0% { transform: translate(calc(var(--size) * -.64), calc(var(--size) * -.64)); opacity: 0 } 100% { transform: none; opacity: 1 } }
 @keyframes shake { 0%, 100% { transform: none } 25% { transform: translate(-3px, 2px) } 50% { transform: translate(3px, -2px) } 75% { transform: translate(-2px, -1px) } }
 @keyframes flash { 0% { opacity: 0; transform: scale(.3) } 30% { opacity: 1 } 100% { opacity: 0; transform: scale(2.2) } }
+
+/* ---------- emotes (--size is the art's width, --dur the 3 s they stay) ---------- */
+.emote { position: absolute; width: 0; height: 0; pointer-events: none; --size: 150px; --dur: 3s; }
+.emote .tag { top: calc(var(--size) * 0.5 + 8px); }
+/* A bundled emote is a baked animation: a 320 px canvas holding 256 px of art, so it is drawn 1.25 times the art's size. */
+.emote .sheet {
+  position: absolute; left: calc(var(--size) * -0.625); top: calc(var(--size) * -0.625);
+  width: calc(var(--size) * 1.25); height: calc(var(--size) * 1.25);
+}
+/* A custom emote (or the placeholder) gets this envelope instead: pop in, bob, then shrink and fade over the last 0.35 s. */
+.emote .fx {
+  position: absolute; left: calc(var(--size) * -0.5); top: calc(var(--size) * -0.5); width: var(--size); height: var(--size);
+  animation: emoteIn .25s ease-out both, emoteBob 1.4s ease-in-out infinite, emoteOut .35s ease-in calc(var(--dur) - .35s) forwards;
+}
+.emote .fx img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 8px #fff8); }
+.emote .bubble {
+  position: absolute; left: 8%; top: 8%; width: 84%; height: 68%; box-sizing: border-box; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #f4efe2; border: 3px solid #c8aa6e; color: #1f2a30; filter: drop-shadow(0 0 8px #fff8);
+  font: 700 calc(var(--size) * .4)/1 "Segoe UI", sans-serif;
+}
+.emote .bubble::after {
+  content: ''; position: absolute; left: 24%; bottom: -7px; width: 14px; height: 14px; box-sizing: border-box;
+  background: #f4efe2; border: solid #c8aa6e; border-width: 0 3px 3px 0; transform: rotate(45deg) skew(8deg, 8deg);
+}
+@keyframes emoteIn { 0% { transform: scale(0) } 60% { transform: scale(1.15) } 100% { transform: scale(1) } }
+@keyframes emoteBob { 0%, 100% { translate: 0 0 } 25% { translate: 0 -4px } 75% { translate: 0 4px } }
+@keyframes emoteOut { from { transform: scale(1); opacity: 1 } to { transform: scale(.85); opacity: 0 } }
 
 /* ---------- toast ---------- */
 .toast {

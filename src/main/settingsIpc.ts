@@ -1,20 +1,25 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
+import { isCustomRef, isEmoteRefShape, type EmoteRef, type ImportResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
-import type { Settings } from '../shared/settings';
+import { patchClashes, rendererPatch } from '../shared/settings';
+import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
 
 const PROJECT_URL = 'https://github.com/darrenprx/lolPing';
 
 export interface SettingsIpcDeps {
   store: SettingsStore;
+  /** Imported emotes' files. Only the import and remove handlers change `customEmotes`. */
+  library: EmoteLibrary;
   getStatus(): AppStatus;
   setEnabled(on: boolean): void;
   preview(id: PingId): void;
+  previewEmote(ref: EmoteRef): void;
   about(): About;
   retryHelper(): void;
   setCapturing(on: boolean): void;
@@ -49,8 +54,20 @@ function hotkeyConflict(next: Hotkey, current: Hotkey, text: Strings, platform: 
 }
 
 export function registerSettingsIpc(d: SettingsIpcDeps): void {
+  // Imports and removals run one at a time, so each sees the list the one before it left (the duplicate and full checks).
+  let emoteQueue: Promise<unknown> = Promise.resolve();
+  const oneAtATime = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = emoteQueue.then(fn);
+    emoteQueue = run.catch(() => undefined);
+    return run;
+  };
+
   ipcMain.handle(SETTINGS_CH.get, () => d.store.get());
-  ipcMain.handle(SETTINGS_CH.set, (_e, patch: Partial<Settings>): SetSettingsResult => {
+  ipcMain.handle(SETTINGS_CH.set, (_e, raw: unknown): SetSettingsResult => {
+    const patch = rendererPatch(raw);
+    if (patchClashes(d.store.get(), patch, d.platform)) {
+      return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
+    }
     if (patch.toggleHotkey) {
       const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
       if (error) return { ok: false, error, settings: d.store.get() };
@@ -63,6 +80,23 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     const p = typeof id === 'string' ? pingById(id) : undefined;
     if (p) d.preview(p.id);
   });
+  ipcMain.handle(SETTINGS_CH.previewEmote, (_e, ref: unknown) => {
+    if (isEmoteRefShape(ref)) d.previewEmote(ref);
+  });
+  ipcMain.handle(SETTINGS_CH.emoteImport, (_e, raw: unknown) => oneAtATime(async (): Promise<ImportResult> => {
+    const file = emoteFileFrom(raw);
+    if (!file) return { ok: false, error: 'type' };
+    const saved = await d.library.save(file, d.store.get().customEmotes);
+    if (!saved.ok) return { ok: false, error: saved.error };
+    d.store.update({ customEmotes: [...d.store.get().customEmotes, saved.emote] });
+    return { ok: true, id: saved.emote.id };
+  }));
+  ipcMain.handle(SETTINGS_CH.emoteRemove, (_e, id: unknown) => oneAtATime(async () => {
+    if (!isCustomRef(id)) return;
+    await d.library.remove(id);
+    // Normalising the shorter list puts each wheel slot (and the click emote) that used it back to a default.
+    d.store.update({ customEmotes: d.store.get().customEmotes.filter((c) => c.id !== id) });
+  }));
   ipcMain.handle(SETTINGS_CH.about, () => d.about());
   ipcMain.handle(SETTINGS_CH.openFolder, async () => {
     await shell.openPath(d.store.dir);

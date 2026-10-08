@@ -1,3 +1,4 @@
+import { isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
 import { isTagColor } from './roomColors';
 
@@ -35,10 +36,19 @@ export interface PingMsg extends Base {
   x: number;
   y: number;
 }
+/** Added in 0.5.0: older apps drop it as an unknown type. Position as in PingMsg. */
+export interface EmoteMsg extends Base {
+  t: 'emote';
+  /** A bundled slug (possibly one only a newer app has) or 'c:' + hash of an imported emote. */
+  e: EmoteRef;
+  d: number;
+  x: number;
+  y: number;
+}
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | ByeMsg;
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -49,9 +59,9 @@ const UNSAFE_CHARS =
 /** While typing: at most MAX_NAME code points (an emoji counts once; maxLength would count UTF-16 units). */
 export const clampNameInput = (v: string): string => [...v].slice(0, MAX_NAME).join('');
 
-/** A display name that can't hide, reorder or break the text around it. */
-export function sanitizeName(raw: string, fallback = 'Player'): string {
-  const name = [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_NAME).join('').trim();
+/** A display name that can't hide, reorder or break the text around it. `max` is in code points. */
+export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): string {
+  const name = [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, max).join('').trim();
   return name || fallback;
 }
 
@@ -78,6 +88,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isUnit(x) || !isUnit(y)) return null;
       return { t, ...base, ping, d: d as number, x, y };
     }
+    case 'emote': {
+      const { e, d, x, y } = raw;
+      if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
+      if (!isUnit(x) || !isUnit(y)) return null;
+      return { t, ...base, e, d: d as number, x, y };
+    }
     case 'bye':
       return { t, ...base };
     default:
@@ -87,8 +103,22 @@ export function validateMessage(raw: unknown): RoomMessage | null {
 
 const round4 = (v: number): number => Math.round(v * 10_000) / 10_000;
 
+const PLAIN_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
+
+/** True only when `app` is a plain x.y.z version lower than `version`: anything else (a dev tool, a prerelease) isn't called old. */
+export function isOlderThan(app: string, version: string): boolean {
+  const a = PLAIN_VERSION.exec(app);
+  const v = PLAIN_VERSION.exec(version);
+  if (!a || !v) return false;
+  for (let i = 1; i <= 3; i++) {
+    const diff = Number(a[i]) - Number(v[i]);
+    if (diff !== 0) return diff < 0;
+  }
+  return false;
+}
+
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

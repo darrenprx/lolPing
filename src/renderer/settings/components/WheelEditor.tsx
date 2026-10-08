@@ -1,12 +1,8 @@
 import { Button } from '@fluentui/react-components';
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
-import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, pingById, textureUrl, type PingId } from '../../../shared/pings';
+import { DismissRegular } from '@fluentui/react-icons';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { dropPatch, type WheelPatch, type WheelSource, type WheelTarget } from '../../../shared/wheelLayout';
-import { api } from '../api';
 import { useText } from '../text';
-
-/** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared']);
 
 // Geometry of the editor wheel, in CSS pixels.
 const SIZE = 300;
@@ -22,12 +18,29 @@ const wedgePath = (i: number): string => {
   return `M${pt(R_IN, a0)} A${R_IN},${R_IN} 0 0 1 ${pt(R_IN, a1)} L${pt(R_OUT, a1)} A${R_OUT},${R_OUT} 0 0 0 ${pt(R_OUT, a0)}Z`;
 };
 
-interface Props {
-  wheel: readonly PingId[];
-  clickPingId: PingId;
-  clickPingOn: boolean;
+/** One thing that can go on the wheel, a ping or an emote. `badge` is a small tag on its tile; `onRemove` adds an × to it. */
+export interface PoolItem<T extends string> {
+  id: T;
+  icon: string;
+  name: string;
+  badge?: string;
+  onRemove?: () => void;
+}
+
+interface Props<T extends string> {
+  wheel: readonly T[];
+  center: T;
+  centerOn: boolean;
   trigger: string;
-  onChange: (patch: WheelPatch) => void;
+  pool: readonly PoolItem<T>[];
+  defaults: { wheel: readonly T[]; center: T };
+  labels: { title: string; desc: string; poolTitle: string; poolDesc: string };
+  /** Rendered under the pool's tiles, outside their scroll box, so it stays in view however long the pool is. */
+  poolExtra?: ReactNode;
+  /** Files dragged in from outside and dropped on the pool. Without it the pool takes no files. */
+  onDropFiles?: (files: File[]) => void;
+  onChange: (patch: WheelPatch<T>) => void;
+  onPreview: (id: T) => void;
 }
 
 const activate = (fn: () => void) => (e: KeyboardEvent) => {
@@ -37,11 +50,14 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
   }
 };
 
-export function WheelEditor({ wheel, clickPingId, clickPingOn, trigger, onChange }: Props) {
+export function WheelEditor<T extends string>({
+  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onChange, onPreview,
+}: Props<T>) {
   const t = useText();
-  const [picked, setPicked] = useState<WheelSource | null>(null);
+  const [picked, setPicked] = useState<WheelSource<T> | null>(null);
   const [hot, setHot] = useState<WheelTarget | null>(null);
-  const drag = useRef<WheelSource | null>(null);
+  const [filesOver, setFilesOver] = useState(false);
+  const drag = useRef<WheelSource<T> | null>(null);
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -51,19 +67,19 @@ export function WheelEditor({ wheel, clickPingId, clickPingOn, trigger, onChange
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const apply = (src: WheelSource, target: WheelTarget) => {
-    const patch = dropPatch(wheel, clickPingId, src, target);
+  const apply = (src: WheelSource<T>, target: WheelTarget) => {
+    const patch = dropPatch(wheel, center, src, target);
     if (patch) onChange(patch);
     setPicked(null);
   };
 
-  /** Click on a slot or the centre: place the picked ping there, or pick up what's there. */
-  const clickTarget = (target: WheelTarget, here: WheelSource) => {
+  /** Click on a slot or the centre: place the picked item there, or pick up what's there. */
+  const clickTarget = (target: WheelTarget, here: WheelSource<T>) => {
     if (picked) apply(picked, target);
     else setPicked(here);
   };
 
-  const dragProps = (src: WheelSource) => ({
+  const dragProps = (src: WheelSource<T>) => ({
     draggable: true,
     onDragStart: (e: DragEvent) => {
       drag.current = src;
@@ -91,21 +107,42 @@ export function WheelEditor({ wheel, clickPingId, clickPingOn, trigger, onChange
     },
   });
 
-  const name = (id: PingId) => t.pingNames[id];
-  const isPicked = (match: (p: WheelSource) => boolean) => (picked !== null && match(picked) ? ' picked' : '');
-  const centerPing = pingById(clickPingId);
+  /** Only a drag of files from outside: a tile being dragged carries text, never files. */
+  const takesFiles = (e: DragEvent): boolean => onDropFiles !== undefined && !drag.current && e.dataTransfer.types.includes('Files');
+  const fileDropProps = {
+    onDragOver: (e: DragEvent) => {
+      if (!takesFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setFilesOver(true);
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFilesOver(false); // left the pool, not just a tile
+    },
+    onDrop: (e: DragEvent) => {
+      setFilesOver(false);
+      if (!takesFiles(e)) return;
+      e.preventDefault();
+      onDropFiles?.([...e.dataTransfer.files]);
+    },
+  };
+
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  const name = (id: T) => byId.get(id)?.name ?? '?';
+  const icon = (id: T) => byId.get(id)?.icon;
+  const isPicked = (match: (p: WheelSource<T>) => boolean) => (picked !== null && match(picked) ? ' picked' : '');
 
   return (
     <div className="card wheelEditor">
       <div className="weHead">
         <div className="lbl">
-          {t.wheelTitle}
-          <span className="desc">{t.wheelDesc(trigger)}</span>
+          {labels.title}
+          <span className="desc">{labels.desc}</span>
         </div>
         <Button
           onClick={() => {
             setPicked(null);
-            onChange({ wheel: [...DEFAULT_WHEEL], clickPingId: DEFAULT_CLICK_PING });
+            onChange({ wheel: [...defaults.wheel], center: defaults.center });
           }}
         >
           {t.wheelReset}
@@ -129,42 +166,51 @@ export function WheelEditor({ wheel, clickPingId, clickPingOn, trigger, onChange
                 {...dragProps({ from: 'slot', id, slot: i })} {...dropProps(i)}
                 onClick={() => clickTarget(i, { from: 'slot', id, slot: i })}
                 onKeyDown={activate(() => clickTarget(i, { from: 'slot', id, slot: i }))}>
-                <img src={textureUrl(pingById(id)?.icon ?? 'generic_ping')} alt="" />
+                <img src={icon(id)} alt="" />
               </div>
             );
           })}
-          <div role="button" tabIndex={0} aria-label={t.wheelCenterLabel(trigger, name(clickPingId))}
-            title={t.wheelCenterLabel(trigger, name(clickPingId))}
-            className={`weCenter${hot === 'center' ? ' hot' : ''}${clickPingOn ? '' : ' off'}${isPicked((p) => p.from === 'center')}`}
-            {...dragProps({ from: 'center', id: clickPingId })} {...dropProps('center')}
-            onClick={() => clickTarget('center', { from: 'center', id: clickPingId })}
-            onKeyDown={activate(() => clickTarget('center', { from: 'center', id: clickPingId }))}>
-            <img src={textureUrl(centerPing?.icon ?? 'generic_ping')} alt="" />
+          <div role="button" tabIndex={0} aria-label={t.wheelCenterLabel(trigger, name(center))}
+            title={t.wheelCenterLabel(trigger, name(center))}
+            className={`weCenter${hot === 'center' ? ' hot' : ''}${centerOn ? '' : ' off'}${isPicked((p) => p.from === 'center')}`}
+            {...dragProps({ from: 'center', id: center })} {...dropProps('center')}
+            onClick={() => clickTarget('center', { from: 'center', id: center })}
+            onKeyDown={activate(() => clickTarget('center', { from: 'center', id: center }))}>
+            <img src={icon(center)} alt="" />
             <span>{t.wheelCenter}</span>
           </div>
         </div>
-        <div className="wePool">
-          <div className="wePoolTitle">{t.allPings}</div>
-          <span className="desc">{t.allPingsDesc}</span>
+        <div className={`wePool${filesOver ? ' filesOver' : ''}`} {...fileDropProps}>
+          <div className="wePoolTitle">{labels.poolTitle}</div>
+          <span className="desc">{labels.poolDesc}</span>
           <div className="weTiles">
-            {ALL_PINGS.map((p) => {
+            {pool.map((p) => {
               const slot = wheel.indexOf(p.id);
               const pick = () => {
-                void api.previewPing(p.id);
+                onPreview(p.id);
                 setPicked((cur) => (cur?.from === 'pool' && cur.id === p.id ? null : { from: 'pool', id: p.id }));
               };
               return (
-                <div key={p.id} role="button" tabIndex={0}
-                  className={`weTile${isPicked((s) => s.from === 'pool' && s.id === p.id)}`}
-                  {...dragProps({ from: 'pool', id: p.id })} onClick={pick} onKeyDown={activate(pick)}>
-                  {NEW_PINGS.has(p.id) ? <span className="weNew">{t.wheelNew}</span> : null}
-                  {slot >= 0 ? <span className="weWhere">{t.slotNames[slot]}</span> : null}
-                  <img src={textureUrl(p.icon)} alt="" />
-                  {name(p.id)}
+                <div key={p.id} className={`weCell${p.onRemove ? ' removable' : ''}`}>
+                  <div role="button" tabIndex={0}
+                    className={`weTile${isPicked((s) => s.from === 'pool' && s.id === p.id)}`}
+                    {...dragProps({ from: 'pool', id: p.id })} onClick={pick} onKeyDown={activate(pick)}>
+                    {p.badge ? <span className="weNew">{p.badge}</span> : null}
+                    {slot >= 0 ? <span className="weWhere">{t.slotNames[slot]}</span> : null}
+                    <img src={p.icon} alt="" />
+                    {p.name}
+                  </div>
+                  {p.onRemove ? (
+                    <button type="button" className="weRemove" aria-label={t.removeImage(p.name)} title={t.removeImage(p.name)}
+                      onClick={p.onRemove}>
+                      <DismissRegular />
+                    </button>
+                  ) : null}
                 </div>
               );
             })}
           </div>
+          {poolExtra}
         </div>
       </div>
       <div className="weHint" aria-live="polite">{picked ? t.wheelPickHint(name(picked.id)) : ' '}</div>

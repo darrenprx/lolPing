@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, sanitizeName, validateMessage, type PingMsg, type PresenceMsg, type RoomMessage,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type EmoteMsg, type PingMsg,
+  type PresenceMsg, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
 const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on' };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
+const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
+const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
 
 describe('encode / decode', () => {
   it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
@@ -15,6 +18,10 @@ describe('encode / decode', () => {
 
   it('rounds x and y to 4 decimals', () => {
     expect(decodeMessage(encodeMessage({ ...ping, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
+  });
+
+  it('rounds an emote’s x and y to 4 decimals too', () => {
+    expect(decodeMessage(encodeMessage({ ...emote, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
   });
 
   it('rejects bytes that are not JSON', () => {
@@ -73,6 +80,59 @@ describe('validateMessage', () => {
   });
 });
 
+describe('emote messages', () => {
+  it('validates a bundled and a custom emote, and round-trips them', () => {
+    for (const e of ['gg', CUSTOM_REF]) {
+      const m: EmoteMsg = { ...emote, e };
+      expect(validateMessage(m)).toEqual(m);
+      expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    }
+  });
+
+  it('accepts a well-formed slug this version does not know (a newer peer’s emote)', () => {
+    expect(validateMessage({ ...emote, e: 'brand_new_2' })).toEqual({ ...emote, e: 'brand_new_2' });
+  });
+
+  it.each([
+    ['empty ref', { ...emote, e: '' }],
+    ['upper-case slug', { ...emote, e: 'GG' }],
+    ['slug with a path', { ...emote, e: '../gg' }],
+    ['slug over 40 characters', { ...emote, e: 'a'.repeat(41) }],
+    ['short custom hash', { ...emote, e: 'c:0123' }],
+    ['upper-case custom hash', { ...emote, e: `c:${'ABCDEF0123456789'.repeat(2)}` }],
+    ['non-string ref', { ...emote, e: 7 }],
+    ['missing ref', { ...emote, e: undefined }],
+    ['display 0', { ...emote, d: 0 }],
+    ['display 17', { ...emote, d: 17 }],
+    ['x above 1', { ...emote, x: 1.5 }],
+    ['x below 0', { ...emote, x: -0.01 }],
+    ['infinite y', { ...emote, y: Infinity }],
+    ['string y', { ...emote, y: '0.5' }],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateMessage(raw)).toBeNull();
+  });
+
+  it('keeps known fields only', () => {
+    expect(validateMessage({ ...emote, extra: 'ignored', ping: 'danger' })).toEqual(emote);
+  });
+});
+
+describe('isOlderThan', () => {
+  it('is true only for a plain x.y.z version that is lower', () => {
+    expect(isOlderThan('0.4.0', '0.5.0')).toBe(true);
+    expect(isOlderThan('0.4.9', '0.5.0')).toBe(true);
+    expect(isOlderThan('0.5.0', '0.5.0')).toBe(false);
+    expect(isOlderThan('0.5.1', '0.5.0')).toBe(false);
+    expect(isOlderThan('1.0.0', '0.5.0')).toBe(false);
+    expect(isOlderThan('0.10.0', '0.9.0')).toBe(false); // numbers, not text
+    expect(isOlderThan('0.9.0', '0.10.0')).toBe(true);
+  });
+
+  it('is false for anything else, so an unknown build is never called old', () => {
+    for (const app of ['room-peer', '0.4', '', '0.4.0-beta', 'v0.4.0', '0.4.0.1', '0.-4.0']) expect(isOlderThan(app, '0.5.0')).toBe(false);
+  });
+});
+
 describe('sanitizeName', () => {
   it('strips control, bidi and zero-width characters', () => {
     expect(sanitizeName('\u0007A​l‪e⁦x\u007f\u0085﻿')).toBe('Alex');
@@ -87,6 +147,11 @@ describe('sanitizeName', () => {
     expect(sanitizeName('  Bob  ')).toBe('Bob');
     expect(sanitizeName('🎮'.repeat(20))).toBe('🎮'.repeat(16));
     expect(sanitizeName('x'.repeat(40))).toHaveLength(16);
+  });
+
+  it('cuts to a longer limit when asked', () => {
+    expect(sanitizeName('x'.repeat(40), 'Player', 24)).toBe('x'.repeat(24));
+    expect(sanitizeName('x'.repeat(40), 'Player', 24)).not.toBe(sanitizeName('x'.repeat(40)));
   });
 
   it('falls back when nothing is left', () => {

@@ -31,10 +31,11 @@ uint32_t modBit(uint32_t vk) {
   }
 }
 
-Emit point(Emit::Kind k, int x, int y) {
+Emit point(Emit::Kind k, int x, int y, WheelKind w) {
   Emit e{k};
   e.x = x;
   e.y = y;
+  e.wheel = w;
   return e;
 }
 
@@ -48,8 +49,14 @@ uint32_t Decision::mods() const {
   return m;
 }
 
-bool Decision::triggerHeld() const {
-  switch (cfg_.trigger) {
+Decision::Spec Decision::spec(WheelKind k) const {
+  if (k == WheelKind::Emote) return {cfg_.emoteTrigger, cfg_.emoteTriggerVk, cfg_.emoteClick};
+  return {cfg_.trigger, cfg_.triggerVk, cfg_.clickPing};
+}
+
+// Keyboard triggers only: a mouse trigger, or None, is never "held".
+bool Decision::held(WheelKind k) const {
+  switch (spec(k).trigger) {
     case Trigger::Alt:
       return (mods() & ModAlt) != 0;
     case Trigger::Ctrl:
@@ -60,14 +67,14 @@ bool Decision::triggerHeld() const {
       return (mods() & ModWin) != 0;
     case Trigger::CapsLock:
     case Trigger::CustomVk:
-      return keyDown_[keyTriggerVk() & 0xFF];
+      return keyDown_[keyTriggerVk(k) & 0xFF];
     default:
       return false;
   }
 }
 
-bool Decision::isTriggerVk(uint32_t vk) const {
-  switch (cfg_.trigger) {
+bool Decision::isTriggerVk(WheelKind k, uint32_t vk) const {
+  switch (spec(k).trigger) {
     case Trigger::Alt:
       return modBit(vk) == ModAlt;
     case Trigger::Ctrl:
@@ -78,16 +85,37 @@ bool Decision::isTriggerVk(uint32_t vk) const {
       return modBit(vk) == ModWin;
     case Trigger::CapsLock:
     case Trigger::CustomVk:
-      return vk == keyTriggerVk();
+      return vk == keyTriggerVk(k);
     default:
       return false;
   }
 }
 
-Btn Decision::dragButton() const {
-  if (cfg_.trigger == Trigger::Mouse4) return Btn::X1;
-  if (cfg_.trigger == Trigger::Mouse5) return Btn::X2;
+bool Decision::isMouseTrigger(WheelKind k) const {
+  const Trigger t = spec(k).trigger;
+  return t == Trigger::Mouse4 || t == Trigger::Mouse5;
+}
+
+bool Decision::isKeyTrigger(WheelKind k) const {
+  const Trigger t = spec(k).trigger;
+  return t == Trigger::CapsLock || t == Trigger::CustomVk;
+}
+
+uint32_t Decision::keyTriggerVk(WheelKind k) const {
+  const Spec s = spec(k);
+  return s.trigger == Trigger::CapsLock ? 0x14u : s.vk;
+}
+
+Btn Decision::dragButton(WheelKind k) const {
+  const Trigger t = spec(k).trigger;
+  if (t == Trigger::Mouse4) return Btn::X1;
+  if (t == Trigger::Mouse5) return Btn::X2;
   return Btn::Left;
+}
+
+// A press starts a gesture for this wheel: its side button, or the left button while its key is held.
+bool Decision::startsGesture(WheelKind k, Btn btn) const {
+  return btn == dragButton(k) && (isMouseTrigger(k) || held(k));
 }
 
 // Something was swallowed while Alt or Win is held: their key-up must be masked,
@@ -196,7 +224,9 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
       cancelGesture(r);
       return;
     }
-    if (isKeyTrigger() && vk == keyTriggerVk()) {
+    // Caps Lock and custom-key triggers of either wheel would toggle or type: keep them from the OS.
+    const auto ownKey = [&](WheelKind k) { return isKeyTrigger(k) && vk == keyTriggerVk(k); };
+    if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote)) {
       r.swallow = true;
       swallowKeyUps_.insert(vk);
       return;
@@ -208,9 +238,10 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
 
 void Decision::onKeyUp(const InputEvent& e, Result& r) {
   const uint32_t vk = e.vk & 0xFF;
-  const bool heldBefore = triggerHeld();
+  // Only the gesture's own trigger ends it: the other wheel's key comes and goes freely.
+  const bool heldBefore = held(owner_);
   keyDown_[vk] = false;
-  const bool triggerReleased = heldBefore && !triggerHeld() && isTriggerVk(vk);
+  const bool triggerReleased = heldBefore && !held(owner_) && isTriggerVk(owner_, vk);
 
   if (swallowKeyUps_.erase(vk) > 0) r.swallow = true;
   if (needMask_ && (modBit(vk) == ModAlt || modBit(vk) == ModWin)) {
@@ -223,8 +254,8 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   }
   if (!triggerReleased) return;
   if (state_ == State::Pending) {
-    if (cfg_.clickPing) {
-      r.emits.push_back(point(Emit::Kind::Click, px_, py_));
+    if (clickOn(owner_)) {
+      r.emits.push_back(point(Emit::Kind::Click, px_, py_, owner_));
       state_ = State::SwallowUp;
     } else {
       // Plain click: re-press now; the real button-up will pass through.
@@ -249,10 +280,16 @@ void Decision::onMouseDown(const InputEvent& e, Result& r) {
     cancelGesture(r);
     return;
   }
-  if (state_ == State::Idle && e.btn == dragButton() && (isMouseTrigger() || triggerHeld())) {
+  if (state_ != State::Idle) return;
+  // Exactly one wheel's trigger must claim the press. When both do (Alt and Ctrl held), it's ambiguous:
+  // pass it through untouched rather than guess.
+  const bool ping = startsGesture(WheelKind::Ping, e.btn);
+  const bool emote = startsGesture(WheelKind::Emote, e.btn);
+  if (ping != emote) {
     r.swallow = true;
     markSwallow();
     state_ = State::Pending;
+    owner_ = ping ? WheelKind::Ping : WheelKind::Emote;
     dragBtn_ = e.btn;
     px_ = e.x;
     py_ = e.y;
@@ -268,14 +305,14 @@ void Decision::onMouseUp(const InputEvent& e, Result& r) {
   if (state_ == State::Idle || e.btn != dragBtn_) return;
   r.swallow = true;
   if (state_ == State::Pending) {
-    if (cfg_.clickPing) {
-      r.emits.push_back(point(Emit::Kind::Click, px_, py_));
+    if (clickOn(owner_)) {
+      r.emits.push_back(point(Emit::Kind::Click, px_, py_, owner_));
     } else {
       r.injects.push_back({InjectKind::ButtonDown, dragBtn_});
       r.injects.push_back({InjectKind::ButtonUp, dragBtn_});
     }
   } else if (state_ == State::Wheel) {
-    r.emits.push_back(point(Emit::Kind::WheelRelease, e.x, e.y));
+    r.emits.push_back(point(Emit::Kind::WheelRelease, e.x, e.y, owner_));
   }
   state_ = State::Idle;
 }
@@ -285,11 +322,11 @@ void Decision::onMouseMove(const InputEvent& e, Result& r) {
     const double dist = std::hypot(static_cast<double>(e.x - px_), static_cast<double>(e.y - py_));
     if (dist > cfg_.dragThresholdPx) {
       state_ = State::Wheel;
-      r.emits.push_back(point(Emit::Kind::WheelOpen, px_, py_));
-      r.emits.push_back(point(Emit::Kind::WheelMove, e.x, e.y));
+      r.emits.push_back(point(Emit::Kind::WheelOpen, px_, py_, owner_));
+      r.emits.push_back(point(Emit::Kind::WheelMove, e.x, e.y, owner_));
     }
   } else if (state_ == State::Wheel) {
-    r.emits.push_back(point(Emit::Kind::WheelMove, e.x, e.y));
+    r.emits.push_back(point(Emit::Kind::WheelMove, e.x, e.y, owner_));
   }
 }
 

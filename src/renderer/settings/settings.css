@@ -55,7 +55,10 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weSlot.picked, .weCenter.picked { outline: 2px dashed var(--colorBrandStroke1); outline-offset: 2px; }
 .weSlot:focus-visible, .weCenter:focus-visible, .weTile:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
 .wePoolTitle { font-size: 12px; font-weight: 600; }
-.weTiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; margin-top: 10px; }
+/* The padding is the room focus rings need inside the scroll box (a long pool scrolls); the negative margin cancels it. */
+.weTiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; margin: 7px -3px -3px; padding: 3px; max-height: 380px; overflow-y: auto; }
+.weCell { position: relative; display: flex; }
+.weCell > .weTile { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .weTile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px 6px; border-radius: 6px; font-size: 11px; line-height: 14px; text-align: center;
   user-select: none; cursor: grab; background: var(--colorNeutralBackground1); border: 1px solid var(--colorNeutralStroke1); color: var(--colorNeutralForeground2); }
 .weTile:hover { background: var(--colorNeutralBackground1Hover); }
@@ -64,8 +67,19 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weTile img { width: 34px; height: 34px; pointer-events: none; }
 .weNew { position: absolute; top: 3px; left: 4px; font-size: 9px; font-weight: 600; color: var(--colorBrandForeground1); }
 .weWhere { position: absolute; top: 3px; right: 4px; font-size: 10px; color: var(--text3); }
+.weRemove { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; font-size: 12px; cursor: pointer;
+  background: var(--colorNeutralBackground3); color: var(--colorNeutralForeground2); opacity: .75; }
+.weRemove:hover, .weRemove:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }
+.weRemove:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
+.weCell.removable .weWhere { right: auto; left: 4px; }
+.wePool.filesOver .weTiles { outline: 2px dashed var(--colorBrandStroke1); outline-offset: -1px; border-radius: 6px; }
+/* Add image… sits under the scroll box, so it stays in view however far the pool is scrolled. */
+.weImport { display: grid; gap: 4px; margin-top: 10px; }
+.weImportRow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.weImportError { font-size: 12px; line-height: 16px; color: #ff9c48; overflow-wrap: anywhere; }
 .weHint { min-height: 16px; margin-top: 10px; font-size: 12px; line-height: 16px; color: var(--text3); }
 @media (max-width: 860px) { .weBody { grid-template-columns: 1fr; justify-items: center; } }
+.rowError { margin: 1px 0 4px; padding: 0 20px 0 60px; font-size: 12px; line-height: 16px; color: #ff9c48; }
 .keys { display: flex; align-items: center; gap: 4px; }
 .keys kbd { font: 600 12px "Segoe UI"; padding: 3px 8px; border-radius: 4px; background: var(--colorBrandBackground); color: var(--colorNeutralForegroundOnBrand); }
 @media (max-width: 760px) { .app { grid-template-columns: 1fr; } nav.side { display: none; } }

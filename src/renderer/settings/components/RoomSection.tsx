@@ -86,6 +86,7 @@ function MemberRow({ m }: { m: RoomMember }) {
       <span className="memberName">
         {m.name}
         {m.self ? <span className="desc inline">({t.roomYou})</span> : null}
+        {m.noEmotes ? <span className="desc">{t.memberOldNoEmotes}</span> : null}
       </span>
       {m.self ? null : <span className={`badge ${m.path}`}>{t.roomPath[m.path]}</span>}
       {m.status === 'paused' ? <span className="badge">{t.roomPaused}</span> : null}

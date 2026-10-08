@@ -1,6 +1,6 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
 import { SETTINGS_CH } from '../shared/settingsChannels';
-import { assetPath, IS_MAC, loadPage, preloadPath } from './paths';
+import { assetPath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
 const goneListeners: Array<() => void> = [];
@@ -51,6 +51,20 @@ function showInDock(on: boolean): void {
   }
 }
 
+/**
+ * Whether `url` is the settings page itself, whatever follows its address (a reload is the only navigation this window
+ * needs). The page can import and remove files through its preload, so nothing else may ever load into it.
+ */
+function isSettingsPage(url: string): boolean {
+  try {
+    const target = new URL(url);
+    const own = new URL(pageUrl('settings'));
+    return target.protocol === own.protocol && target.host === own.host && target.pathname === own.pathname;
+  } catch {
+    return false; // not a URL at all
+  }
+}
+
 export function settingsWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null;
 }
@@ -89,6 +103,12 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     notifyGone();
   });
   w.webContents.on('render-process-gone', notifyGone); // the window can stay open on a dead page
+  // A link or a file dropped on the window would navigate it to a page of its own, with the settings preload attached. Links
+  // are opened with shell.openExternal from the main process (the project link), never by the page.
+  w.webContents.on('will-navigate', (event) => {
+    if (!isSettingsPage(event.url)) event.preventDefault();
+  });
+  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   w.once('ready-to-show', () => {
     showInDock(true);
     w.show();

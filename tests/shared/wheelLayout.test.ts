@@ -82,12 +82,12 @@ describe('dropPatch', () => {
     expect(dropPatch(W, 'generic', { from: 'slot', id: 'danger', slot: 0 }, 4)).toEqual({ wheel: swapSlots(W, 0, 4) });
   });
 
-  it('sets the click ping from the pool or a slot, leaving the wheel alone', () => {
-    expect(dropPatch(W, 'generic', { from: 'pool', id: 'visioncleared' }, 'center')).toEqual({ clickPingId: 'visioncleared' });
-    expect(dropPatch(W, 'generic', { from: 'slot', id: 'push', slot: 1 }, 'center')).toEqual({ clickPingId: 'push' });
+  it('sets the centre from the pool or a slot, leaving the wheel alone', () => {
+    expect(dropPatch(W, 'generic', { from: 'pool', id: 'visioncleared' }, 'center')).toEqual({ center: 'visioncleared' });
+    expect(dropPatch(W, 'generic', { from: 'slot', id: 'push', slot: 1 }, 'center')).toEqual({ center: 'push' });
   });
 
-  it('puts the click ping on the wheel when the centre is dropped on a slot', () => {
+  it('puts the centre on the wheel when it is dropped on a slot', () => {
     expect(dropPatch(W, 'bait', { from: 'center', id: 'bait' }, 3)).toEqual({ wheel: placeOnSlot(W, 'bait', 3) });
   });
 
@@ -96,5 +96,30 @@ describe('dropPatch', () => {
     expect(dropPatch(W, 'generic', { from: 'pool', id: 'omw' }, 2)).toBeNull();
     expect(dropPatch(W, 'generic', { from: 'pool', id: 'generic' }, 'center')).toBeNull();
     expect(dropPatch(W, 'generic', { from: 'center', id: 'generic' }, 'center')).toBeNull();
+  });
+});
+
+describe('works for string refs', () => {
+  const E = ['unworthy_cn', 'poro_snax', 'sad_kitten', 'cheeky_poro', 'angry_kitty', 'gg_heart', 'bee_happy', 'bee_mad'];
+  const custom = 'c:0123456789abcdef0123456789abcdef';
+
+  it('assigns a pool emote to a slot, swapping when it is already on the wheel', () => {
+    expect(dropPatch(E, 'facepalm', { from: 'pool', id: 'nice' }, 2)).toEqual({ wheel: placeOnSlot(E, 'nice', 2) });
+    expect(placeOnSlot(E, 'nice', 2)[2]).toBe('nice');
+    const swapped = dropPatch(E, 'facepalm', { from: 'pool', id: 'bee_mad' }, 0);
+    expect(swapped?.wheel?.[0]).toBe('bee_mad');
+    expect(swapped?.wheel?.[7]).toBe('unworthy_cn');
+    expect(dropPatch(E, 'facepalm', { from: 'pool', id: custom }, 5)?.wheel?.[5]).toBe(custom);
+  });
+
+  it('swaps slot with slot', () => {
+    expect(dropPatch(E, 'facepalm', { from: 'slot', id: 'poro_snax', slot: 1 }, 6)).toEqual({ wheel: swapSlots(E, 1, 6) });
+    expect(swapSlots(E, 1, 6)[6]).toBe('poro_snax');
+  });
+
+  it('sets the centre from the pool', () => {
+    expect(dropPatch(E, 'facepalm', { from: 'pool', id: 'nice' }, 'center')).toEqual({ center: 'nice' });
+    expect(dropPatch(E, 'facepalm', { from: 'pool', id: custom }, 'center')).toEqual({ center: custom });
+    expect(dropPatch(E, 'facepalm', { from: 'pool', id: 'facepalm' }, 'center')).toBeNull();
   });
 });

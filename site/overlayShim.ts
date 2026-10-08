@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { OverlayApi } from '../src/preload/overlay';
 import type { OverlayChannel, OverlayEvents } from '../src/shared/ipc';
 
@@ -15,9 +16,20 @@ const api: OverlayApi = {
   reportPing() {
     // the demo has no room to share pings with
   },
+  reportEmote() {
+    // nor emotes
+  },
 };
 window.overlay = api;
 
 export function emit<C extends OverlayChannel>(channel: C, payload: OverlayEvents[C]): void {
   for (const cb of listeners.get(channel) ?? []) (cb as (p: OverlayEvents[C]) => void)(payload);
 }
+
+declare global {
+  interface Window {
+    lpEmit?: typeof emit;
+  }
+}
+// A test hook for the dev server (the emote wheel and emotes aren't on the demo page): lpEmit('emote:spawn', {...}) in the console.
+if (import.meta.env.DEV) window.lpEmit = emit;

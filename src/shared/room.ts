@@ -11,6 +11,8 @@ export interface RoomMember {
   path: MemberPath;
   status: MemberStatus;
   needsUpdate: boolean;
+  /** An app older than 0.5.0: it can't show our emotes. */
+  noEmotes: boolean;
   /** Muted by us, for this session. */
   muted: boolean;
   self: boolean;

@@ -1,8 +1,11 @@
-import { BrowserWindow, ipcMain, screen, type Display } from 'electron';
+import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
-import { OVERLAY_ASSETS, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag } from '../shared/ipc';
+import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
+import {
+  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+} from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
-import type { HelperEvent } from '../shared/protocol';
+import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
@@ -16,11 +19,20 @@ export interface SharedPing {
   y: number;
 }
 
+/** An emote the user just placed, in overlay-local CSS px: the room shares these. */
+export interface SharedEmote {
+  ref: EmoteRef;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /**
  * One transparent, click-through, always-on-top window per display.
- * Emits 'shared' (SharedPing) for every wheel or trigger+click ping, never for settings previews.
+ * Emits 'shared' (SharedPing) for every wheel or trigger+click ping and 'sharedEmote' (SharedEmote) for every wheel or
+ * trigger+click emote, never for settings previews.
  */
 export class OverlayManager extends EventEmitter {
   readonly missingAssets = new Set<string>();
@@ -28,8 +40,10 @@ export class OverlayManager extends EventEmitter {
   private maps: DisplayMap[] = [];
   private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
+  private wheelKind: WheelKind = 'ping';
 
-  constructor(private settings: OverlaySettings) {
+  /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
+  constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
     super();
   }
 
@@ -41,9 +55,17 @@ export class OverlayManager extends EventEmitter {
     ipcMain.on(OVERLAY_PINGED, (event, raw: unknown) => {
       const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
-      const win = BrowserWindow.fromWebContents(event.sender);
-      const displayId = [...this.windows].find(([, w]) => w === win)?.[0];
+      const displayId = this.displayOf(event.sender);
       if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+    });
+    ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
+      const p = raw as { ref?: unknown; x?: unknown; y?: unknown } | null;
+      if (!p || !isEmoteRefShape(p.ref) || !isNum(p.x) || !isNum(p.y)) return;
+      const displayId = this.displayOf(event.sender);
+      if (displayId === undefined) return;
+      this.emit('sharedEmote', { ref: p.ref, displayId, x: p.x, y: p.y } satisfies SharedEmote);
+      // The wheel's own overlay already shows it. Another display may still hold an earlier one of ours.
+      this.clearElsewhere(displayId, 'self');
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -62,7 +84,8 @@ export class OverlayManager extends EventEmitter {
         const p = physicalToLocal(ev.x, ev.y, this.maps);
         if (!p) return;
         this.wheelDisplay = p.displayId;
-        this.send(p.displayId, 'wheel:open', { x: p.x, y: p.y });
+        this.wheelKind = ev.wheel;
+        this.send(p.displayId, 'wheel:open', { x: p.x, y: p.y, wheel: ev.wheel });
         break;
       }
       case 'wheelMove':
@@ -70,13 +93,20 @@ export class OverlayManager extends EventEmitter {
         if (this.wheelDisplay === null) return;
         const p = physicalToLocal(ev.x, ev.y, this.maps, this.wheelDisplay);
         if (!p) return;
-        this.send(p.displayId, ev.type === 'wheelMove' ? 'wheel:move' : 'wheel:release', { x: p.x, y: p.y });
+        this.send(p.displayId, ev.type === 'wheelMove' ? 'wheel:move' : 'wheel:release', { x: p.x, y: p.y, wheel: this.wheelKind });
         if (ev.type === 'wheelRelease') this.wheelDisplay = null;
         break;
       }
       case 'click': {
         const p = physicalToLocal(ev.x, ev.y, this.maps);
         if (!p) break;
+        if (ev.wheel === 'emote') {
+          const ref = this.settings.clickEmoteId;
+          this.send(p.displayId, 'emote:spawn', { owner: 'self', art: this.resolveArt(ref, false), x: p.x, y: p.y });
+          this.clearElsewhere(p.displayId, 'self');
+          this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
+          break;
+        }
         this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
         this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
         break;
@@ -99,6 +129,18 @@ export class OverlayManager extends EventEmitter {
     this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
   }
 
+  /** Shows an emote in the middle of the main display, without sharing it (the settings page's preview). */
+  previewEmote(ref: EmoteRef): void {
+    const d = screen.getPrimaryDisplay();
+    this.send(d.id, 'emote:spawn', { owner: 'preview', art: this.resolveArt(ref, false), x: d.bounds.width / 2, y: d.bounds.height / 2 });
+  }
+
+  /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
+  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; peer: string; tag: PingTag }): void {
+    this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: this.resolveArt(p.ref, true), x: p.x, y: p.y, tag: p.tag });
+    this.clearElsewhere(p.displayId, p.peer);
+  }
+
   /** This machine's displays with their room numbers (#1 = primary). */
   numbered(): NumberedDisplay[] {
     return this.numberedList;
@@ -118,6 +160,16 @@ export class OverlayManager extends EventEmitter {
     if (this.wheelDisplay === null) return;
     this.send(this.wheelDisplay, 'wheel:cancel', null);
     this.wheelDisplay = null;
+  }
+
+  private displayOf(sender: WebContents): number | undefined {
+    const win = BrowserWindow.fromWebContents(sender);
+    return [...this.windows].find(([, w]) => w === win)?.[0];
+  }
+
+  /** Each owner has one emote on screen: clear theirs on every display but the one that just showed their new one. */
+  private clearElsewhere(displayId: number, owner: string): void {
+    for (const id of this.windows.keys()) if (id !== displayId) this.send(id, 'emote:clear', { owner });
   }
 
   private rebuild(): void {

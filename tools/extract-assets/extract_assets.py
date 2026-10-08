@@ -5,17 +5,20 @@ Requirements:
   * Python 3.14+ (uses the built-in compression.zstd module)
   * ffmpeg on PATH
   * vgmstream-cli (https://github.com/vgmstream/vgmstream/releases), passed with --vgmstream
-  * Pillow, only for --dds-dir and --wad-textures
+  * Pillow, only for --dds-dir, --wad-textures, --emote-gallery and --emotes; NumPy, only for the last two
 
 Examples:
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --wad-textures
   py -3.14 tools/extract-assets/extract_assets.py --dds-dir C:/Users/me/Downloads/need
+  py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emote-gallery --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
+  py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emotes --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
 """
 import argparse
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -24,6 +27,8 @@ from compression import zstd
 REPO = Path(__file__).resolve().parents[2]
 SOUND_OUT = REPO / 'assets' / 'sounds'
 TEXTURE_OUT = REPO / 'assets' / 'textures'
+EMOTE_OUT = REPO / 'assets' / 'emotes'
+EMOTE_CATALOG = REPO / 'src' / 'shared' / 'emoteCatalog.ts'
 WAD_REL = Path('Game/DATA/FINAL/Maps/Shipping/Common.wad.client')
 GLOBAL_WAD_REL = Path('Game/DATA/FINAL/Global.wad.client')
 BANK_DIR = 'assets/sounds/wwise2016/sfx/shared/'
@@ -44,6 +49,64 @@ SOUNDS = {
     'SRP_11': 'Play_sfx_hud_base_Pings_SRP_11',              # bait
     'SRP_6': 'Play_sfx_hud_base_Pings_SRP_6',                # vision cleared
     'button': 'Play_sfx_hud_base_Pings_button',              # wheel tick
+}
+
+# The bundled emotes (--emotes), pinned by League id: slug -> id, in the order the app's emote pool lists them. To add one,
+# find its id with --emote-gallery, append 'slug': id here (slug: ^[a-z0-9_]{1,40}$, unique) and run --emotes.
+EMOTE_SET: dict[str, int] = {
+    'facepalm': 4341,
+    'unworthy': 3236,
+    'unworthy_cn': 3239,
+    'poro_snax': 1445,
+    'sad_kitten': 1457,
+    'cheeky_poro': 1499,
+    'angry_kitty': 1501,
+    'gg_heart': 3124,
+    'bee_happy': 3153,
+    'bee_mad': 3154,
+    'bee_sad': 3155,
+    'snoozy_poro': 3173,
+    'wahaha': 3177,
+    'omg_love_it': 3207,
+    'poro_ride': 3214,
+    'dont_make_me_laugh': 3358,
+    'woah_dizzy': 4334,
+    'haha_hilarious': 4443,
+    'gasp': 4670,
+    'super_approved': 4860,
+    'pain': 4948,
+    'laughing_out_loud': 4952,
+    'hats_off': 3156,
+    'call_me': 3338,
+    'think_about_it': 3339,
+    'unimpressed': 3414,
+    'did_you_just': 3448,
+    'nice_try': 1030,
+    'nice': 1459,
+    'despair': 1467,
+    'does_not_compute': 1468,
+    'come_at_me': 1480,
+    'how_could_you': 1487,
+    'scout_approved': 1492,
+    'maybe_next_time': 3141,
+    'okay': 3159,
+    'good_job_buddy': 3166,
+    'teamwork': 3167,
+    'i_will_destroy_you': 3215,
+    'not_today': 3581,
+    'oh': 3709,
+    'come_again': 3962,
+    'magpie_oopsie': 4091,
+    'such_foolishness': 4730,
+}
+# The default emote wheel, top slot then clockwise, and the centre (click) emote.
+DEFAULT_EMOTE_WHEEL: list[str] = ['unworthy_cn', 'poro_snax', 'sad_kitten', 'cheeky_poro', 'angry_kitty', 'gg_heart',
+                                  'bee_happy', 'bee_mad']
+DEFAULT_CLICK_EMOTE = 'facepalm'
+# Names for the catalog where the client's are not enough: slug -> (name, nameZh). The client calls both Unworthy emotes
+# "Unworthy" / "弱爆", and the app's settings list emotes by name.
+NAME_OVERRIDES: dict[str, tuple[str, str]] = {
+    'unworthy_cn': ('Unworthy (Chinese text)', '弱爆（文字版）'),
 }
 
 # output png name -> League .tex in Global.wad.client (the other textures came from Obsidian DDS exports, see README)
@@ -235,18 +298,24 @@ def convert_textures(dds_dir: Path) -> None:
         print('texture', dds.stem)
 
 
-def tex_to_png(data: bytes, out: Path) -> None:
-    """League TEX (DXT5 with mipmaps stored smallest first) -> PNG, by wrapping the full-size level in a DDS header."""
+def tex_to_png(data: bytes, out: Path | None = None):
+    """League TEX (DXT1 or DXT5, mipmaps stored smallest first) -> RGBA PIL image, also saved as PNG when out is given.
+    Decodes by wrapping the full-size level in a DDS header."""
     import io
     from PIL import Image
 
     magic, w, h, _unk, fmt, _res, _flags = struct.unpack_from('<4sHHBBBB', data)
-    if magic != b'TEX\0' or fmt != 12:
-        raise SystemExit(f'{out.name}: unsupported TEX (magic {magic!r}, format {fmt}); only DXT5 is handled')
-    size = max(1, (w + 3) // 4) * max(1, (h + 3) // 4) * 16
+    if magic != b'TEX\0' or fmt not in (10, 12):
+        name = out.name if out else 'TEX'
+        raise SystemExit(f'{name}: unsupported TEX (magic {magic!r}, format {fmt}); only DXT1 and DXT5 are handled')
+    size = max(1, (w + 3) // 4) * max(1, (h + 3) // 4) * (8 if fmt == 10 else 16)
+    fourcc = b'DXT1' if fmt == 10 else b'DXT5'
     dds = (b'DDS ' + struct.pack('<7I', 124, 0x81007, h, w, size, 0, 1) + b'\0' * 44
-           + struct.pack('<II4s5I', 32, 4, b'DXT5', 0, 0, 0, 0, 0) + struct.pack('<5I', 0x1000, 0, 0, 0, 0))
-    Image.open(io.BytesIO(dds + data[-size:])).convert('RGBA').save(out)
+           + struct.pack('<II4s5I', 32, 4, fourcc, 0, 0, 0, 0, 0) + struct.pack('<5I', 0x1000, 0, 0, 0, 0))
+    img = Image.open(io.BytesIO(dds + data[-size:])).convert('RGBA')
+    if out is not None:
+        img.save(out)
+    return img
 
 
 def main() -> None:
@@ -255,14 +324,38 @@ def main() -> None:
     ap.add_argument('--vgmstream', default='vgmstream-cli', help='path to vgmstream-cli.exe')
     ap.add_argument('--dds-dir', type=Path, help='folder of .dds textures to convert to PNG')
     ap.add_argument('--wad-textures', action='store_true', help='with --league: extract only the WAD_TEXTURES, no sounds')
+    ap.add_argument('--emote-gallery', action='store_true',
+                    help='with --league: list every emote in <temp>/lolping-emote-gallery/gallery.html (EMOTE_SET '
+                         'pre-ticked; candidates baked with their sounds), no ping sounds')
+    ap.add_argument('--emotes', action='store_true',
+                    help='with --league: bake EMOTE_SET into assets/emotes/ and generate src/shared/emoteCatalog.ts, '
+                         'no ping sounds')
+    ap.add_argument('--glow-opacity', type=float,
+                    help='with --emotes: draw the emote halos at this opacity instead of emote_bake.GLOW_OPACITY')
     args = ap.parse_args()
     if not args.league and not args.dds_dir:
         ap.error('pass --league and/or --dds-dir')
     if args.wad_textures and not args.league:
         ap.error('--wad-textures needs --league')
+    if (args.emote_gallery or args.emotes) and not args.league:
+        ap.error('--emote-gallery and --emotes need --league')
     if args.dds_dir:
         convert_textures(args.dds_dir)
-    if args.wad_textures:
+    if args.emote_gallery:
+        import emote_bake
+
+        sys.stdout.reconfigure(encoding='utf-8')
+        out = Path(tempfile.gettempdir()) / 'lolping-emote-gallery'
+        preset = {'set': EMOTE_SET, 'wheel': DEFAULT_EMOTE_WHEEL, 'click': DEFAULT_CLICK_EMOTE}
+        print('gallery:', emote_bake.build_gallery(args.league, out, args.vgmstream, preset=preset))
+        print(f'view it with: py -3.14 -m http.server 8766 --directory "{out}"')
+    elif args.emotes:
+        import emote_bake
+
+        sys.stdout.reconfigure(encoding='utf-8')
+        emote_bake.write_emotes(args.league, args.vgmstream, EMOTE_SET, DEFAULT_EMOTE_WHEEL, DEFAULT_CLICK_EMOTE,
+                                EMOTE_OUT, EMOTE_CATALOG, NAME_OVERRIDES, args.glow_opacity)
+    elif args.wad_textures:
         files = wad_read(args.league / GLOBAL_WAD_REL, list(WAD_TEXTURES.values()))
         TEXTURE_OUT.mkdir(parents=True, exist_ok=True)
         for name, path in WAD_TEXTURES.items():

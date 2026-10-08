@@ -45,6 +45,13 @@ bool parseTrigger(const std::string& s, Trigger& t) {
   return true;
 }
 
+// The emote key takes the same names, plus "off". The ping trigger can't be off.
+bool parseEmoteTrigger(const std::string& s, Trigger& t) {
+  if (s != "off") return parseTrigger(s, t);
+  t = Trigger::None;
+  return true;
+}
+
 Btn parseBtn(const std::string& s) {
   if (s == "left") return Btn::Left;
   if (s == "right") return Btn::Right;
@@ -67,6 +74,9 @@ Command parseCommand(const std::string& line, const Config& current) {
     if (m.count("trigger") != 0 && !parseTrigger(m["trigger"], cfg.trigger)) return c;
     cfg.triggerVk = static_cast<uint32_t>(getInt(m, "triggerVk", cfg.triggerVk));
     cfg.clickPing = getBool(m, "clickPing", cfg.clickPing);
+    if (m.count("emoteTrigger") != 0 && !parseEmoteTrigger(m["emoteTrigger"], cfg.emoteTrigger)) return c;
+    cfg.emoteTriggerVk = static_cast<uint32_t>(getInt(m, "emoteTriggerVk", cfg.emoteTriggerVk));
+    cfg.emoteClick = getBool(m, "emoteClick", cfg.emoteClick);
     const long long drag = getInt(m, "dragThresholdPx", cfg.dragThresholdPx);
     cfg.dragThresholdPx = drag < 1 ? 1 : static_cast<int>(drag);
     cfg.toggleMods = static_cast<uint32_t>(getInt(m, "toggleMods", cfg.toggleMods));

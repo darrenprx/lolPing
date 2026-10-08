@@ -2,23 +2,25 @@ import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@
 import {
   ArrowMove24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
-  Timer24Regular, Cursor24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
+  Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LANGUAGE_NAMES, LANGUAGE_PREFS, resolveLang, strings, type LanguagePref, type Strings } from '../../shared/i18n';
 import type { AppStatus } from '../../shared/ipc';
 import { hotkeyParts } from '../../shared/keys';
-import { textureUrl } from '../../shared/pings';
+import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, textureUrl, type PingId } from '../../shared/pings';
 import { triggerLabel, type Settings } from '../../shared/settings';
+import type { WheelPatch } from '../../shared/wheelLayout';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
+import { EmoteSection } from './components/EmoteSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
 import { RoomSection } from './components/RoomSection';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
-import { WheelEditor } from './components/WheelEditor';
+import { WheelEditor, type PoolItem } from './components/WheelEditor';
 import { TextContext, useText } from './text';
 import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
@@ -33,9 +35,21 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
   { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
+  { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
   { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
+
+/** Pings that aren't in League's default wheel layout get a "new" badge. */
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared']);
+
+/** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
+function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {
+  const patch: Partial<Settings> = {};
+  if (p.wheel) patch.wheel = p.wheel;
+  if (p.center) patch.clickPingId = p.center;
+  return patch;
+}
 
 function useDarkMode(): boolean {
   const query = '(prefers-color-scheme: dark)';
@@ -79,6 +93,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
+  const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
+    id: p.id, icon: textureUrl(p.icon), name: t.pingNames[p.id], badge: NEW_PINGS.has(p.id) ? t.wheelNew : undefined,
+  }));
 
   useEffect(() => {
     const show = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -132,7 +149,8 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
               {customTrigger ? <span className="desc">{t.customKeyNote}</span> : null}
             </>
           )}>
-          <TriggerPicker value={s.trigger} onChange={(t) => void update({ trigger: t })} />
+          <TriggerPicker value={s.trigger} blocked={s.emoteTrigger}
+            onChange={(k) => { if (k !== 'off') void update({ trigger: k }); }} />
         </SettingRow>
         <SliderRow limit="dragThresholdPx" icon={<ArrowMove24Regular />} title={t.dragDistance} description={t.dragDistanceDesc}
           value={s.dragThresholdPx} format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ dragThresholdPx: v })} dim={off} />
@@ -167,8 +185,13 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           checked={s.tickSound} onChange={(v) => void update({ tickSound: v })} />
 
         <div className="section" id="wheel">{t.navWheel}</div>
-        <WheelEditor wheel={s.wheel} clickPingId={s.clickPingId} clickPingOn={s.clickPing} trigger={trigger}
-          onChange={(patch) => void update(patch)} />
+        <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
+          defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
+          labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}
+          onChange={(patch) => void update(pingPatch(patch))} onPreview={(id) => void api.previewPing(id)} />
+
+        <div className="section" id="emotes">{t.navEmotes}</div>
+        <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
 
         <div className="section" id="room">{t.navRoom}</div>
         <RoomSection settings={s} update={update} />

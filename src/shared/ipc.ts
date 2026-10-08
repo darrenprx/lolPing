@@ -1,6 +1,7 @@
+import type { EmoteArt, EmoteFile, EmoteRef, ImportResult } from './emotes';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
-import type { HelperStatus } from './protocol';
+import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
 import type { OverlaySettings, Settings } from './settings';
 
@@ -18,25 +19,32 @@ export interface PingTag {
 /** main → overlay renderer messages. Points are CSS pixels inside that overlay. */
 export interface OverlayEvents {
   'overlay:settings': OverlaySettings;
-  'wheel:open': Point;
-  'wheel:move': Point;
-  'wheel:release': Point;
+  /** `wheel` names the wheel the gesture belongs to; missing means 'ping' (the site demo leaves it out). */
+  'wheel:open': Point & { wheel?: WheelKind };
+  'wheel:move': Point & { wheel?: WheelKind };
+  'wheel:release': Point & { wheel?: WheelKind };
   'wheel:cancel': null;
   /** `tag` marks a ping from another room member. */
   'ping:spawn': Point & { id: PingId; tag?: PingTag };
+  /** `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen. */
+  'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
+  'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
 }
 
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
-  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'toast:show',
+  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
+  'toast:show',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
 export const OVERLAY_ASSETS = 'overlay:assets';
 /** overlay renderer → main: {id, x, y} of a ping the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_PINGED = 'overlay:pinged';
+/** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
+export const OVERLAY_EMOTED = 'overlay:emoted';
 
 export interface AppStatus {
   enabled: boolean;
@@ -70,6 +78,12 @@ export interface SettingsApi {
   onStatus(cb: (s: AppStatus) => void): () => void;
   setEnabled(on: boolean): Promise<void>;
   previewPing(id: PingId): Promise<void>;
+  /** Plays the emote in the middle of the primary display, without sharing it. */
+  previewEmote(ref: EmoteRef): Promise<void>;
+  /** Saves an image prepared by the settings window and adds it to the imported emotes. */
+  importEmote(file: EmoteFile): Promise<ImportResult>;
+  /** Deletes an imported emote's files and entry; wheel slots that used it fall back. */
+  removeEmote(id: EmoteRef): Promise<void>;
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;

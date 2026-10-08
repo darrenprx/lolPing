@@ -41,13 +41,16 @@ body {
   pointer-events: none;
   z-index: 50;
 }
-#fx #pings {
+#fx #pings,
+#fx #emotes {
   position: absolute;
 }
-#wheel {
+#wheel,
+#emoteWheel {
   transform: scale(calc(var(--wheel-scale) * 0.85));
 }
-#wheel.open {
+#wheel.open,
+#emoteWheel.open {
   transform: scale(var(--wheel-scale));
 }
 .fake-cursor {

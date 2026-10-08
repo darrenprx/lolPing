@@ -1,12 +1,15 @@
 import type { Settings } from './settings';
 
+/** Which wheel a gesture belongs to: the ping trigger's or the emote key's. */
+export type WheelKind = 'ping' | 'emote';
+
 /**
  * Messages the hook helper writes to stdout, one JSON object per line.
  * Coordinates are physical pixels on Windows and global points (Electron DIPs) on macOS.
  */
 export type HelperEvent =
   | { type: 'ready'; version: number }
-  | { type: 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click'; x: number; y: number }
+  | { type: 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click'; x: number; y: number; wheel: WheelKind }
   | { type: 'cancel' }
   | { type: 'toggled'; enabled: boolean }
   | { type: 'error'; message: string; code?: string }
@@ -47,7 +50,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
         : null;
     default:
       if (typeof o.type === 'string' && POINT_TYPES.has(o.type) && isInt(o.x) && isInt(o.y)) {
-        return { type: o.type as PointType, x: o.x, y: o.y };
+        // Anything but "emote" (including no field, from a version 1 helper) is the ping wheel.
+        return { type: o.type as PointType, x: o.x, y: o.y, wheel: o.wheel === 'emote' ? 'emote' : 'ping' };
       }
       return null;
   }
@@ -62,6 +66,10 @@ export type HelperCommand =
       trigger: HelperTrigger;
       triggerVk: number;
       clickPing: boolean;
+      /** 'off': no emote key, so no emote gestures. */
+      emoteTrigger: HelperTrigger | 'off';
+      emoteTriggerVk: number;
+      emoteClick: boolean;
       dragThresholdPx: number;
       toggleMods: number;
       toggleVk: number;
@@ -73,11 +81,15 @@ export type HelperCommand =
 
 export function configCommand(s: Settings, enabled: boolean): HelperCommand {
   const t = s.trigger;
+  const e = s.emoteTrigger;
   return {
     type: 'config',
     trigger: typeof t === 'object' ? 'vk' : t,
     triggerVk: typeof t === 'object' ? t.vk : 0,
     clickPing: s.clickPing,
+    emoteTrigger: typeof e === 'object' ? 'vk' : e,
+    emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
+    emoteClick: s.emoteClick,
     dragThresholdPx: s.dragThresholdPx,
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,

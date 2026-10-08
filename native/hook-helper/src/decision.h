@@ -20,7 +20,10 @@ struct InputEvent {
   uint64_t timeMs = 0;
 };
 
-enum class Trigger { Alt, Ctrl, Shift, Win, CapsLock, Mouse4, Mouse5, CustomVk };
+enum class Trigger { Alt, Ctrl, Shift, Win, CapsLock, Mouse4, Mouse5, CustomVk, None };  // None: no trigger (emote key off)
+
+// The two wheels a gesture can open: each has its own trigger.
+enum class WheelKind { Ping, Emote };
 
 constexpr uint32_t ModCtrl = 1;
 constexpr uint32_t ModAlt = 2;
@@ -28,9 +31,12 @@ constexpr uint32_t ModShift = 4;
 constexpr uint32_t ModWin = 8;
 
 struct Config {
-  Trigger trigger = Trigger::Alt;
-  uint32_t triggerVk = 0;  // only for Trigger::CustomVk
+  Trigger trigger = Trigger::Alt;  // the ping wheel's
+  uint32_t triggerVk = 0;          // only for Trigger::CustomVk
   bool clickPing = false;
+  Trigger emoteTrigger = Trigger::None;  // the emote wheel's
+  uint32_t emoteTriggerVk = 0;           // only for Trigger::CustomVk
+  bool emoteClick = false;
   int dragThresholdPx = 8;
   uint32_t toggleMods = ModCtrl | ModAlt;
   uint32_t toggleVk = 0x50;  // 'P'
@@ -41,7 +47,8 @@ struct Emit {
   enum class Kind { WheelOpen, WheelMove, WheelRelease, Click, Cancel, Toggled } kind;
   int x = 0;
   int y = 0;
-  bool enabled = false;  // Toggled only
+  WheelKind wheel = WheelKind::Ping;  // point events only: the wheel whose trigger started the gesture
+  bool enabled = false;               // Toggled only
 };
 
 enum class InjectKind { ButtonDown, ButtonUp, KeyDown, KeyUp };
@@ -85,14 +92,24 @@ class Decision {
   const Config& config() const { return cfg_; }
 
  private:
+  // One wheel's trigger settings, read from the ping or emote fields of cfg_.
+  struct Spec {
+    Trigger trigger;
+    uint32_t vk;  // only for Trigger::CustomVk
+    bool click;   // trigger + click places a ping / emote instead of replaying the click
+  };
+
   bool active() const { return enabled_ && !suspended_; }
   uint32_t mods() const;
-  bool triggerHeld() const;
-  bool isTriggerVk(uint32_t vk) const;
-  bool isMouseTrigger() const { return cfg_.trigger == Trigger::Mouse4 || cfg_.trigger == Trigger::Mouse5; }
-  bool isKeyTrigger() const { return cfg_.trigger == Trigger::CapsLock || cfg_.trigger == Trigger::CustomVk; }
-  uint32_t keyTriggerVk() const { return cfg_.trigger == Trigger::CapsLock ? 0x14u : cfg_.triggerVk; }
-  Btn dragButton() const;
+  Spec spec(WheelKind k) const;
+  bool held(WheelKind k) const;
+  bool isTriggerVk(WheelKind k, uint32_t vk) const;
+  bool isMouseTrigger(WheelKind k) const;
+  bool isKeyTrigger(WheelKind k) const;  // a key we swallow: Caps Lock or a custom key
+  uint32_t keyTriggerVk(WheelKind k) const;
+  Btn dragButton(WheelKind k) const;
+  bool clickOn(WheelKind k) const { return spec(k).click; }
+  bool startsGesture(WheelKind k, Btn btn) const;
   void markSwallow();
   void cancelGesture(Result& r);
   void onKeyDown(const InputEvent& e, Result& r);
@@ -110,6 +127,7 @@ class Decision {
   bool swallowRightUp_ = false;
   bool needMask_ = false;
   bool maskMenuKeys_ = true;
+  WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   Btn dragBtn_ = Btn::None;
   int px_ = 0;
   int py_ = 0;
