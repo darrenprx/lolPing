@@ -89,6 +89,8 @@ For every entry, `--emotes` writes:
 
   Voice lines come from the `EMOTE_VO_LOCALE` (`en_US`) banks. If an own sound can't be used (its event is in no bank, for example because that voice WAD is missing, or its media is missing or won't decode), the run prints a `WARNING` and the emote takes its family sound instead. With no sound at all, there is no `.ogg` and the emote gets `hasSound: false`.
 
+`--glow-opacity <n>` draws the halos behind the emotes at that opacity instead of `GLOW_OPACITY`.
+
 It then deletes every other file in `assets/emotes/` and generates `src/shared/emoteCatalog.ts`. `NAME_OVERRIDES` in `extract_assets.py` (slug → name, nameZh) replaces a catalog name where the client's is not enough; the two Unworthy emotes need it, and the run refuses two emotes with the same name. The output is deterministic: running it again on the same League version writes byte-identical files.
 
 ### Adding an emote later

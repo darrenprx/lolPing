@@ -5,8 +5,9 @@
 </p>
 
 <p align="center">
-  把英雄联盟的信号轮盘搬到整个桌面，支持 Windows 和 macOS。<br>
-  按住 <b>Alt</b>（Mac 上是 <b>⌥ Option</b>）拖动，在想要的信号上松开：动画弹出、音效响起，任何程序之上、任何显示器上都可以。
+  把英雄联盟的信号和表情搬到整个桌面，支持 Windows 和 macOS。<br>
+  按住 <b>Alt</b>（Mac 上是 <b>⌥ Option</b>）拖动，在想要的信号上松开：动画弹出、音效响起，任何程序之上、任何显示器上都可以。<br>
+  按住 <b>Ctrl</b>（Mac 上是 <b>⌃ Control</b>）拖动打开表情轮盘：英雄联盟的表情，或你自己的图片。
 </p>
 
 <p align="center">
@@ -22,7 +23,7 @@
 
 <p align="center"><img src="docs/media/demo.zh-CN.gif" width="880" alt="一个程序卡死弹出“未响应”对话框，信号轮盘在上面连发三个“敌人消失”信号"></p>
 
-信号会出现在全屏录制/共享画面里，所以在 Discord 或 OBS 上看你直播的朋友也能看到。lolPing 只是一个桌面小玩具：它不会读取、修改或注入英雄联盟本身。
+信号和表情会出现在全屏录制/共享画面里，所以在 Discord 或 OBS 上看你直播的朋友也能看到。lolPing 只是一个桌面小玩具：它不会读取、修改或注入英雄联盟本身。
 
 ## 安装
 
@@ -67,7 +68,7 @@ Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 12 或更新版本
 
 ## 设置
 
-<img src="docs/media/settings.zh-CN.png" width="760" alt="lolPing 设置窗口">
+<img src="docs/media/settings.zh-CN.png" width="760" alt="lolPing 设置窗口，包含触发、开关、信号与声音、轮盘、表情、房间和应用几个部分">
 
 - **触发键：** Alt、Ctrl、Shift、Win、Caps Lock、鼠标侧键 4/5，或任意其他按键（Mac 上：Option、Control、Shift、Command、鼠标侧键 4/5，或任意其他按键）。开启信号时，自定义按键在其他程序里不会再输入字符。
 - **Alt + 单击发送信号：** 默认关闭，这样平时的 Alt + 单击快捷操作不受影响。发送的是轮盘编辑器中心的信号（默认是普通信号）。
