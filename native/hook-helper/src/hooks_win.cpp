@@ -16,9 +16,14 @@ namespace {
 
 constexpr ULONG_PTR kSelfMarker = 0x4C50494E;  // "LPIN" in dwExtraInfo marks our own SendInput events
 constexpr UINT kWmCommand = WM_APP + 1;
+constexpr UINT kWmInject = WM_APP + 2;
 
 Decision* g_decision = nullptr;
 Output* g_out = nullptr;
+DWORD g_hookThreadId = 0;
+// Injects waiting to run on the hook thread's message loop. Hook callbacks and that loop share one
+// thread, so no lock is needed; only that thread touches this.
+std::vector<Inject> g_pendingInjects;
 
 bool isExtendedVk(uint32_t vk) {
   switch (vk) {
@@ -90,10 +95,27 @@ void sendInjects(const std::vector<Inject>& injects) {
   if (!inputs.empty()) SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
 }
 
-// Reports emits, performs injections, and returns whether to swallow the event.
+// SendInput from inside a low-level hook callback deadlocks against this very hook: the injected
+// events must pass the hook chain again, and the thread that serves it is the one blocked inside
+// SendInput. Every input event system-wide then waits out the hook timeout, freezing the cursor.
+// So injects are queued here and run by the message loop (kWmInject) once the callback has returned.
+void queueInjects(const std::vector<Inject>& injects) {
+  if (injects.empty()) return;
+  g_pendingInjects.insert(g_pendingInjects.end(), injects.begin(), injects.end());
+  PostThreadMessageW(g_hookThreadId, kWmInject, 0, 0);
+}
+
+void drainInjects() {
+  if (g_pendingInjects.empty()) return;
+  std::vector<Inject> batch;
+  batch.swap(g_pendingInjects);
+  sendInjects(batch);
+}
+
+// Reports emits, queues injections for the message loop, and returns whether to swallow the event.
 bool apply(const Result& r) {
   for (const auto& e : r.emits) g_out->emit(e);
-  sendInjects(r.injects);
+  queueInjects(r.injects);
   return r.swallow;
 }
 
@@ -149,6 +171,7 @@ int runHooks(Output& out) {
   g_out = &out;
   decision.setFullscreenProbe(foregroundIsFullscreen);
   const DWORD threadId = GetCurrentThreadId();
+  g_hookThreadId = threadId;
   MSG msg;
   PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // make sure this thread has a queue
 
@@ -176,6 +199,8 @@ int runHooks(Output& out) {
     if (msg.message == WM_TIMER) {
       decision.syncKeyStates(isKeyDown);
       apply(decision.tick(GetTickCount64()));
+    } else if (msg.message == kWmInject) {
+      drainInjects();
     } else if (msg.message == kWmCommand) {
       std::unique_ptr<std::string> text(reinterpret_cast<std::string*>(msg.lParam));
       const Command c = parseCommand(*text, decision.config());
