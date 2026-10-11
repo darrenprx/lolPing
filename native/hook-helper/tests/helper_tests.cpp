@@ -28,7 +28,7 @@ static int g_fail = 0;
   } while (0)
 
 namespace {
-constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54;
+constexpr uint32_t ALT = 0xA4, CTRL = 0xA2, KEY_P = 0x50, ESC = 0x1B, CAPS = 0x14, KEY_V = 0x56, KEY_T = 0x54, TAB = 0x09;
 using S = Decision::State;
 
 InputEvent key(EvKind k, uint32_t vk) {
@@ -221,6 +221,56 @@ static void test_trigger_released_during_pending_pings_when_click_ping_on() {
   const Emit* c = findEmit(r, Emit::Kind::Click);
   CHECK(c != nullptr && c->x == 100);
   CHECK(d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+}
+
+// Alt+Tab belongs to the task switcher: clicks pass through untouched while the chord lasts,
+// and after Alt is released Alt+click gestures again.
+static void test_alt_tab_clicks_pass_through() {
+  Decision d;
+  CHECK(!d.onEvent(kd(ALT)).swallow);
+  CHECK(!d.onEvent(kd(TAB)).swallow);  // the switcher's key marks the chord as foreign
+  CHECK(!d.onEvent(ku(TAB)).swallow);
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);  // the click belongs to the switcher, not to a wheel
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  r = d.onEvent(ku(ALT));  // nothing was swallowed, so the Alt-up needs no mask
+  CHECK(!r.swallow);
+  CHECK(r.injects.empty());
+  d.onEvent(kd(ALT));  // the chord is over: Alt+click gestures again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(r.injects.size() == 2);  // clickPing off: the click is replayed
+}
+
+// Same rule with clickPing on: Alt+Tab + click must NOT place a ping.
+static void test_alt_tab_click_places_no_ping_even_with_click_ping_on() {
+  Decision d = withTrigger(Trigger::Alt, 0, true);
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(TAB));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  r = d.onEvent(ku(ALT));
+  CHECK(!r.swallow);
+  CHECK(r.injects.empty());
+}
+
+// Win+Tab (task view) under the Win trigger; a stale foreign flag is cleared by key re-sync.
+static void test_win_tab_clicks_pass_through_and_sync_clears_flag() {
+  Decision d = withTrigger(Trigger::Win);
+  d.onEvent(kd(0x5B));  // LWin
+  d.onEvent(kd(TAB));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  d.syncKeyStates([](uint32_t) { return false; });  // the OS reports every key up (Win+L, UAC...)
+  d.onEvent(kd(0x5B));                              // LWin again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);  // gestures again
 }
 
 static void test_alt_up_after_gesture_is_masked() {
@@ -836,6 +886,9 @@ int main() {
   test_trigger_released_during_pending_pings_when_click_ping_on();
   test_alt_up_after_gesture_is_masked();
   test_plain_alt_tap_is_not_masked();
+  test_alt_tab_clicks_pass_through();
+  test_alt_tab_click_places_no_ping_even_with_click_ping_on();
+  test_win_tab_clicks_pass_through_and_sync_clears_flag();
   test_toggle_hotkey_disables_and_enables();
   test_hotkey_autorepeat_toggles_once();
   test_hotkey_ignored_while_suspended();

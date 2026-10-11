@@ -170,6 +170,7 @@ void Decision::syncKeyStates(const std::function<bool(uint32_t vk)>& isDown) {
     // A key whose down we swallowed never reached the OS, so the OS reports it up: keep those.
     if (keyDown_[vk] && swallowKeyUps_.count(vk) == 0 && !isDown(vk)) keyDown_[vk] = false;
   }
+  if (!held(WheelKind::Ping) && !held(WheelKind::Emote)) foreignKey_ = false;
 }
 
 Result Decision::onEvent(const InputEvent& e) {
@@ -202,6 +203,14 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
   const uint32_t vk = e.vk & 0xFF;
   const bool repeat = keyDown_[vk];
   keyDown_[vk] = true;
+
+  // Another program's chord is starting (Alt+Tab's switcher, Win+Tab's task view, Alt+F4...):
+  // until every trigger is released, clicks belong to that context and must not open a wheel.
+  // Only in Idle: a foreign key arriving mid-gesture (Esc cancelling a wheel) says nothing about
+  // the NEXT gesture.
+  if (state_ == State::Idle && modBit(vk) == 0 && !isTriggerVk(WheelKind::Ping, vk) &&
+      !isTriggerVk(WheelKind::Emote, vk) && (held(WheelKind::Ping) || held(WheelKind::Emote)))
+    foreignKey_ = true;
 
   if (!suspended_ && vk == cfg_.toggleVk && mods() == cfg_.toggleMods) {
     r.swallow = true;
@@ -241,6 +250,7 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   // Only the gesture's own trigger ends it: the other wheel's key comes and goes freely.
   const bool heldBefore = held(owner_);
   keyDown_[vk] = false;
+  if (!held(WheelKind::Ping) && !held(WheelKind::Emote)) foreignKey_ = false;
   const bool triggerReleased = heldBefore && !held(owner_) && isTriggerVk(owner_, vk);
 
   if (swallowKeyUps_.erase(vk) > 0) r.swallow = true;
@@ -281,6 +291,7 @@ void Decision::onMouseDown(const InputEvent& e, Result& r) {
     return;
   }
   if (state_ != State::Idle) return;
+  if (foreignKey_) return;  // the trigger is part of another program's chord: let the click through
   // Exactly one wheel's trigger must claim the press. When both do (Alt and Ctrl held), it's ambiguous:
   // pass it through untouched rather than guess.
   const bool ping = startsGesture(WheelKind::Ping, e.btn);

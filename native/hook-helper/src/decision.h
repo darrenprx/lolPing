@@ -126,6 +126,9 @@ class Decision {
   std::set<uint32_t> swallowKeyUps_;
   bool swallowRightUp_ = false;
   bool needMask_ = false;
+  // A non-modifier key was pressed while a wheel trigger is held (Alt+Tab, Win+Tab, Alt+F4...):
+  // that chord belongs to another program, so clicks pass through until every trigger is released.
+  bool foreignKey_ = false;
   bool maskMenuKeys_ = true;
   WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   Btn dragBtn_ = Btn::None;
