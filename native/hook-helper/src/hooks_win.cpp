@@ -32,9 +32,11 @@ bool isExtendedVk(uint32_t vk) {
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
 
-// True when the foreground window covers its monitor (within 2%): a game — or any fullscreen app —
-// owns the screen, so trigger+click chords belong to it, not to a wheel. Shell surfaces (desktop,
-// taskbar) also cover the monitor and are excluded. Runs once per would-be gesture: microseconds.
+// True when the foreground window covers its monitor (within 2%) and has no caption: a game — or
+// any fullscreen app — owns the screen, so trigger+click chords belong to it, not to a wheel. The
+// caption check keeps maximized windows out even with an auto-hiding taskbar (their work area then
+// equals the monitor); borderless games and F11 browsers drop it. Shell surfaces (desktop, taskbar)
+// are excluded. Runs once per would-be gesture: microseconds.
 bool foregroundIsFullscreen() {
   const HWND fg = GetForegroundWindow();
   if (fg == nullptr) return false;
@@ -42,6 +44,7 @@ bool foregroundIsFullscreen() {
   if (GetClassNameW(fg, cls, 64) != 0 &&
       (lstrcmpiW(cls, L"Progman") == 0 || lstrcmpiW(cls, L"WorkerW") == 0 || lstrcmpiW(cls, L"Shell_TrayWnd") == 0))
     return false;
+  if ((GetWindowLongW(fg, GWL_STYLE) & WS_CAPTION) != 0) return false;
   RECT wr;
   if (!GetWindowRect(fg, &wr)) return false;
   const HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
