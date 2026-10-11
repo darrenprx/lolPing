@@ -273,6 +273,50 @@ static void test_win_tab_clicks_pass_through_and_sync_clears_flag() {
   CHECK(r.swallow);  // gestures again
 }
 
+// A fullscreen game owns the screen: trigger+click passes through while the probe says fullscreen,
+// and gestures come back on the desktop. (clickPing on: the in-game drop-click case.)
+static void test_fullscreen_game_keeps_the_click() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  c.gameCheck = true;
+  Decision d;
+  d.setConfig(c);
+  bool fullscreen = true;
+  d.setFullscreenProbe([&fullscreen] { return fullscreen; });
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);  // the game keeps the click
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  fullscreen = false;  // back on the desktop: gestures again
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
+  CHECK(d.state() == S::Idle);
+}
+
+// gameCheck off: the probe is never consulted, fullscreen or not.
+static void test_fullscreen_probe_ignored_when_disabled() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  c.gameCheck = false;
+  Decision d;
+  d.setConfig(c);
+  bool consulted = false;
+  d.setFullscreenProbe([&consulted] { consulted = true; return true; });
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);  // the gesture starts despite "fullscreen"
+  CHECK(!consulted);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
+}
+
 static void test_alt_up_after_gesture_is_masked() {
   Decision d;
   openWheel(d);
@@ -889,6 +933,8 @@ int main() {
   test_alt_tab_clicks_pass_through();
   test_alt_tab_click_places_no_ping_even_with_click_ping_on();
   test_win_tab_clicks_pass_through_and_sync_clears_flag();
+  test_fullscreen_game_keeps_the_click();
+  test_fullscreen_probe_ignored_when_disabled();
   test_toggle_hotkey_disables_and_enables();
   test_hotkey_autorepeat_toggles_once();
   test_hotkey_ignored_while_suspended();

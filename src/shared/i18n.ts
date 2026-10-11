@@ -45,6 +45,8 @@ const en = {
   clickPing: (trigger: string) => `${trigger} + click places a ping`,
   clickPingDesc: (trigger: string) =>
     `Places the ping in the centre of the wheel. When off, ${trigger} + click passes straight through to the app underneath`,
+  gameCheck: 'Pause in fullscreen apps',
+  gameCheckDesc: 'Games and other fullscreen apps keep every click: trigger + click passes through there, and gestures resume on the desktop',
   toggleShortcut: 'Enable / disable shortcut',
   toggleShortcutDesc: 'Works anywhere, even while pinging is off',
   startEnabled: 'Start enabled',
@@ -290,6 +292,8 @@ const zh: Strings = {
   dragDistanceDesc: '鼠标移动多远后才打开轮盘',
   clickPing: (trigger) => `${trigger} + 单击发送信号`,
   clickPingDesc: (trigger) => `发送轮盘中心的信号。关闭时，${trigger} + 单击会直接传给下方的程序`,
+  gameCheck: '全屏程序中暂停',
+  gameCheckDesc: '游戏等全屏程序独占点击：触发键 + 单击原样交给程序，回到桌面后手势恢复正常',
   toggleShortcut: '开关快捷键',
   toggleShortcutDesc: '在任何地方都可用，即使信号已关闭',
   startEnabled: '启动时开启',

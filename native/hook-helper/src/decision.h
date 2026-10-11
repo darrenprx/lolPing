@@ -34,6 +34,8 @@ struct Config {
   Trigger trigger = Trigger::Alt;  // the ping wheel's
   uint32_t triggerVk = 0;          // only for Trigger::CustomVk
   bool clickPing = false;
+  /** Fullscreen apps (games) keep every click: gestures start only when the probe says windowed. */
+  bool gameCheck = false;
   Trigger emoteTrigger = Trigger::None;  // the emote wheel's
   uint32_t emoteTriggerVk = 0;           // only for Trigger::CustomVk
   bool emoteClick = false;
@@ -73,11 +75,13 @@ class Decision {
  public:
   enum class State { Idle, Pending, Wheel, SwallowUp };
 
-  Result setConfig(const Config& c);
-  Result setEnabled(bool on);
-  Result setSuspended(bool on);
-  Result onEvent(const InputEvent& e);
-  Result tick(uint64_t nowMs);
+ Result setConfig(const Config& c);
+ Result setEnabled(bool on);
+ Result setSuspended(bool on);
+ Result onEvent(const InputEvent& e);
+ Result tick(uint64_t nowMs);
+ /** Injects the "is the foreground app fullscreen" probe (per platform). Unset: gameCheck never fires. */
+ void setFullscreenProbe(std::function<bool()> probe);
   // Windows opens the menu bar / Start menu on a lone Alt / Win key-up, so a swallowed press while one is held
   // gets a mask key before that key-up. macOS has no such behaviour: its hook layer turns this off.
   void setMaskMenuKeys(bool on) { maskMenuKeys_ = on; }
@@ -121,6 +125,7 @@ class Decision {
   Config cfg_;
   bool enabled_ = true;
   bool suspended_ = false;
+  std::function<bool()> fullscreenProbe_;
   State state_ = State::Idle;
   std::array<bool, 256> keyDown_{};
   std::set<uint32_t> swallowKeyUps_;

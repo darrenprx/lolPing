@@ -37,7 +37,7 @@ describe('parseHelperLine', () => {
 describe('commands', () => {
   it('builds a flat config command for named triggers', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
-      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false,
+      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
       toggleMods: 3, toggleVk: 0x50, enabled: true,
     });

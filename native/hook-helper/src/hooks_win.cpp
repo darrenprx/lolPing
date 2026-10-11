@@ -32,6 +32,27 @@ bool isExtendedVk(uint32_t vk) {
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
 
+// True when the foreground window covers its monitor (within 2%): a game — or any fullscreen app —
+// owns the screen, so trigger+click chords belong to it, not to a wheel. Shell surfaces (desktop,
+// taskbar) also cover the monitor and are excluded. Runs once per would-be gesture: microseconds.
+bool foregroundIsFullscreen() {
+  const HWND fg = GetForegroundWindow();
+  if (fg == nullptr) return false;
+  wchar_t cls[64];
+  if (GetClassNameW(fg, cls, 64) != 0 &&
+      (lstrcmpiW(cls, L"Progman") == 0 || lstrcmpiW(cls, L"WorkerW") == 0 || lstrcmpiW(cls, L"Shell_TrayWnd") == 0))
+    return false;
+  RECT wr;
+  if (!GetWindowRect(fg, &wr)) return false;
+  const HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(mi);
+  if (mon == nullptr || !GetMonitorInfoW(mon, &mi)) return false;
+  const LONG ww = wr.right - wr.left, wh = wr.bottom - wr.top;
+  const LONG mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+  return mw > 0 && mh > 0 && ww * 100 >= mw * 98 && wh * 100 >= mh * 98;
+}
+
 void sendInjects(const std::vector<Inject>& injects) {
   std::vector<INPUT> inputs;
   for (const auto& i : injects) {
@@ -123,6 +144,7 @@ int runHooks(Output& out) {
   Decision decision;
   g_decision = &decision;
   g_out = &out;
+  decision.setFullscreenProbe(foregroundIsFullscreen);
   const DWORD threadId = GetCurrentThreadId();
   MSG msg;
   PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // make sure this thread has a queue

@@ -66,6 +66,8 @@ export type HelperCommand =
       trigger: HelperTrigger;
       triggerVk: number;
       clickPing: boolean;
+      /** Fullscreen apps keep every click: no wheel gestures while one is in front. */
+      gameCheck: boolean;
       /** 'off': no emote key, so no emote gestures. */
       emoteTrigger: HelperTrigger | 'off';
       emoteTriggerVk: number;
@@ -87,6 +89,7 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     trigger: typeof t === 'object' ? 'vk' : t,
     triggerVk: typeof t === 'object' ? t.vk : 0,
     clickPing: s.clickPing,
+    gameCheck: s.gameCheck,
     emoteTrigger: typeof e === 'object' ? 'vk' : e,
     emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
     emoteClick: s.emoteClick,

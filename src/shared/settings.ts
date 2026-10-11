@@ -31,6 +31,8 @@ export interface Settings {
   clickPing: boolean;
   /** Which ping trigger + click places. */
   clickPingId: PingId;
+  /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
+  gameCheck: boolean;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trigger: 'alt',
   dragThresholdPx: 8,
   clickPing: false,
+  gameCheck: true,
   clickPingId: DEFAULT_CLICK_PING,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
@@ -119,7 +122,7 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
   | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -218,6 +221,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     trigger: pingTrigger,
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
+    gameCheck: bool(r.gameCheck, 'gameCheck'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,

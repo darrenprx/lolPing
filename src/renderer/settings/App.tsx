@@ -1,6 +1,6 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -159,6 +159,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
+        <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
+          description={t.gameCheckDesc}
+          checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
 
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>

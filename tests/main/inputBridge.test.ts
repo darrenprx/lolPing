@@ -45,7 +45,7 @@ describe('InputBridge', () => {
   it('re-sends the last config whenever the helper becomes ready', async () => {
     const b = bridge('echo');
     b.send({
-      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
+      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true, emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
       dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true,
     });
     const echoed = waitFor<HelperEvent>(b, 'event', (e) => e.type === 'error' && e.message === 'got:config');
