@@ -26,6 +26,24 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .desc { display: block; color: var(--text3); font-size: 12px; line-height: 16px; }
 .desc.inline { display: inline; margin-left: 6px; }
 .card .ctl { display: flex; align-items: center; gap: 10px; }
+.card.aiEditor { display: block; padding: 16px 20px; }
+.aiHead { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+.aiHead .icon { flex: 0 0 24px; color: var(--colorBrandForeground1); }
+.aiRow { display: grid; gap: 12px; padding: 16px 0; border-top: 1px solid var(--stroke); min-width: 0; }
+.aiSignalHeader { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 190px); gap: 16px; align-items: center; }
+.aiName { display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: 0; }
+.aiName img { width: 26px; height: 26px; object-fit: contain; }
+.aiEditor .fui-Field, .aiEditor .fui-Textarea, .aiEditor .fui-Input { min-width: 0; width: 100%; box-sizing: border-box; }
+.aiEditor .fui-Textarea { min-height: 90px; }
+.aiEditor textarea { min-width: 0; width: 100%; box-sizing: border-box; font: inherit; line-height: 1.6; padding: 8px 10px; }
+.aiConnectionFields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.aiEndpoint { grid-column: 1 / -1; }
+.aiConnectionActions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+.aiConnectionActions .desc { flex: 1; min-width: 140px; }
+.aiFeedback { margin-top: 10px; font-size: 12px; }
+.aiEditor { container-type: inline-size; }
+@container (max-width: 420px) { .aiConnectionFields, .aiSignalHeader { grid-template-columns: minmax(0, 1fr); } }
+.aiHint { margin-top: 10px; }
 .value { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 /* Fluent draws a tick per step on the rail; with 38-100 steps they merge into a dark dashed line. */
 .card .fui-Slider__rail::before { background-image: none; }

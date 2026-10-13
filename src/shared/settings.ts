@@ -5,7 +5,7 @@ import {
 } from './emotes';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
-import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
+import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
 import type { Platform } from './platform';
 import { isTagColor } from './roomColors';
 import { parseRoomCode } from './roomCode';
@@ -69,7 +69,17 @@ export interface Settings {
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
   updateNotifiedVersion: string | null;
+  /** Per-ping AI action and prompt. API credentials are never stored here. */
+  aiSignals: Record<PingId, AiSignalConfig>;
 }
+
+export type AiSignalAction = 'off' | 'show' | 'copy' | 'showAndCopy';
+export interface AiSignalConfig { action: AiSignalAction; prompt: string }
+
+const DEFAULT_AI_PROMPT = '重点观察这个信号附近的文字和界面，解释用户可能看不懂的内容。请用简洁中文回答；看不清时明确说明，不要臆测。';
+export const defaultAiSignals = (): Record<PingId, AiSignalConfig> => Object.fromEntries(
+  ALL_PINGS.map((p) => [p.id, { action: 'off', prompt: DEFAULT_AI_PROMPT }]),
+) as Record<PingId, AiSignalConfig>;
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
 export interface Identity {
@@ -110,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customEmotes: [],
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
+  aiSignals: defaultAiSignals(),
 };
 
 export const LIMITS = {
@@ -136,6 +147,20 @@ function num(raw: unknown, key: NumKey): number {
 }
 
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
+
+const AI_ACTIONS: readonly AiSignalAction[] = ['off', 'show', 'copy', 'showAndCopy'];
+const aiSignals = (raw: unknown): Record<PingId, AiSignalConfig> => {
+  const defaults = defaultAiSignals();
+  if (!isObj(raw)) return defaults;
+  for (const p of ALL_PINGS) {
+    const value = raw[p.id];
+    if (!isObj(value)) continue;
+    const action = AI_ACTIONS.includes(value.action as AiSignalAction) ? value.action as AiSignalAction : defaults[p.id].action;
+    const prompt = typeof value.prompt === 'string' ? value.prompt.slice(0, 4000) : defaults[p.id].prompt;
+    defaults[p.id] = { action, prompt: prompt.trim() || defaults[p.id].prompt };
+  }
+  return defaults;
+};
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
   if (platform === 'mac' && raw === 'capslock') return fallback;
@@ -248,6 +273,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     customEmotes: custom,
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
+    aiSignals: aiSignals(r.aiSignals),
   };
 }
 

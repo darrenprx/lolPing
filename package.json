@@ -25,6 +25,9 @@
     "media": "npm run build:site && electron tools/capture-media/capture.mjs"
   },
   "devDependencies": {
+    "dompurify": "3.4.17",
+    "marked": "18.1.1",
+    "jsdom": "29.1.1",
     "@fluentui/react-components": "9.74.9",
     "@fluentui/react-icons": "2.0.343",
     "@noble/secp256k1": "3.2.0",

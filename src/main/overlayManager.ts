@@ -27,6 +27,13 @@ export interface SharedEmote {
   y: number;
 }
 
+export interface AiAssistPing {
+  id: PingId;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /**
@@ -56,7 +63,11 @@ export class OverlayManager extends EventEmitter {
       const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
-      if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+      if (displayId !== undefined) {
+        const ping = { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing;
+        this.emit('shared', ping);
+        this.emit('aiAssist', ping satisfies AiAssistPing);
+      }
     });
     ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
       const p = raw as { ref?: unknown; x?: unknown; y?: unknown } | null;
@@ -109,6 +120,7 @@ export class OverlayManager extends EventEmitter {
         }
         this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
         this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
+        this.emit('aiAssist', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies AiAssistPing);
         break;
       }
       case 'cancel':

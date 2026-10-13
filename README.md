@@ -25,6 +25,12 @@
 
 Pings and emotes show up in whole-screen capture, so friends watching your Discord or OBS stream see them too. lolPing is a desktop toy: it doesn't read, change or hook into League itself.
 
+## Optional AI assistance
+
+Settings → AI assistance lets you configure an HTTPS, OpenAI-compatible vision chat endpoint, model and API key, then opt individual signals into screenshot assistance. All AI actions are off by default. Each signal has its own prompt and can show, copy, or show-and-copy the answer.
+
+Enabled signals upload a crop around the signal and an overview of the same display to your configured provider. The prompt prioritizes nearby content; the overview supplies background. API keys are encrypted locally with Electron `safeStorage`. Answers render sanitized Markdown in separate windows and remain until manually closed. Screenshots may contain private information: enable this only when you intend to send the displayed content. No images are sent through the room network, and no separate screenshot file is written to disk. See [AI assistance notes](README-AI.md).
+
 ## Install
 
 ### Windows
