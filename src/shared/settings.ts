@@ -89,6 +89,10 @@ export interface Settings {
   aiAnswerStyle: AiAnswerStyle;
   /** Seconds the corner card stays before closing itself; hovering it keeps it. */
   aiCardSeconds: number;
+  /** Base font size of the answer text, in CSS px. */
+  aiFontSize: number;
+  /** Show the captured screenshot as a small thumbnail above the conversation. */
+  aiShowThumbnail: boolean;
 }
 
 export type AiAnswerStyle = 'fullscreen' | 'card';
@@ -146,6 +150,8 @@ export const DEFAULT_SETTINGS: Settings = {
   aiModel: AI_MODEL_DEFAULT,
   aiAnswerStyle: 'fullscreen',
   aiCardSeconds: 10,
+  aiFontSize: 15,
+  aiShowThumbnail: true,
 };
 
 export const LIMITS = {
@@ -158,11 +164,12 @@ export const LIMITS = {
   aiTriggerCount: { min: 2, max: 10, step: 1 },
   aiTriggerWindowS: { min: 1, max: 15, step: 1 },
   aiCardSeconds: { min: 5, max: 60, step: 1 },
+  aiFontSize: { min: 12, max: 28, step: 1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck' | 'aiEnabled';
+  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck' | 'aiEnabled' | 'aiShowThumbnail';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -322,6 +329,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     aiModel: normalizeAiModel(r.aiModel),
     aiAnswerStyle: r.aiAnswerStyle === 'card' ? 'card' : 'fullscreen',
     aiCardSeconds: num(r.aiCardSeconds, 'aiCardSeconds'),
+    aiFontSize: num(r.aiFontSize, 'aiFontSize'),
+    aiShowThumbnail: bool(r.aiShowThumbnail, 'aiShowThumbnail'),
   };
 }
 

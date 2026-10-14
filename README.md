@@ -115,6 +115,8 @@ Ping the same ping several times in a row and lolPing opens a WeChat-style scree
 Set it up in **Settings → AI capture**: the trigger ping, how many pings within how many seconds, and an OpenAI-compatible service (address, key and model, such as `https://api.deepseek.com` and `deepseek-flash`). **Test connection** sends a one-pixel image, so you know the service and the model accept images before you need them. The key stays in this computer's settings file.
 
 - While the capture is open it takes the mouse: a drag marks an area with a ✓/✕ pair to confirm or cancel, a plain click shoots the whole screen, and Esc backs out at any moment. Left alone for a minute, it closes itself.
+Follow-ups: the answer window has an input — type and press Enter to keep asking about the same shot, with the conversation as context. It lives as long as the window does.
+
 - The answer shows fullscreen by default. **Corner card** shows it in the bottom-right and closes itself after a while; hovering the card keeps it.
 - **Privacy:** screenshots are sent to the API address you set, with a one-line "identify this image" prompt. Nothing else leaves the machine — no pings, no room traffic, no telemetry. With **Capture on repeated pings** off, lolPing touches nothing but updates and rooms.
 

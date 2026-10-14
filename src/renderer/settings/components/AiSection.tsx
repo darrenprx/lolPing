@@ -1,7 +1,7 @@
 import { Button, Dropdown, Input, Option } from '@fluentui/react-components';
 import {
-  Bot24Regular, Camera24Regular, Desktop24Regular, Globe24Regular, Key24Regular, NumberSymbol24Regular, PlugConnected24Regular,
-  QuestionCircle24Regular, Timer24Regular,
+  Bot24Regular, Camera24Regular, Desktop24Regular, Globe24Regular, Image24Regular, Key24Regular, NumberSymbol24Regular, PlugConnected24Regular,
+  QuestionCircle24Regular, TextFontSize24Regular, Timer24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Strings } from '../../../shared/i18n';
@@ -99,6 +99,10 @@ export function AiSection({ settings: s, update }: { settings: Settings; update:
           <Option value="card" text={t.aiAnswerCard}>{t.aiAnswerCard}</Option>
         </Dropdown>
       </SettingRow>
+      <SliderRow limit="aiFontSize" icon={<TextFontSize24Regular />} title={t.aiFontSize} description={t.aiFontSizeDesc}
+        value={s.aiFontSize} format={(v) => `${v} px`} onChange={(v) => void update({ aiFontSize: v })} dim={!s.aiEnabled} />
+      <SwitchRow icon={<Image24Regular />} title={t.aiShowThumbnail} description={t.aiShowThumbnailDesc}
+        checked={s.aiShowThumbnail} onChange={(v) => void update({ aiShowThumbnail: v })} dim={!s.aiEnabled} />
       <SliderRow limit="aiCardSeconds" icon={<Timer24Regular />} title={t.aiCardSeconds} description={t.aiCardSecondsDesc}
         value={s.aiCardSeconds} format={(v) => `${v} s`} onChange={(v) => void update({ aiCardSeconds: v })}
         dim={!s.aiEnabled || s.aiAnswerStyle !== 'card'} />

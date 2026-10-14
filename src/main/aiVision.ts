@@ -17,6 +17,34 @@ export const AI_TIMEOUT_MS = 90_000;
 /** What the shot is asked for. Neutral: identify and explain the picture, nothing about games. */
 export const AI_PROMPT = '请识别并解释这张截图的内容。';
 
+/** A conversation keeps at most this many messages: the first (with the image) plus the newest turns. */
+const MAX_MESSAGES = 20;
+
+/** One message of an OpenAI-compatible chat; `content` is a string or, for images, an array of parts. */
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: unknown;
+}
+
+/** The first message of a conversation: the prompt and the captured image. */
+export function imageMessage(prompt: string, image: Buffer, mime = 'image/jpeg'): ChatMessage {
+  return {
+    role: 'user',
+    content: [
+      { type: 'text', text: prompt },
+      { type: 'image_url', image_url: { url: `data:${mime};base64,${image.toString('base64')}` } },
+    ],
+  };
+}
+
+export const textMessage = (role: ChatMessage['role'], text: string): ChatMessage => ({ role, content: text });
+
+/** Keeps the first message (it carries the image) plus the newest turns, so follow-ups stay in budget. */
+export function trimMessages(messages: readonly ChatMessage[], max = MAX_MESSAGES): ChatMessage[] {
+  if (messages.length <= max) return [...messages];
+  return [messages[0], ...messages.slice(messages.length - (max - 1))];
+}
+
 /** A one-pixel PNG, just enough to learn whether the service accepts image input at all (the settings page's test). */
 export const AI_TEST_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -24,10 +52,11 @@ export const AI_TEST_PNG = Buffer.from(
 );
 
 /**
- * Sends one image to an OpenAI-compatible vision model and returns its answer. The network comes in through `io.fetch`,
- * so tests run it against a stub. Errors are sorted into reasons the UI can name, with the service's own text as detail.
+ * Sends one conversation to an OpenAI-compatible vision model and returns the last answer. The network comes in
+ * through `io.fetch`, so tests run it against a stub. Errors are sorted into reasons the UI can name, with the
+ * service's own text as detail.
  */
-export async function recognizeImage(cfg: AiVisionConfig, image: Buffer, io: { fetch: typeof fetch }, prompt: string = AI_PROMPT): Promise<AiVisionResult> {
+export async function chatCompletion(cfg: AiVisionConfig, messages: readonly ChatMessage[], io: { fetch: typeof fetch }): Promise<AiVisionResult> {
   const key = cfg.apiKey.trim();
   if (key === '') return { ok: false, reason: 'noKey', detail: 'no api key' };
   const ctrl = new AbortController();
@@ -36,18 +65,7 @@ export async function recognizeImage(cfg: AiVisionConfig, image: Buffer, io: { f
     const res = await io.fetch(aiChatCompletionsUrl(cfg.baseUrl), {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:image/png;base64,${image.toString('base64')}` } },
-          ],
-        }],
-        max_tokens: 2048,
-        temperature: 0.2,
-      }),
+      body: JSON.stringify({ model: cfg.model, messages, max_tokens: 2048, temperature: 0.2 }),
       signal: ctrl.signal,
     });
     if (res.status === 401 || res.status === 403) return { ok: false, reason: 'auth', detail: await detail(res) };
@@ -107,4 +125,9 @@ async function detail(res: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/** One-shot helper: ask about a single image (the settings page's connection test). */
+export function recognizeImage(cfg: AiVisionConfig, image: Buffer, io: { fetch: typeof fetch }, prompt: string = AI_PROMPT): Promise<AiVisionResult> {
+  return chatCompletion(cfg, [imageMessage(prompt, image, 'image/png')], io);
 }

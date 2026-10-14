@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AI_TEST_PNG, answerText, recognizeImage, type AiVisionResult } from '../../src/main/aiVision';
+import { AI_TEST_PNG, answerText, chatCompletion, imageMessage, recognizeImage, textMessage, trimMessages, type AiVisionResult } from '../../src/main/aiVision';
 
 const cfg = { baseUrl: 'https://ai.test', apiKey: 'sk-test', model: 'vision-1', timeoutMs: 1000 };
 
@@ -92,5 +92,37 @@ describe('answerText', () => {
     expect(answerText({ choices: [] })).toBeNull();
     expect(answerText({ choices: [{ message: { content: '  ' } }] })).toBeNull();
     expect(answerText('x')).toBeNull();
+  });
+});
+
+describe('multi-turn messages', () => {
+  it('sends the conversation as given, user and assistant turns in order', async () => {
+    const { io, calls } = fetchStub(200, { choices: [{ message: { content: '好的。' } }] });
+    const messages = [
+      imageMessage('看这张图', AI_TEST_PNG, 'image/jpeg'),
+      textMessage('assistant', '图里是一像素。'),
+      textMessage('user', '左上角是什么颜色?'),
+    ];
+    const r = await chatCompletion(cfg, messages, io);
+    expect(r).toEqual({ ok: true, text: '好的。' });
+    expect(calls[0].url).toBe('https://ai.test/chat/completions');
+    const sent = JSON.parse(String(calls[0].init.body));
+    expect(sent.messages).toHaveLength(3);
+    expect(sent.messages[0].content[1].image_url.url.startsWith('data:image/jpeg;base64,')).toBe(true);
+    expect(sent.messages[2]).toEqual({ role: 'user', content: '左上角是什么颜色?' });
+  });
+
+  it('keeps the image message and the newest turns when trimming', () => {
+    const first = imageMessage('看这张图', AI_TEST_PNG);
+    const rest = Array.from({ length: 30 }, (_, i) => textMessage(i % 2 ? 'assistant' : 'user', `t${i}`));
+    const trimmed = trimMessages([first, ...rest], 20);
+    expect(trimmed).toHaveLength(20);
+    expect(trimmed[0]).toBe(first);
+    expect(trimmed[19]).toEqual(rest[29]);
+  });
+
+  it('returns the messages unchanged when they already fit', () => {
+    const messages = [imageMessage('p', AI_TEST_PNG), textMessage('assistant', 'a')];
+    expect(trimMessages(messages)).toEqual(messages);
   });
 });

@@ -68,18 +68,31 @@ export const CAPTURE_CONFIRM = 'capture:confirm';
 /** capture renderer → main: the user dismissed the capture. */
 export const CAPTURE_CANCEL = 'capture:cancel';
 
-/** main → answer renderer messages. */
+/** One round of the conversation: what was asked and what the model answered. */
+export interface AnswerTurn {
+  /** The user's question; the first round quotes the one-line prompt the shot was sent with. */
+  q: string;
+  /** The model's answer, or the error text; empty while this round is pending. */
+  a: string;
+  /** This round's answer is still being fetched. */
+  pending: boolean;
+  /** The answer is an error, drawn apart from a normal answer. */
+  error: boolean;
+}
+
+/** main → answer renderer messages. A full snapshot every time: the page just re-renders it. */
 export interface AnswerEvents {
-  /** Which shape the page draws, its texts, and whether an answer is still on its way. */
   'answer:state': {
     mode: 'fullscreen' | 'card';
     title: string;
-    /** Empty while the answer is pending. */
-    body: string;
-    /** The answer is still being fetched: the page shows the working state. */
-    pending: boolean;
-    /** The body is an error, drawn apart from a normal answer. */
-    error: boolean;
+    /** The captured shot as a data URL, for the thumbnail; empty when hidden or unavailable. */
+    thumbnail: string;
+    /** The conversation so far, oldest first. */
+    turns: AnswerTurn[];
+    /** The input's placeholder, in the app language. */
+    askPlaceholder: string;
+    /** Answer text size, in CSS px. */
+    fontSize: number;
     closeHint: string;
     /** Card mode only: seconds until the page closes itself. */
     cardSeconds: number;
@@ -88,7 +101,12 @@ export interface AnswerEvents {
 
 export const ANSWER_CHANNELS: readonly (keyof AnswerEvents)[] = ['answer:state'];
 
-/** answer renderer → main: the user closed the answer (click, Esc, or the card's timer). */
+/** The full payload the answer page renders from. */
+export type AnswerState = AnswerEvents['answer:state'];
+
+/** answer renderer → main: the user asked a follow-up with this text. */
+export const ANSWER_ASK = 'answer:ask';
+/** answer renderer → main: the user closed the answer (Esc, or the card's ✕ / timer). */
 export const ANSWER_CLOSE = 'answer:close';
 
 export interface AppStatus {

@@ -14,7 +14,7 @@ import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { AnswerManager } from './answerManager';
-import { aiErrorText, recognizeImage, AI_TIMEOUT_MS } from './aiVision';
+import { aiErrorText, chatCompletion, AI_PROMPT, AI_TIMEOUT_MS } from './aiVision';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -117,7 +117,13 @@ function start(): void {
     const t = text();
     return { hint: t.captureHint, confirm: t.captureConfirm, cancel: t.captureCancel };
   } });
-  const answer = new AnswerManager();
+  const answer = new AnswerManager({
+    request: (messages) => {
+      const s = settings;
+      return chatCompletion({ baseUrl: s.aiBaseUrl, apiKey: s.aiApiKey, model: s.aiModel, timeoutMs: AI_TIMEOUT_MS }, messages, { fetch });
+    },
+    errorText: (result) => aiErrorText(text(), result, settings.aiModel),
+  });
   const AI_COOLDOWN_MS = 10_000;
   let lastPingDisplay = screen.getPrimaryDisplay().id;
   const detector = new QuestionPingDetector({
@@ -130,6 +136,19 @@ function start(): void {
     onTrigger: () => startAiCapture(),
   });
 
+  function answerFrame() {
+    const t = text();
+    return {
+      mode: settings.aiAnswerStyle,
+      title: t.navAi,
+      askPlaceholder: t.aiAskPlaceholder,
+      fontSize: settings.aiFontSize,
+      closeHint: t.aiCloseHint,
+      cardSeconds: settings.aiCardSeconds,
+      showThumbnail: settings.aiShowThumbnail,
+    };
+  }
+
   function startAiCapture(): void {
     if (settings.aiApiKey.trim() === '') {
       overlays.toast(text().navAi, text().aiToastNoKey);
@@ -138,26 +157,14 @@ function start(): void {
     capture.start(lastPingDisplay);
   }
 
-  async function recognizeShot(shot: CapturedShot): Promise<void> {
-    const t = text();
-    const s = settings;
-    const style = s.aiAnswerStyle;
-    answer.show(shot.displayId, { mode: style, title: t.navAi, body: '', pending: true, error: false, closeHint: t.aiCloseHint, cardSeconds: s.aiCardSeconds });
-    const result = await recognizeImage({ baseUrl: s.aiBaseUrl, apiKey: s.aiApiKey, model: s.aiModel, timeoutMs: AI_TIMEOUT_MS }, shot.jpeg, { fetch });
-    if (result.ok) console.log(`[ai] answered in ${result.text.length} chars`);
-    else console.warn('[ai] failed:', result.reason, result.detail.slice(0, 120));
-    if (!answer.isVisible()) return; // the user closed it while the model was thinking
-    answer.show(shot.displayId, {
-      mode: style,
-      title: t.navAi,
-      body: result.ok ? result.text : aiErrorText(t, result, s.aiModel),
-      pending: false,
-      error: !result.ok,
-      closeHint: t.aiCloseHint,
-      cardSeconds: s.aiCardSeconds,
-    });
-  }
-  capture.on('captured', (shot: CapturedShot) => void recognizeShot(shot));
+  capture.on('captured', (shot: CapturedShot) => {
+    const thumbnail = `data:image/jpeg;base64,${shot.jpeg.toString('base64')}`;
+    answer.begin(shot.displayId, answerFrame(), AI_PROMPT, shot.jpeg, thumbnail);
+  });
+  // Settings that shape the answer apply to a conversation that is already on screen.
+  const pushAnswerFrame = (): void => {
+    if (answer.isVisible()) answer.updateFrame(lastPingDisplay, answerFrame());
+  };
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
@@ -420,6 +427,10 @@ function start(): void {
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
+    if (
+      s.language !== previous.language || s.aiAnswerStyle !== previous.aiAnswerStyle || s.aiFontSize !== previous.aiFontSize
+      || s.aiCardSeconds !== previous.aiCardSeconds || s.aiShowThumbnail !== previous.aiShowThumbnail
+    ) pushAnswerFrame();
     if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
