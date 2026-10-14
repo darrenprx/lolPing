@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeKeyPair, signEvent, type NostrEvent } from '../../src/main/nostrEvent';
+import { makeKeyPair, serializeEvent, type KeyPair, type NostrEvent } from '../../src/main/nostrEvent';
 import { RelayPool } from '../../src/main/relayPool';
 import type { TransportStatus } from '../../src/main/transport';
 import { fakeSockets, type FakeSocket } from './fixtures/fakeSocket';
@@ -15,7 +16,13 @@ let events: NostrEvent[];
 let statuses: TransportStatus[];
 let linkUps: string[];
 
-const ev = (keys = other, content = 'AAAA'): NostrEvent => signEvent(keys, 24747, [['x', TOPIC]], content, Math.floor(Date.now() / 1000));
+// The pool leaves signatures to the relays, so skip signing: hundreds of Schnorr signatures timed out on CI.
+const ev = (keys: KeyPair = other, content = 'AAAA'): NostrEvent => {
+  const createdAt = Math.floor(Date.now() / 1000);
+  const tags = [['x', TOPIC]];
+  const id = createHash('sha256').update(serializeEvent(keys.pubkey, createdAt, 24747, tags, content)).digest('hex');
+  return { id, pubkey: keys.pubkey, created_at: createdAt, kind: 24747, tags, content, sig: '0'.repeat(128) };
+};
 /** The newest socket for a relay. */
 const sock = (url: string): FakeSocket => sockets.filter((s) => s.url === url).at(-1)!;
 const openAll = (): void => URLS.forEach((u) => sock(u).open());
