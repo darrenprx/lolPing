@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, clipboard, desktopCapturer, dialog, ipcMain, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -17,7 +17,10 @@ import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
-import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
+import { OverlayManager, type AiAssistPing, type SharedEmote, type SharedPing } from './overlayManager';
+import { AiAssist, focusCropRect } from './aiAssist';
+import { showAiAnswer } from './aiAnswerWindow';
+import { AiConfigStore } from './aiConfigStore';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
@@ -90,6 +93,17 @@ function start(): void {
 
   const overlays = new OverlayManager(overlaySettings(settings), (ref, remote) => resolveEmoteArt(ref, settings.customEmotes, remote));
   overlays.start();
+  const aiConfig = new AiConfigStore(settingsDir());
+  const aiAssist = new AiAssist({ getConfig: () => aiConfig.runtime() });
+  ipcMain.handle(SETTINGS_CH.aiGet, (event) => {
+    if (event.sender !== settingsWindow()?.webContents || event.senderFrame?.routingId !== event.sender.mainFrame.routingId || event.senderFrame?.processId !== event.sender.mainFrame.processId) throw new Error('Unauthorized');
+    return aiConfig.publicConfig();
+  });
+  ipcMain.handle(SETTINGS_CH.aiSave, (event, raw: unknown) => {
+    if (event.sender !== settingsWindow()?.webContents || event.senderFrame?.routingId !== event.sender.mainFrame.routingId || event.senderFrame?.processId !== event.sender.mainFrame.processId) throw new Error('Unauthorized');
+    try { return { ok: true, config: aiConfig.save(raw) }; }
+    catch (error) { return { ok: false, error: error instanceof Error && error.message === 'invalid' ? 'invalid' : 'storage' }; }
+  });
   const bridge = new InputBridge({ command: helperExePath() });
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
@@ -253,6 +267,32 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);
   });
+  overlays.on('aiAssist', (p: AiAssistPing) => {
+    const config = settings.aiSignals[p.id];
+    if (!config || config.action === 'off' || !aiAssist.configured || quitting) return;
+    void explainPing(p, config.prompt, config.action).catch((err: unknown) => console.warn('[ai-assist]', err));
+  });
+  async function explainPing(p: AiAssistPing, prompt: string, action: 'show' | 'copy' | 'showAndCopy'): Promise<void> {
+    const display = screen.getAllDisplays().find((d) => d.id === p.displayId);
+    if (!display) return;
+    const scale = display.scaleFactor || 1;
+    const width = Math.max(1, Math.round(display.bounds.width * scale));
+    const height = Math.max(1, Math.round(display.bounds.height * scale));
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
+    const source = sources.find((s) => s.display_id === String(display.id));
+    if (!source || source.thumbnail.isEmpty()) return;
+    const image = source.thumbnail;
+    const size = image.getSize();
+    const marker = { x: p.x * size.width / display.bounds.width, y: p.y * size.height / display.bounds.height };
+    const crop = focusCropRect(size, marker, 640, 480);
+    const background = size.width > 1280 ? image.resize({ width: 1280 }) : image;
+    const answer = await aiAssist.explain(image.crop(crop), prompt, {
+      imageUrl: background.toDataURL(), marker: { x: marker.x - crop.x, y: marker.y - crop.y },
+    });
+    if (!answer || quitting) return;
+    if (action === 'copy' || action === 'showAndCopy') await Promise.resolve().then(() => clipboard.writeText(answer)).catch(() => undefined);
+    if (action === 'show' || action === 'showAndCopy') showAiAnswer(answer);
+  }
   room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);

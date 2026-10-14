@@ -84,4 +84,7 @@
 [data-platform="mac"] .card.wheelEditor { padding: 14px 14px 10px; }
 [data-platform="mac"] .weTile { border: 0; background: transparent; color: var(--mac-sub); font-size: 11.5px; }
 [data-platform="mac"] .weTile:hover { background: var(--mac-sel); }
-@media (max-width: 760px) { [data-platform="mac"] .titlebar { left: 0; } }
+@media (max-width: 760px) {
+  [data-platform="mac"] .titlebar { left: 0; }
+  [data-platform="mac"] .app { grid-template-columns: minmax(0, 1fr); }
+}
