@@ -1,6 +1,5 @@
 import type { AnswerApi } from '../../preload/answer';
 import type { AnswerState, AnswerTurn } from '../../shared/ipc';
-import { textureUrl } from '../../shared/pings';
 import { parseMarkdown, type MdBlock, type MdSpan } from './markdown';
 
 declare global {
@@ -10,7 +9,6 @@ declare global {
 }
 
 const root = document.getElementById('root') as HTMLElement;
-const icon = document.getElementById('icon') as HTMLImageElement;
 const title = document.getElementById('title') as HTMLElement;
 const closeBtn = document.getElementById('close') as HTMLButtonElement;
 const shot = document.getElementById('shot') as HTMLElement;
@@ -21,8 +19,6 @@ const sendBtn = document.getElementById('send') as HTMLButtonElement;
 const closeHint = document.getElementById('closeHint') as HTMLElement;
 const countdown = document.getElementById('countdown') as HTMLElement;
 const countdownBar = countdown.firstElementChild as HTMLElement;
-
-icon.src = textureUrl('generic_ping');
 
 let last: AnswerState | null = null;
 let timer: number | null = null;
@@ -95,16 +91,23 @@ const mdBlock = (b: MdBlock): HTMLElement => {
 const working = (): HTMLElement => {
   const d = document.createElement('div');
   d.className = 'working';
-  d.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+  const glyph = document.createElement('span');
+  glyph.className = 'glyph';
+  glyph.textContent = '✻';
+  d.append(glyph, document.createTextNode(' …'));
   return d;
 };
 
 function renderTurn(turn: AnswerTurn): void {
   const q = document.createElement('div');
   q.className = 'turn-user';
-  const bubble = document.createElement('span');
-  bubble.textContent = turn.q;
-  q.append(bubble);
+  const prompt = document.createElement('span');
+  prompt.className = 'prompt';
+  prompt.textContent = '❯';
+  const line = document.createElement('span');
+  line.className = 'q';
+  line.textContent = turn.q;
+  q.append(prompt, line);
   chat.append(q);
 
   const a = document.createElement('div');

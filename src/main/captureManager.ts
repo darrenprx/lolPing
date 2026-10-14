@@ -24,6 +24,8 @@ export interface CaptureManagerDeps {
 export class CaptureManager extends EventEmitter {
   private readonly windows = new Map<number, BrowserWindow>();
   private active = false;
+  /** The frozen frame of each display, taken the instant the trigger landed. */
+  private shots = new Map<number, Electron.NativeImage>();
   /** The capture takes the mouse and suspends the helper, so it ends itself when the user walks away. */
   private static readonly TIMEOUT_MS = 60_000;
   private timeout: NodeJS.Timeout | null = null;
@@ -54,9 +56,21 @@ export class CaptureManager extends EventEmitter {
     return this.active;
   }
 
-  start(originDisplayId: number): void {
+  /**
+   * Freezes every display the instant the trigger lands — before any mask exists — and only then darkens the
+   * screens for the selection. The confirm crops the frozen frame, so the shot is exactly what the user saw.
+   */
+  async start(originDisplayId: number): Promise<void> {
     if (this.active) return;
     this.active = true;
+    const shots = await this.grabAll().catch(() => null);
+    if (shots === null || shots.size === 0) {
+      console.warn('[capture] could not read the screens');
+      this.close();
+      this.emit('cancelled');
+      return;
+    }
+    this.shots = shots;
     this.timeout = setTimeout(() => this.cancel(), CaptureManager.TIMEOUT_MS);
     this.d.setSuspended(true);
     this.syncDisplays();
@@ -70,6 +84,7 @@ export class CaptureManager extends EventEmitter {
   close(): void {
     if (this.timeout !== null) clearTimeout(this.timeout);
     this.timeout = null;
+    this.shots.clear();
     for (const win of this.windows.values()) if (!win.isDestroyed()) win.destroy();
     this.windows.clear();
     if (this.active) {
@@ -86,7 +101,7 @@ export class CaptureManager extends EventEmitter {
   private async finish(displayId: number, rect: CaptureRect): Promise<void> {
     let jpeg: Buffer | null = null;
     try {
-      jpeg = await this.shot(displayId, rect);
+      jpeg = this.crop(displayId, rect);
     } catch (e) {
       console.warn('[capture] screen shot failed:', e instanceof Error ? e.message : e);
     }
@@ -167,26 +182,35 @@ export class CaptureManager extends EventEmitter {
     return { x, y, width, height };
   }
 
-  /** The display's pixels under `rect` (CSS px local to it), JPEG-encoded. Null when the screen can't be read. */
-  private async shot(displayId: number, rect: CaptureRect): Promise<Buffer | null> {
-    const display = screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: display.bounds.width, height: display.bounds.height },
-    });
-    const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0];
-    if (!source) return null;
-    // The thumbnail comes back at its own scale, so measure it rather than trust the display's DPI.
-    const size = source.thumbnail.getSize();
-    if (size.width <= 0 || size.height <= 0) return null;
+  /** Reads every display's current frame, before the mask exists. */
+  private async grabAll(): Promise<Map<number, Electron.NativeImage>> {
+    const out = new Map<number, Electron.NativeImage>();
+    for (const d of screen.getAllDisplays()) {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: d.bounds.width, height: d.bounds.height },
+      });
+      const source = sources.find((s) => s.display_id === String(d.id)) ?? sources[0];
+      if (source && source.thumbnail.getSize().width > 0) out.set(d.id, source.thumbnail);
+    }
+    return out;
+  }
+
+  /** The frozen display's pixels under `rect` (CSS px local to it), JPEG-encoded. Null when the display is missing. */
+  private crop(displayId: number, rect: CaptureRect): Buffer | null {
+    const image = this.shots.get(displayId);
+    const display = screen.getAllDisplays().find((d) => d.id === displayId);
+    if (!image || !display) return null;
+    // The frozen frame comes back at its own scale, so measure it rather than trust the display's DPI.
+    const size = image.getSize();
     const scale = size.width / display.bounds.width;
-    const crop = {
+    const cropRect = {
       x: Math.round(rect.x * scale),
       y: Math.round(rect.y * scale),
       width: Math.min(Math.round(rect.width * scale), size.width),
       height: Math.min(Math.round(rect.height * scale), size.height),
     };
-    return source.thumbnail.crop(crop).toJPEG(90);
+    return image.crop(cropRect).toJPEG(90);
   }
 
   /** Which capture window a message came from, in display ids. */
