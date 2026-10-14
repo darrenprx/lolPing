@@ -1,13 +1,14 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
 import { isCustomRef, isEmoteRefShape, type EmoteRef, type ImportResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
-import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
+import { SETTINGS_CH, type About, type AiTestConfig, type AiTestResult, type AppStatus, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
-import { patchClashes, rendererPatch } from '../shared/settings';
+import { normalizeAiBaseUrl, normalizeAiModel, patchClashes, rendererPatch } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
+import { recognizeImage, AI_TEST_PNG, AI_TIMEOUT_MS } from './aiVision';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
 
@@ -131,6 +132,17 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
   ipcMain.handle(SETTINGS_CH.roomRetryInternet, () => d.room.retryInternet());
+
+  // The fields come from the page's inputs, not the saved settings, so the test says whether what is typed works.
+  ipcMain.handle(SETTINGS_CH.aiTest, async (_e, raw: unknown): Promise<AiTestResult> => {
+    const o = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+    const cfg: AiTestConfig = {
+      baseUrl: normalizeAiBaseUrl(o.baseUrl),
+      apiKey: typeof o.apiKey === 'string' ? o.apiKey.trim().slice(0, 512) : '',
+      model: normalizeAiModel(o.model),
+    };
+    return recognizeImage({ ...cfg, timeoutMs: AI_TIMEOUT_MS }, AI_TEST_PNG, { fetch });
+  });
 
   ipcMain.handle(SETTINGS_CH.updateGet, (): UpdateState | null => d.update?.state() ?? null);
   ipcMain.handle(SETTINGS_CH.updateCheck, async () => {

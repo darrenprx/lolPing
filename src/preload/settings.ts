@@ -36,6 +36,7 @@ const api: SettingsApi = {
   clipboardRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomClipboard),
   copyRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomCopy),
   retryInternet: () => ipcRenderer.invoke(SETTINGS_CH.roomRetryInternet),
+  testAi: (cfg) => ipcRenderer.invoke(SETTINGS_CH.aiTest, cfg),
   onShowSection: (cb) => subscribe(SETTINGS_CH.showSection, cb),
   getUpdate: () => ipcRenderer.invoke(SETTINGS_CH.updateGet),
   onUpdate: (cb) => subscribe(SETTINGS_CH.updateState, cb),

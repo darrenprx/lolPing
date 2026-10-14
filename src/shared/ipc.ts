@@ -47,6 +47,50 @@ export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_EMOTED = 'overlay:emoted';
 
+/** The selected area in CSS px inside the capture window's display. */
+export interface CaptureRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** main → capture renderer messages. */
+export interface CaptureEvents {
+  /** The window covers its display and takes the mouse; the strings are one-line texts in the app language. */
+  'capture:begin': { hint: string; confirm: string; cancel: string };
+}
+
+export const CAPTURE_CHANNELS: readonly (keyof CaptureEvents)[] = ['capture:begin'];
+
+/** capture renderer → main: {rect} the user confirmed (a click's fullscreen area included). */
+export const CAPTURE_CONFIRM = 'capture:confirm';
+/** capture renderer → main: the user dismissed the capture. */
+export const CAPTURE_CANCEL = 'capture:cancel';
+
+/** main → answer renderer messages. */
+export interface AnswerEvents {
+  /** Which shape the page draws, its texts, and whether an answer is still on its way. */
+  'answer:state': {
+    mode: 'fullscreen' | 'card';
+    title: string;
+    /** Empty while the answer is pending. */
+    body: string;
+    /** The answer is still being fetched: the page shows the working state. */
+    pending: boolean;
+    /** The body is an error, drawn apart from a normal answer. */
+    error: boolean;
+    closeHint: string;
+    /** Card mode only: seconds until the page closes itself. */
+    cardSeconds: number;
+  };
+}
+
+export const ANSWER_CHANNELS: readonly (keyof AnswerEvents)[] = ['answer:state'];
+
+/** answer renderer → main: the user closed the answer (click, Esc, or the card's timer). */
+export const ANSWER_CLOSE = 'answer:close';
+
 export interface AppStatus {
   enabled: boolean;
   helper: HelperStatus;
@@ -64,6 +108,18 @@ export interface About {
 }
 
 export type SetSettingsResult = { ok: true; settings: Settings } | { ok: false; error: string; settings: Settings };
+
+/** The AI test button's outcome: the model's answer, or the sorted failure reason with the service's own text. */
+export type AiTestResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: 'noKey' | 'network' | 'auth' | 'model' | 'busy' | 'response' | 'timeout' | 'unknown'; detail: string };
+
+/** The AI service fields as the settings window has them, before they are saved. */
+export interface AiTestConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
 // SETTINGS_CH lives in its own module so the settings preload can import it without sharing a chunk
 // with the overlay preload (a sandboxed preload can only require('electron'), never a sibling file).
@@ -104,6 +160,8 @@ export interface SettingsApi {
   copyRoomCode(): Promise<void>;
   /** Reconnects to every relay now (the Room page's Retry). */
   retryInternet(): Promise<void>;
+  /** Tries a one-pixel image against the AI service in these fields, so the page can say whether they work. */
+  testAi(cfg: AiTestConfig): Promise<AiTestResult>;
   /** The main process asks to scroll to a section (e.g. tray → Room settings…). */
   onShowSection(cb: (id: string) => void): () => void;
   /** Where the update checker is, or null when this build has none (a development build): then the page shows no update controls. */

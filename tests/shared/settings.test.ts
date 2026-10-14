@@ -430,3 +430,50 @@ describe('update settings', () => {
     expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
   });
 });
+
+describe('AI capture settings', () => {
+  it('defaults to the feature off, the danger ping and the DeepSeek vision defaults', () => {
+    const s = normalizeSettings(undefined);
+    expect(s.aiEnabled).toBe(false);
+    expect(s.aiTriggerPingId).toBe('danger');
+    expect(s.aiTriggerCount).toBe(3);
+    expect(s.aiTriggerWindowS).toBe(5);
+    expect(s.aiBaseUrl).toBe('https://api.deepseek.com');
+    expect(s.aiApiKey).toBe('');
+    expect(s.aiModel).toBe('deepseek-flash');
+    expect(s.aiAnswerStyle).toBe('fullscreen');
+    expect(s.aiCardSeconds).toBe(10);
+  });
+
+  it('keeps valid values and clamps the numbers to their limits', () => {
+    const s = normalizeSettings({
+      aiEnabled: true, aiTriggerPingId: 'missing', aiTriggerCount: 1, aiTriggerWindowS: 99, aiCardSeconds: 4,
+      aiBaseUrl: 'https://api.openai.com/v1/', aiApiKey: ' sk-1 ', aiModel: 'gpt-4o', aiAnswerStyle: 'card',
+    });
+    expect([s.aiEnabled, s.aiTriggerPingId, s.aiTriggerCount, s.aiTriggerWindowS, s.aiCardSeconds])
+      .toEqual([true, 'missing', 2, 15, 5]);
+    expect([s.aiBaseUrl, s.aiApiKey, s.aiModel, s.aiAnswerStyle])
+      .toEqual(['https://api.openai.com/v1', 'sk-1', 'gpt-4o', 'card']);
+  });
+
+  it('replaces wrong AI values with their defaults', () => {
+    const s = normalizeSettings({
+      aiTriggerPingId: 'nope', aiBaseUrl: 'ftp://x', aiModel: 'has spaces', aiAnswerStyle: 'side', aiApiKey: 42,
+    });
+    expect(s.aiTriggerPingId).toBe('danger');
+    expect(s.aiBaseUrl).toBe('https://api.deepseek.com');
+    expect(s.aiModel).toBe('deepseek-flash');
+    expect(s.aiAnswerStyle).toBe('fullscreen');
+    expect(s.aiApiKey).toBe('');
+  });
+
+  it('accepts any http(s) base and drops a path that is not a URL', () => {
+    expect(normalizeSettings({ aiBaseUrl: 'http://192.168.1.9:8000/v1' }).aiBaseUrl).toBe('http://192.168.1.9:8000/v1');
+    expect(normalizeSettings({ aiBaseUrl: 'not a url' }).aiBaseUrl).toBe('https://api.deepseek.com');
+    expect(normalizeSettings({ aiBaseUrl: '' }).aiBaseUrl).toBe('https://api.deepseek.com');
+  });
+
+  it('a long key is cut, not dropped', () => {
+    expect(normalizeSettings({ aiApiKey: `k${'x'.repeat(600)}` }).aiApiKey).toHaveLength(512);
+  });
+});

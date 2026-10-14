@@ -13,6 +13,8 @@ import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { AnswerManager } from './answerManager';
+import { aiErrorText, recognizeImage, AI_TIMEOUT_MS } from './aiVision';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -22,10 +24,12 @@ import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
+import { CaptureManager, type CapturedShot } from './captureManager';
 import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
+import { QuestionPingDetector } from './questionPingDetector';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
@@ -106,6 +110,54 @@ function start(): void {
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
+
+  // AI capture: repeated pings of one kind open a WeChat-style screen capture whose shot goes to a vision model.
+  // The helper is suspended while the capture takes the mouse, so its gestures can't fight the selection.
+  const capture = new CaptureManager({ setSuspended: (on) => bridge.send({ type: 'suspend', on }), texts: () => {
+    const t = text();
+    return { hint: t.captureHint, confirm: t.captureConfirm, cancel: t.captureCancel };
+  } });
+  const answer = new AnswerManager();
+  const AI_COOLDOWN_MS = 10_000;
+  let lastPingDisplay = screen.getPrimaryDisplay().id;
+  const detector = new QuestionPingDetector({
+    enabled: () => settings.aiEnabled,
+    ping: () => settings.aiTriggerPingId,
+    threshold: () => settings.aiTriggerCount,
+    windowMs: () => settings.aiTriggerWindowS * 1000,
+    cooldownMs: AI_COOLDOWN_MS,
+    now: Date.now,
+    onTrigger: () => startAiCapture(),
+  });
+
+  function startAiCapture(): void {
+    if (settings.aiApiKey.trim() === '') {
+      overlays.toast(text().navAi, text().aiToastNoKey);
+      return;
+    }
+    capture.start(lastPingDisplay);
+  }
+
+  async function recognizeShot(shot: CapturedShot): Promise<void> {
+    const t = text();
+    const s = settings;
+    const style = s.aiAnswerStyle;
+    answer.show(shot.displayId, { mode: style, title: t.navAi, body: '', pending: true, error: false, closeHint: t.aiCloseHint, cardSeconds: s.aiCardSeconds });
+    const result = await recognizeImage({ baseUrl: s.aiBaseUrl, apiKey: s.aiApiKey, model: s.aiModel, timeoutMs: AI_TIMEOUT_MS }, shot.jpeg, { fetch });
+    if (result.ok) console.log(`[ai] answered in ${result.text.length} chars`);
+    else console.warn('[ai] failed:', result.reason, result.detail.slice(0, 120));
+    if (!answer.isVisible()) return; // the user closed it while the model was thinking
+    answer.show(shot.displayId, {
+      mode: style,
+      title: t.navAi,
+      body: result.ok ? result.text : aiErrorText(t, result, s.aiModel),
+      pending: false,
+      error: !result.ok,
+      closeHint: t.aiCloseHint,
+      cardSeconds: s.aiCardSeconds,
+    });
+  }
+  capture.on('captured', (shot: CapturedShot) => void recognizeShot(shot));
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
@@ -291,6 +343,8 @@ function start(): void {
   overlays.on('shared', (p: SharedPing) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);
+    lastPingDisplay = p.displayId;
+    detector.record(p.id);
   });
   room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
   overlays.on('sharedEmote', (p: SharedEmote) => {
@@ -452,6 +506,8 @@ function start(): void {
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
     transfer.stop();
     stopWaitingForAccess();
+    capture.close();
+    answer.close();
     tray.destroy();
     overlays.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));

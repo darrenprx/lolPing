@@ -71,7 +71,31 @@ export interface Settings {
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
   updateNotifiedVersion: string | null;
+  /** Repeatedly pinging `aiTriggerPingId` opens a screen capture whose shot goes to an AI vision service. */
+  aiEnabled: boolean;
+  /** The ping that counts toward the AI capture trigger. */
+  aiTriggerPingId: PingId;
+  /** How many trigger pings inside the window start a capture. */
+  aiTriggerCount: number;
+  /** The sliding window, in seconds, the trigger pings must land inside. */
+  aiTriggerWindowS: number;
+  /** Base of an OpenAI-compatible service, without a path (e.g. https://api.deepseek.com). */
+  aiBaseUrl: string;
+  /** The key sent as a bearer token to `aiBaseUrl`. Stays in this machine's settings file. */
+  aiApiKey: string;
+  /** A vision model name that accepts images (e.g. deepseek-flash). */
+  aiModel: string;
+  /** Where the answer appears: a fullscreen mask or a card in the corner. */
+  aiAnswerStyle: AiAnswerStyle;
+  /** Seconds the corner card stays before closing itself; hovering it keeps it. */
+  aiCardSeconds: number;
 }
+
+export type AiAnswerStyle = 'fullscreen' | 'card';
+export const AI_ANSWER_STYLES: readonly AiAnswerStyle[] = ['fullscreen', 'card'];
+
+export const AI_BASE_URL_DEFAULT = 'https://api.deepseek.com';
+export const AI_MODEL_DEFAULT = 'deepseek-flash';
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
 export interface Identity {
@@ -113,6 +137,15 @@ export const DEFAULT_SETTINGS: Settings = {
   friendEmotes: true,
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
+  aiEnabled: false,
+  aiTriggerPingId: 'danger',
+  aiTriggerCount: 3,
+  aiTriggerWindowS: 5,
+  aiBaseUrl: AI_BASE_URL_DEFAULT,
+  aiApiKey: '',
+  aiModel: AI_MODEL_DEFAULT,
+  aiAnswerStyle: 'fullscreen',
+  aiCardSeconds: 10,
 };
 
 export const LIMITS = {
@@ -122,11 +155,14 @@ export const LIMITS = {
   volume: { min: 0, max: 100, step: 1 },
   incomingPingLimit: { min: 0, max: 20, step: 1 },
   emoteSizePx: { min: 80, max: 300, step: 1 },
+  aiTriggerCount: { min: 2, max: 10, step: 1 },
+  aiTriggerWindowS: { min: 1, max: 15, step: 1 },
+  aiCardSeconds: { min: 5, max: 60, step: 1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
+  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck' | 'aiEnabled';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -210,6 +246,31 @@ function customEmotes(raw: unknown): CustomEmote[] {
 
 const DEFAULT_IDENTITY: Identity = { name: DEFAULT_SETTINGS.displayName, color: DEFAULT_SETTINGS.tagColor };
 
+/** An http(s) base URL without a trailing slash, or the default when the raw value isn't one. */
+export function normalizeAiBaseUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return AI_BASE_URL_DEFAULT;
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (trimmed === '') return AI_BASE_URL_DEFAULT;
+  try {
+    const { protocol } = new URL(trimmed);
+    return protocol === 'https:' || protocol === 'http:' ? trimmed : AI_BASE_URL_DEFAULT;
+  } catch {
+    return AI_BASE_URL_DEFAULT;
+  }
+}
+
+/** The endpoint a base URL names: an OpenAI-compatible chat completions path. */
+export const aiChatCompletionsUrl = (baseUrl: string): string => `${baseUrl}/chat/completions`;
+
+const AI_MODEL_CHARS = /^[A-Za-z0-9._\-/:]{1,128}$/;
+
+/** A model name is a short identifier; anything else (or too long) falls back to the default. */
+export function normalizeAiModel(raw: unknown): string {
+  if (typeof raw !== 'string') return AI_MODEL_DEFAULT;
+  const trimmed = raw.trim();
+  return AI_MODEL_CHARS.test(trimmed) ? trimmed : AI_MODEL_DEFAULT;
+}
+
 /** Turns anything (parsed JSON, IPC payloads) into a complete, valid Settings object for `platform`. */
 export function normalizeSettings(raw: unknown, platform: Platform = 'win', identity: Identity = DEFAULT_IDENTITY): Settings {
   const r = isObj(raw) ? raw : {};
@@ -252,6 +313,15 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     friendEmotes: bool(r.friendEmotes, 'friendEmotes'),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
+    aiEnabled: bool(r.aiEnabled, 'aiEnabled'),
+    aiTriggerPingId: isPingId(r.aiTriggerPingId) ? r.aiTriggerPingId : DEFAULT_SETTINGS.aiTriggerPingId,
+    aiTriggerCount: num(r.aiTriggerCount, 'aiTriggerCount'),
+    aiTriggerWindowS: num(r.aiTriggerWindowS, 'aiTriggerWindowS'),
+    aiBaseUrl: normalizeAiBaseUrl(r.aiBaseUrl),
+    aiApiKey: typeof r.aiApiKey === 'string' ? r.aiApiKey.trim().slice(0, 512) : '',
+    aiModel: normalizeAiModel(r.aiModel),
+    aiAnswerStyle: r.aiAnswerStyle === 'card' ? 'card' : 'fullscreen',
+    aiCardSeconds: num(r.aiCardSeconds, 'aiCardSeconds'),
   };
 }
 

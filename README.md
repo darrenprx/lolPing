@@ -108,12 +108,23 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - A room holds up to 8 people. Leave and create a new room to get rid of someone.
 - **Privacy:** pings, emotes, your emote images and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes, images or name. Turn **Allow internet connections** off to stay on your local network.
 
+## AI capture
+
+Ping the same ping several times in a row and lolPing opens a WeChat-style screen capture: drag to mark an area, or click for the whole screen. The shot goes to an AI vision model and the answer appears on screen — a fullscreen card, or a small one in the corner.
+
+Set it up in **Settings → AI capture**: the trigger ping, how many pings within how many seconds, and an OpenAI-compatible service (address, key and model, such as `https://api.deepseek.com` and `deepseek-flash`). **Test connection** sends a one-pixel image, so you know the service and the model accept images before you need them. The key stays in this computer's settings file.
+
+- While the capture is open it takes the mouse: a drag marks an area with a ✓/✕ pair to confirm or cancel, a plain click shoots the whole screen, and Esc backs out at any moment. Left alone for a minute, it closes itself.
+- The answer shows fullscreen by default. **Corner card** shows it in the bottom-right and closes itself after a while; hovering the card keeps it.
+- **Privacy:** screenshots are sent to the API address you set, with a one-line "identify this image" prompt. Nothing else leaves the machine — no pings, no room traffic, no telemetry. With **Capture on repeated pings** off, lolPing touches nothing but updates and rooms.
+
 ## Known limitations
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
 - Exclusive-fullscreen games draw above the overlay.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
 - While lolPing is on, Ctrl + drag opens the emote wheel instead of copying files or text. Pick another emote key, or turn it off, in Settings → Emotes.
+- The capture overlay and the answer draw above borderless-windowed games; an exclusive-fullscreen game covers them. Play borderless-windowed to use AI capture in a game.
 - On a Mac, the wheel can't open while a secure screen is showing, such as the login window or a password prompt, and Accessibility has to be allowed again after each update.
 
 ## Build from source

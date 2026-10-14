@@ -31,4 +31,5 @@ export const SETTINGS_CH = {
   updateStart: 'update:start',
   updateOpenRelease: 'update:openRelease',
   showSection: 'settings:showSection',
+  aiTest: 'ai:test',
 } as const;

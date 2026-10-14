@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>lolPing answer</title>
+    <link rel="stylesheet" href="./answer.css" />
+  </head>
+  <body>
+    <div id="root" hidden>
+      <div id="panel">
+        <div id="head">
+          <img id="icon" alt="" />
+          <span id="title"></span>
+          <button id="close" hidden>✕</button>
+        </div>
+        <div id="body">
+          <div id="spinner" hidden></div>
+          <div id="text" hidden></div>
+        </div>
+        <div id="foot">
+          <span id="closeHint"></span>
+          <div id="countdown" hidden></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
