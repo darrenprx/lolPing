@@ -8,8 +8,38 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels its older run. Runs on main always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Skips the tests when only docs changed. Not paths-ignore: test and test-mac are required checks, and a skipped
+  # job passes them where a workflow that never ran would leave the pull request waiting.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # The compare API lists at most 300 files; past that, or on any error, run everything.
+          if files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq '.files | if length < 300 then .[].filename else "too-many" end') \
+            && [ -n "$files" ] \
+            && ! grep -qvE '\.md$|^docs/|^\.github/ISSUE_TEMPLATE/|^LICENSE$' <<< "$files"; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "$files"
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,6 +56,8 @@ jobs:
       - run: npm run build:site
 
   test-mac:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-latest # Apple Silicon
     steps:
       - uses: actions/checkout@v7
