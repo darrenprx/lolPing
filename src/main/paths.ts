@@ -8,8 +8,10 @@ export type Page = 'overlay' | 'settings';
 export const PLATFORM: Platform = platformOf(process.platform);
 export const IS_MAC = PLATFORM === 'mac';
 export const IS_LINUX = PLATFORM === 'linux';
+export const IS_WIN = PLATFORM === 'win';
 
-const HELPER_FILE = PLATFORM === 'win' ? 'hook-helper.exe' : 'hook-helper';
+// Windows ships a .exe; macOS and Linux build a bare `hook-helper` (M3 adds the Linux build).
+const HELPER_FILE = IS_WIN ? 'hook-helper.exe' : 'hook-helper';
 
 export const helperExePath = (): string =>
   app.isPackaged

@@ -1,322 +1,672 @@
-// X11 backend. Passive grabs swallow wheel gestures; ReplayPointer preserves normal clicks.
-// XI2 raw keyboard events observe modifiers without taking keyboard focus or reading /dev/input.
+// X11 platform layer for the hook helper (Linux / UOS).
+//
+// Windows low-level hooks can swallow events; X11 cannot observe-and-block, so this layer is built
+// on grabs instead: a passive grab routes matching input only to us, which IS the swallow. Events a
+// gesture should not own go back to the system with XAllowEvents(ReplayPointer/ReplayKeyboard) — a
+// genuine re-delivery by the server, not an injection, so there is no echo to filter out.
+//
+//   - XGrabButton (drag buttons, AnyModifier): every press of those buttons routes through Decision;
+//     untriggered clicks are replayed, a gesture press is consumed and the passive grab stays active
+//     until release, capturing the drag.
+//   - XGrabKey (wheel trigger keys, the toggle chord): consumed or replayed per Decision.
+//   - While a gesture is pending or a wheel is open, XGrabKeyboard routes keys through Decision too
+//     (Esc cancels, the trigger's key-up ends the gesture); pass-through re-fakes the key.
+//   - Injection (plain-click replay) happens after releasing the grabs, so no self-injected event is
+//     ever fed back into Decision.
+// Project headers first: Xlib.h #defines None, which would break the Btn/Trigger enumerators.
 #include "app.h"
 #include "commands.h"
-#include "linuxinput.h"
-#include <X11/Xlib.h>
+
+#include <X11/Xatom.h>
 #include <X11/XKBlib.h>
-#include <X11/extensions/XInput2.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <X11/extensions/XTest.h>
-#include <poll.h>
-#include <unistd.h>
-#include <array>
+#include <X11/keysym.h>
+
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <string>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <queue>
 #include <set>
-#include <utility>
+#include <string>
+#include <thread>
+#include <unistd.h>
 #include <vector>
-// Xlib macros collide with scoped enum members in the shared logic.
+#include <cstdarg>
+
+// Xlib.h pollutes the global namespace with names our enums use; X calls below pass 0 instead.
 #undef None
 
 namespace lp {
 namespace {
-uint64_t nowMs() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-    std::chrono::steady_clock::now().time_since_epoch()).count();
+
+// Windows VK codes the decision layer speaks (see decision.cpp).
+constexpr uint32_t kVkLShift = 0xA0, kVkRShift = 0xA1, kVkLCtrl = 0xA2, kVkRCtrl = 0xA3;
+constexpr uint32_t kVkLAlt = 0xA4, kVkRAlt = 0xA5, kVkLWin = 0x5B, kVkRWin = 0x5C;
+
+unsigned xMaskOfMods(uint32_t mods) {
+  unsigned m = 0;
+  if (mods & ModShift) m |= ShiftMask;
+  if (mods & ModCtrl) m |= ControlMask;
+  if (mods & ModAlt) m |= Mod1Mask;  // Alt is Mod1 on every mainstream layout
+  if (mods & ModWin) m |= Mod4Mask;  // Super is Mod4
+  return m;
 }
-int grabErrors = 0;
-int xError(Display* d, XErrorEvent* e) {
-  if (e->error_code == BadAccess) { ++grabErrors; return 0; }
-  char message[256]; XGetErrorText(d, e->error_code, message, sizeof(message));
-  std::cerr << "X11: " << message << '\n';
-  return 0;
-}
-Btn button(unsigned int n) {
-  switch(n) {
-    case 1: return Btn::Left; case 2: return Btn::Middle; case 3: return Btn::Right;
-    case 8: return Btn::X1; case 9: return Btn::X2; default: return Btn::None;
+
+std::optional<Btn> btnOf(unsigned button) {
+  switch (button) {
+    case Button1: return Btn::Left;
+    case Button2: return Btn::Middle;
+    case Button3: return Btn::Right;
+    case 8: return Btn::X1;
+    case 9: return Btn::X2;
+    default: return std::nullopt;
   }
 }
-unsigned int buttonNumber(Btn b) {
-  switch(b) {
-    case Btn::Left: return 1; case Btn::Middle: return 2; case Btn::Right: return 3;
-    case Btn::X1: return 8; case Btn::X2: return 9; default: return 0;
+
+unsigned buttonOf(Btn btn) {
+  switch (btn) {
+    case Btn::Left: return Button1;
+    case Btn::Middle: return Button2;
+    case Btn::Right: return Button3;
+    case Btn::X1: return 8;
+    case Btn::X2: return 9;
+    default: return 0;
   }
 }
-// Modifiers are left out of key replays: their real events always pass, and a replayed key carries the live state.
-bool isModifierVk(uint32_t v) {
-  return v == 0x10 || v == 0x11 || v == 0x12 || (v >= 0xA0 && v <= 0xA5) || v == 0x5B || v == 0x5C;
+
+int ignoreErrors(Display*, XErrorEvent*) { return 0; }  // grabs can race; a failed grab must not kill the helper
+
+// Diagnostic log (temporary, for field debugging on UOS). Shared path so the assistant can read it too.
+static void hlog(const char* fmt, ...) {
+  static FILE* f = nullptr;
+  if (!f) f = fopen("/home/suma/lolping_hook_diag.log", "a");
+  if (!f) return;
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(f, fmt, ap);
+  va_end(ap);
+  fputc('\n', f);
+  fflush(f);
 }
-class Hooks {
+
+uint64_t steadyMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+class XHooks {
  public:
-  Display* display;
-  Window root;
-  Output& out;
-  Decision decision;
-  std::array<uint32_t, 256> vk{};
-  std::array<bool, 256> swallowed{};
-  std::array<int, 256> selfCore{};  // fake releases our own keyboard grab delivers back to us
-  int grabKey = 0;  // the key whose grab is active: later keys are delivered to us instead of the application
-  std::array<bool, 256> rawDown{};  // keys whose raw press was seen and whose release is still due
-  std::array<int, 256> codeOfVk{};  // the keycode a VK was last seen on, so a replay uses the physical key
-  // Raw events the helper caused with XTest, per keycode: counted so rawKey() does not take them for real presses.
-  std::array<int, 256> selfRaw{};
-  std::array<uint64_t, 256> selfRawUntil{};
-  bool suspended = false;
-  bool quit = false;
-  bool pointerActive = false;
-  std::set<unsigned int> heldButtons;
-  explicit Hooks(Display* d, Output& o): display(d), root(DefaultRootWindow(d)), out(o) {
-    decision.setMaskMenuKeys(false);
-    refreshKeys();
-  }
-  void refreshKeys() {
-    XkbDescPtr map = XkbGetKeyboard(display, XkbAllComponentsMask, XkbUseCoreKbd);
-    for (int code = 8; code < 256; ++code) {
-      uint32_t physical = 0;
-      if (map && map->names && map->names->keys && code >= map->min_key_code && code <= map->max_key_code)
-        physical = x11::keyNameToVk(map->names->keys[code].name);
-      vk[code] = physical ? physical : x11::keysymToVk(XkbKeycodeToKeysym(display, code, 0, 0));
-    }
-    if (map) XkbFreeKeyboard(map, XkbAllComponentsMask, True);
-  }
-  void grabButtons() {
-    // Grab individually: AnyModifier would fail the whole grab if a window manager owns one chord.
-    for (unsigned int b : {1u, 8u, 9u})
-      for (unsigned int mods = 0; mods < 256; ++mods)
-        XGrabButton(display, b, mods, root, False, ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                    GrabModeSync, GrabModeAsync, 0, 0);
-  }
-  void configureGrabs() {
-    XUngrabButton(display, AnyButton, AnyModifier, root);
-    grabButtons();
-    grabKeys();
-  }
-  void grabKeys() {
-    XUngrabKey(display, AnyKey, AnyModifier, root);
-    const Config& c = decision.config();
-    const auto own = [&](uint32_t key, Trigger t, uint32_t custom) {
-      return decision.enabled() && !suspended && t == Trigger::CustomVk && key == custom;
-    };
-    for (int code = 8; code < 256; ++code) {
-      if (!vk[code]) continue;
-      for (unsigned int mods = 0; mods < 256; ++mods) {
-        const unsigned int chord = ((c.toggleMods & ModCtrl) ? ControlMask : 0) |
-          ((c.toggleMods & ModAlt) ? Mod1Mask : 0) | ((c.toggleMods & ModShift) ? ShiftMask : 0) |
-          ((c.toggleMods & ModWin) ? Mod4Mask : 0);
-        if ((pointerActive && vk[code] == 0x1B) || own(vk[code], c.trigger, c.triggerVk) || own(vk[code], c.emoteTrigger, c.emoteTriggerVk) ||
-            (!suspended && vk[code] == c.toggleVk && (mods & ~(LockMask | Mod2Mask)) == chord))
-          XGrabKey(display, code, mods, root, False, GrabModeAsync, GrabModeSync);
-      }
-    }
-    XSync(display, False);
-    if (grabErrors) {
-      std::cerr << "Some input chords are reserved by another application or window manager; choose a different trigger.\n";
-      grabErrors = 0;
-    }
-  }
-  void apply(const Result& r) {
-    for (const auto& e : r.emits) out.emit(e);
-    if (r.injects.empty()) return;
-    injectKeys(r);
-    bool buttons = false;
-    for (const auto& i : r.injects) buttons = buttons || i.kind == InjectKind::ButtonDown || i.kind == InjectKind::ButtonUp;
-    if (!buttons) return;
-    // Temporarily remove our passive grabs under a server grab so replay never triggers another wheel.
-    XGrabServer(display);
-    // Release any physical-down state while OUR grab still receives the synthetic up.
-    for (const auto& i : r.injects) {
-      if (i.kind == InjectKind::ButtonDown && pointerActive)
-        XTestFakeButtonEvent(display, buttonNumber(i.btn), False, CurrentTime);
-    }
-    XSync(display, False);
-    XUngrabPointer(display, CurrentTime);
-    pointerActive = false;
-    heldButtons.clear();
-    XUngrabButton(display, AnyButton, AnyModifier, root);
-    for (const auto& i : r.injects) {
-      const unsigned int n = buttonNumber(i.btn);
-      if (!n) continue;
-      if (i.kind == InjectKind::ButtonDown) {
-        XTestFakeButtonEvent(display, n, True, CurrentTime);
-      } else if (i.kind == InjectKind::ButtonUp) XTestFakeButtonEvent(display, n, False, CurrentTime);
-    }
-    XSync(display, False);
-    grabButtons();
-    XUngrabServer(display);
-    XFlush(display);
-  }
-  int keyCodeFor(uint32_t v) const {
-    if (v < codeOfVk.size() && codeOfVk[v] >= 8) return codeOfVk[v];
-    for (int code = 8; code < 256; ++code) if (vk[code] == v) return code;
-    return -1;
-  }
-  // Types the swallowed keys the decision hands back (a tapped trigger key, and the key that follows it).
-  void injectKeys(const Result& r) {
-    std::vector<std::pair<int, bool>> keys;
-    for (const auto& i : r.injects) {
-      if ((i.kind != InjectKind::KeyDown && i.kind != InjectKind::KeyUp) || isModifierVk(i.vk)) continue;
-      const int code = keyCodeFor(i.vk);
-      if (code >= 0) keys.emplace_back(code, i.kind == InjectKind::KeyDown);
-    }
-    fakeKeys(keys);
-  }
-  // Types keys with XTest while the key grabs are lifted, so they reach the application and are not grabbed again.
-  void fakeKeys(const std::vector<std::pair<int, bool>>& keys) {
-    if (keys.empty()) return;
-    XGrabServer(display);
-    // A key that is still physically down would make a fake press look like a repeat, and X drops it. Release it
-    // while only we receive events, so the application never sees the extra release.
-    bool released = false;
-    for (const auto& [code, down] : keys) {
-      if (!down || !rawDown[code]) continue;
-      if (!released) XGrabKeyboard(display, root, False, GrabModeAsync, GrabModeAsync, CurrentTime);
-      released = true;
-      XTestFakeKeyEvent(display, code, False, CurrentTime);
-      ++selfCore[code];
-    }
-    XSync(display, False);
-    XUngrabKeyboard(display, CurrentTime);  // ends the grab a held trigger key started, or replays would go to us
-    grabKey = 0;
-    XUngrabKey(display, AnyKey, AnyModifier, root);
-    for (const auto& [code, down] : keys) {
-      XTestFakeKeyEvent(display, code, down, CurrentTime);
-      ++selfRaw[code];
-      selfRawUntil[code] = nowMs() + 500;  // raw events arrive within milliseconds; never hold a count longer
-    }
-    XSync(display, False);
-    grabKeys();
-    XUngrabServer(display);
-    XFlush(display);
-  }
-  bool isSelfRaw(int code) {
-    if (selfRaw[code] <= 0) return false;
-    if (nowMs() > selfRawUntil[code]) { selfRaw[code] = 0; return false; }
-    --selfRaw[code];
-    return true;
-  }
-  void rawKey(int code, bool down) {
-    if (code < 8 || code > 255 || !vk[code]) return;
-    if (isSelfRaw(code)) return;
-    // The grab's core events call this too, so a repeated release is ignored.
-    if (!down && !rawDown[code]) return;
-    rawDown[code] = down;
-    if (vk[code] < codeOfVk.size()) codeOfVk[vk[code]] = code;
-    InputEvent e; e.kind = down ? EvKind::KeyDown : EvKind::KeyUp; e.vk = vk[code]; e.timeMs = nowMs();
-    const bool before = decision.enabled();
-    Result r = decision.onEvent(e);
-    swallowed[code] = r.swallow;
-    apply(r);
-    if (before != decision.enabled()) configureGrabs();
-  }
-  void mouse(const XEvent& event) {
-    InputEvent e; e.timeMs = nowMs();
-    if (event.type == MotionNotify) {
-      e.kind = EvKind::MouseMove; e.x = event.xmotion.x_root; e.y = event.xmotion.y_root;
-    } else {
-      e.kind = event.type == ButtonPress ? EvKind::MouseDown : EvKind::MouseUp;
-      e.btn = button(event.xbutton.button); e.x = event.xbutton.x_root; e.y = event.xbutton.y_root;
-    }
-    const bool wasActive = pointerActive;
-    if (event.type == ButtonPress) heldButtons.insert(event.xbutton.button);
-    if (event.type == ButtonRelease) heldButtons.erase(event.xbutton.button);
-    Result r = decision.onEvent(e);
-    if (event.type == ButtonPress && !wasActive) {
-      pointerActive = r.swallow;
-      XAllowEvents(display, r.swallow ? AsyncPointer : ReplayPointer, event.xbutton.time);
-      if (!r.swallow) heldButtons.clear();
-      configureGrabs();
-    }
-    apply(r);
-    if (event.type == ButtonRelease && heldButtons.empty()) {
-      XUngrabPointer(display, event.xbutton.time);
-      pointerActive = false;
-      configureGrabs();
-    }
-  }
-  void command(const std::string& line) {
-    const Command c = parseCommand(line, decision.config());
-    switch(c.kind) {
-      case Command::Kind::Config: apply(decision.setConfig(c.config)); configureGrabs(); break;
-      case Command::Kind::SetEnabled: apply(decision.setEnabled(c.flag)); configureGrabs(); break;
-      case Command::Kind::Suspend: suspended = c.flag; apply(decision.setSuspended(c.flag)); configureGrabs(); break;
-      case Command::Kind::Shutdown: quit = true; break;
-      default: out.error("invalid command: " + line); break;
-    }
-  }
+  int run(Output& out);
+
+ private:
+  void buildKeymaps();
+  uint32_t vkOfKeycode(KeyCode kc) const;
+  KeyCode keycodeOfVk(uint32_t vk) const;
+  bool isKeyDown(uint32_t vk) const;
+  bool clickIsOnFullscreenApp(int x, int y) const;
+
+  void installGrabs();
+  void clearGrabs();
+  void grabTriggerKey(Trigger t, uint32_t customVk);
+  int grabKeyAnyLock(KeyCode kc, unsigned mods);
+  void grabButtonAny(unsigned button);
+
+  void syncGrabs();
+  Result apply(const Result& r);
+  void inject(const std::vector<Inject>& injects);
+  void handleKeyEvent(XKeyEvent& ev, bool press);
+  void handleButtonEvent(XButtonEvent& ev, bool press);
+  void handleMotion(XMotionEvent& ev);
+  void handleCommand(const std::string& line);
+  void replayKey(XKeyEvent& ev);
+
+  Display* dpy_ = nullptr;
+  Window root_ = 0;
+  Decision* decision_ = nullptr;
+  Output* out_ = nullptr;
+
+  std::map<uint32_t, KeyCode> vkToKc_;
+  std::map<KeyCode, uint32_t> kcToVk_;
+
+  std::vector<unsigned> grabbedButtons_;
+  std::vector<std::pair<KeyCode, unsigned>> grabbedKeys_;
+  bool keyboardGrabbed_ = false;
+
+  std::mutex cmdMu_;
+  std::queue<std::string> cmds_;
 };
+
+uint32_t vkOfKeysym(KeySym ks) {
+  if (ks >= XK_a && ks <= XK_z) return 0x41 + static_cast<uint32_t>(ks - XK_a);
+  if (ks >= XK_A && ks <= XK_Z) return 0x41 + static_cast<uint32_t>(ks - XK_A);
+  if (ks >= XK_0 && ks <= XK_9) return 0x30 + static_cast<uint32_t>(ks - XK_0);
+  if (ks >= XK_F1 && ks <= XK_F24) return 0x70 + static_cast<uint32_t>(ks - XK_F1);
+  switch (ks) {
+    case XK_space: return 0x20;
+    case XK_Escape: return 0x1B;
+    case XK_Return:
+    case XK_KP_Enter: return 0x0D;
+    case XK_Tab: return 0x09;
+    case XK_BackSpace: return 0x08;
+    case XK_Delete: return 0x2E;
+    case XK_Insert: return 0x2D;
+    case XK_Home: return 0x24;
+    case XK_End: return 0x23;
+    case XK_Prior: return 0x21;
+    case XK_Next: return 0x22;
+    case XK_Left: return 0x25;
+    case XK_Up: return 0x26;
+    case XK_Right: return 0x27;
+    case XK_Down: return 0x28;
+    case XK_Shift_L: return kVkLShift;
+    case XK_Shift_R: return kVkRShift;
+    case XK_Control_L: return kVkLCtrl;
+    case XK_Control_R: return kVkRCtrl;
+    case XK_Alt_L: return kVkLAlt;
+    case XK_Alt_R: return kVkRAlt;
+    case XK_Super_L: return kVkLWin;
+    case XK_Super_R: return kVkRWin;
+    case XK_Caps_Lock: return 0x14;
+    case XK_Num_Lock: return 0x90;
+    case XK_Print: return 0x2C;
+    case XK_Pause: return 0x13;
+    case XK_minus: return 0xBD;
+    case XK_equal: return 0xBB;
+    case XK_bracketleft: return 0xDB;
+    case XK_bracketright: return 0xDD;
+    case XK_semicolon: return 0xBA;
+    case XK_apostrophe: return 0xDE;
+    case XK_grave: return 0xC0;
+    case XK_backslash: return 0xDC;
+    case XK_comma: return 0xBC;
+    case XK_period: return 0xBE;
+    case XK_slash: return 0xBF;
+    default: return 0;
+  }
 }
-int runHooks(Output& out) {
-  const char* session = std::getenv("XDG_SESSION_TYPE");
-  if ((session && std::strcmp(session, "wayland") == 0) || std::getenv("WAYLAND_DISPLAY")) {
-    out.error("noAccess", "Linux requires an X11 login session; XWayland cannot capture input from native Wayland apps.");
-    return 3;
-  }
-  Display* display = XOpenDisplay(nullptr);
-  if (!display) { out.error("noAccess", "Cannot connect to X11. Start lolPing inside an X11 desktop session."); return 3; }
-  XSetErrorHandler(xError);
-  int opcode, eventBase, errorBase, major = 2, minor = 1;
-  if (!XQueryExtension(display, "XInputExtension", &opcode, &eventBase, &errorBase) ||
-      XIQueryVersion(display, &major, &minor) != Success || (major == 2 && minor < 1) ||
-      !XTestQueryExtension(display, &eventBase, &errorBase, &major, &minor)) {
-    out.error("noAccess", "XInput 2.1 and XTest are required."); XCloseDisplay(display); return 3;
-  }
-  Hooks h(display, out);
-  unsigned char bits[XIMaskLen(XI_LASTEVENT)]{};
-  XISetMask(bits, XI_RawKeyPress); XISetMask(bits, XI_RawKeyRelease);
-  XIEventMask mask{XIAllMasterDevices, sizeof(bits), bits};
-  XISelectEvents(display, h.root, &mask, 1);
-  Bool repeat; XkbSetDetectableAutoRepeat(display, True, &repeat);
-  h.configureGrabs();
-  char keys[32]; XQueryKeymap(display, keys);
-  for (int code = 8; code < 256; ++code) if (keys[code/8] & (1 << (code%8))) h.rawKey(code, true);
-  out.ready();
-  std::string pending;
-  while (!h.quit) {
-    while (XPending(display)) {
-      XEvent e; XNextEvent(display, &e);
-      if (e.type == GenericEvent && e.xcookie.extension == opcode && XGetEventData(display, &e.xcookie)) {
-        if (e.xcookie.evtype == XI_RawKeyPress || e.xcookie.evtype == XI_RawKeyRelease) {
-          const auto* raw = static_cast<XIRawEvent*>(e.xcookie.data);
-          h.rawKey(raw->detail, e.xcookie.evtype == XI_RawKeyPress);
-        }
-        XFreeEventData(display, &e.xcookie);
-      } else if (e.type == KeyPress || e.type == KeyRelease) {
-        const int code = e.xkey.keycode;
-        const bool down = e.type == KeyPress;
-        if (!down && h.selfCore[code] > 0) { --h.selfCore[code]; continue; }
-        const bool outsider = h.grabKey != 0 && code != h.grabKey;
-        // While our grab is active X does not always send the raw event, so the core event drives the decision too.
-        // A key that reaches us this way was meant for the application and is typed again.
-        if (h.rawDown[code] != down) h.rawKey(code, down);
-        if (outsider && !h.swallowed[code]) h.fakeKeys({{code, down}});
-        else if (down && h.swallowed[code] && h.grabKey == 0) h.grabKey = code;
-        else if (!down && code == h.grabKey) h.grabKey = 0;
-        XAllowEvents(display, h.swallowed[e.xkey.keycode] ? AsyncKeyboard : ReplayKeyboard, e.xkey.time);
-      } else if (e.type == ButtonPress || e.type == ButtonRelease || e.type == MotionNotify) h.mouse(e);
-      else if (e.type == MappingNotify) { XRefreshKeyboardMapping(&e.xmapping); h.refreshKeys(); h.configureGrabs(); }
-    }
-    h.apply(h.decision.tick(nowMs()));
-    XFlush(display);
-    pollfd fds[] = {{ConnectionNumber(display), POLLIN, 0}, {STDIN_FILENO, POLLIN, 0}};
-    if (poll(fds, 2, 25) < 0) break;
-    if (fds[1].revents & (POLLIN | POLLHUP | POLLERR)) {
-      char buf[4096]; const ssize_t count = read(STDIN_FILENO, buf, sizeof(buf));
-      if (count <= 0) break;
-      pending.append(buf, count);
-      size_t end;
-      while ((end = pending.find('\n')) != std::string::npos) {
-        h.command(pending.substr(0, end)); pending.erase(0, end + 1);
-        if (h.quit) break;
+
+void XHooks::buildKeymaps() {
+  int minKc = 0, maxKc = 0, per = 0;
+  XDisplayKeycodes(dpy_, &minKc, &maxKc);
+  KeySym* syms = XGetKeyboardMapping(dpy_, static_cast<KeyCode>(minKc), maxKc - minKc + 1, &per);
+  if (!syms) return;
+  for (int kc = minKc; kc <= maxKc; ++kc) {
+    for (int col = 0; col < per; ++col) {
+      const uint32_t vk = vkOfKeysym(syms[(kc - minKc) * per + col]);
+      if (vk == 0) continue;
+      if (vkToKc_.find(vk) == vkToKc_.end()) {
+        vkToKc_[vk] = static_cast<KeyCode>(kc);
+        kcToVk_[static_cast<KeyCode>(kc)] = vk;
       }
-      if (pending.size() > 65536) { out.error("command too long"); break; }
     }
   }
-  XUngrabPointer(display, CurrentTime); XUngrabKeyboard(display, CurrentTime);
-  XCloseDisplay(display);
+  XFree(syms);
+}
+
+uint32_t XHooks::vkOfKeycode(KeyCode kc) const {
+  const auto it = kcToVk_.find(kc);
+  return it == kcToVk_.end() ? 0 : it->second;
+}
+
+KeyCode XHooks::keycodeOfVk(uint32_t vk) const {
+  const auto it = vkToKc_.find(vk);
+  return it == vkToKc_.end() ? 0 : it->second;
+}
+
+bool XHooks::isKeyDown(uint32_t vk) const {
+  char keys[32] = {};
+  XQueryKeymap(dpy_, keys);
+  const KeyCode kc = keycodeOfVk(vk);
+  return kc != 0 && (keys[kc / 8] & (1 << (kc % 8))) != 0;
+}
+
+// True when the topmost client window under (x, y) — other than our own overlays and the desktop —
+// covers a monitor in the EWMH fullscreen state: a game owns that screen, so clicks belong to it.
+bool XHooks::clickIsOnFullscreenApp(int x, int y) const {
+  const Atom stacking = XInternAtom(dpy_, "_NET_CLIENT_LIST_STACKING", True);
+  const Atom pidAtom = XInternAtom(dpy_, "_NET_WM_PID", True);
+  const Atom typeAtom = XInternAtom(dpy_, "_NET_WM_WINDOW_TYPE", True);
+  const Atom desktopType = XInternAtom(dpy_, "_NET_WM_WINDOW_TYPE_DESKTOP", True);
+  const Atom stateAtom = XInternAtom(dpy_, "_NET_WM_STATE", True);
+  const Atom fullscreenState = XInternAtom(dpy_, "_NET_WM_STATE_FULLSCREEN", True);
+  if (!stacking || !stateAtom || !fullscreenState) return false;
+
+  Atom actual = 0;
+  int format = 0;
+  unsigned long n = 0, left = 0;
+  unsigned char* data = nullptr;
+  if (XGetWindowProperty(dpy_, root_, stacking, 0, 1024, False, XA_WINDOW, &actual, &format, &n, &left, &data) != Success ||
+      actual != XA_WINDOW || n == 0) {
+    if (data) XFree(data);
+    return false;
+  }
+  const Window* wins = reinterpret_cast<const Window*>(data);
+  bool found = false;
+  for (unsigned long i = n; i-- > 0 && !found;) {  // stacking order: last is topmost
+    const Window w = wins[i];
+    // Our own overlay windows sit on top of everything and must not hide the app below them.
+    if (pidAtom) {
+      Atom a = 0;
+      int f = 0;
+      unsigned long pn = 0, pl = 0;
+      unsigned char* pd = nullptr;
+      if (XGetWindowProperty(dpy_, w, pidAtom, 0, 1, False, XA_CARDINAL, &a, &f, &pn, &pl, &pd) == Success && a == XA_CARDINAL &&
+          pn == 1 && pd) {
+        const unsigned long pid = *reinterpret_cast<const unsigned long*>(pd);
+        XFree(pd);
+        if (pid == static_cast<unsigned long>(getpid())) continue;
+      } else if (pd) {
+        XFree(pd);
+      }
+    }
+    Window child = 0;
+    int wx = 0, wy = 0;
+    if (!XTranslateCoordinates(dpy_, w, root_, 0, 0, &wx, &wy, &child)) continue;
+    XWindowAttributes attr{};
+    if (!XGetWindowAttributes(dpy_, w, &attr) || attr.map_state != IsViewable) continue;
+    if (x < wx || y < wy || x >= wx + attr.width || y >= wy + attr.height) continue;
+    if (typeAtom && desktopType) {
+      Atom a = 0;
+      int f = 0;
+      unsigned long tn = 0, tl = 0;
+      unsigned char* td = nullptr;
+      if (XGetWindowProperty(dpy_, w, typeAtom, 0, 32, False, XA_ATOM, &a, &f, &tn, &tl, &td) == Success && a == XA_ATOM && td) {
+        const Atom* types = reinterpret_cast<const Atom*>(td);
+        for (unsigned long k = 0; k < tn; ++k) {
+          if (types[k] == desktopType) {
+            found = false;
+            i = 0;  // stop the scan: only the desktop is under the point
+            break;
+          }
+        }
+        XFree(td);
+        if (i == 0) break;
+      }
+    }
+    Atom a = 0;
+    int f = 0;
+    unsigned long sn = 0, sl = 0;
+    unsigned char* sd = nullptr;
+    if (XGetWindowProperty(dpy_, w, stateAtom, 0, 64, False, XA_ATOM, &a, &f, &sn, &sl, &sd) == Success && a == XA_ATOM && sd) {
+      const Atom* states = reinterpret_cast<const Atom*>(sd);
+      for (unsigned long k = 0; k < sn; ++k) {
+        if (states[k] == fullscreenState) found = true;
+      }
+      XFree(sd);
+    }
+    break;  // first non-own, non-desktop client under the point decides
+  }
+  XFree(data);
+  return found;
+}
+
+// Returns the number of successful grabs (0 means a competing client already owns this chord — a UOS
+// global shortcut, e.g. Ctrl+Alt+P for the screen reader — and we cannot preempt it).
+int XHooks::grabKeyAnyLock(KeyCode kc, unsigned mods) {
+  if (kc == 0) return 0;
+  int ok = 0;
+  const unsigned locks[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};  // with/without Caps Lock and Num Lock
+  for (const unsigned lock : locks) {
+    // Sync KEYBOARD grab (keyboard_mode=Sync): a captured key is frozen until we call XAllowEvents(ReplayKeyboard),
+    // so a non-gesture key passes through to the window under the cursor. (pointer_mode=Async leaves the pointer
+    // untouched.) Async would drop the key and XTest needs an extension that may be disabled.
+    if (XGrabKey(dpy_, kc, mods | lock, root_, False, GrabModeAsync, GrabModeSync) == GrabSuccess) {
+      grabbedKeys_.emplace_back(kc, mods | lock);
+      ++ok;
+    }
+  }
+  return ok;
+}
+
+void XHooks::grabTriggerKey(Trigger t, uint32_t customVk) {
+  std::vector<uint32_t> vks;
+  switch (t) {
+    case Trigger::Alt: vks = {kVkLAlt, kVkRAlt}; break;
+    case Trigger::Ctrl: vks = {kVkLCtrl, kVkRCtrl}; break;
+    case Trigger::Shift: vks = {kVkLShift, kVkRShift}; break;
+    case Trigger::Win: vks = {kVkLWin, kVkRWin}; break;
+    case Trigger::CapsLock: vks = {0x14}; break;
+    case Trigger::CustomVk: vks = {customVk}; break;
+    default: return;
+  }
+  for (const uint32_t vk : vks) grabKeyAnyLock(keycodeOfVk(vk), AnyModifier);
+}
+
+void XHooks::grabButtonAny(unsigned button) {
+  if (button == 0) return;
+  // Sync passive grab: a captured pointer event is FROZEN until we call XAllowEvents exactly once.
+  //   - ReplayPointer re-injects the frozen event to the window under the cursor (it re-arms the grab
+  //     WITHOUT re-freezing this event), so a normal click reaches the app.
+  //   - AsyncPointer drops it, used while a gesture owns the pointer.
+  // Every captured event (press/release/motion, mapped or unmapped) MUST be allowed once, or the queue
+  // freezes and the pointer sticks. This path does NOT rely on the XTest extension.
+  XGrabButton(dpy_, button, AnyModifier, root_, False,
+              ButtonPressMask | ButtonReleaseMask | ButtonMotionMask, GrabModeSync, GrabModeAsync, 0, 0);
+  grabbedButtons_.push_back(button);
+}
+
+void XHooks::clearGrabs() {
+  for (const unsigned b : grabbedButtons_) XUngrabButton(dpy_, b, AnyModifier, root_);
+  for (const auto& [kc, mods] : grabbedKeys_) XUngrabKey(dpy_, kc, mods, root_);
+  grabbedButtons_.clear();
+  grabbedKeys_.clear();
+}
+
+// Passive grabs decide which events reach us at all; Decision then filters per event. Grabbed:
+//   - the buttons that can start a gesture (drag buttons),
+//   - each wheel's trigger key (a key trigger is consumed while active, replayed when disabled),
+//   - the toggle chord's key (Decision matches the full modifier set itself).
+void XHooks::installGrabs() {
+  clearGrabs();
+  const Config& c = decision_->config();
+  std::set<unsigned> buttons;
+  const auto dragButtonOf = [](Trigger t) -> unsigned {
+    if (t == Trigger::Mouse4) return 8u;
+    if (t == Trigger::Mouse5) return 9u;
+    return Button1;
+  };
+  if (c.trigger != Trigger::None) buttons.insert(dragButtonOf(c.trigger));
+  if (c.emoteTrigger != Trigger::None) buttons.insert(dragButtonOf(c.emoteTrigger));
+  for (const unsigned b : buttons) grabButtonAny(b);
+  grabTriggerKey(c.trigger, c.triggerVk);
+  grabTriggerKey(c.emoteTrigger, c.emoteTriggerVk);
+  const int toggleOk = grabKeyAnyLock(keycodeOfVk(c.toggleVk), xMaskOfMods(c.toggleMods));
+  if (toggleOk == 0)
+    hlog("WARN toggle vk=0x%X grab failed (BadAccess): a UOS global shortcut owns this chord, so the "
+         "enable/disable hotkey will NOT fire. Rebind it in Settings (开关快捷键) to a combo UOS does not reserve.",
+         (int)c.toggleVk);
+  // Also grab the bare modifier keys (Ctrl/Shift/Win) so Decision's mods() — built from keyDown_ — reflects
+  // them even though only the trigger and toggle keys are otherwise captured. They are replayed, never
+  // swallowed, so the OS still sees every Ctrl/Shift/Win press. Without this, a Ctrl+Shift+P toggle never
+  // matched its mods() because Ctrl was never reported as down (Ctrl isn't a grab target on its own).
+  const uint32_t modKeys[] = {kVkLShift, kVkRShift, kVkLCtrl, kVkRCtrl, kVkLWin, kVkRWin};
+  for (uint32_t vk : modKeys) grabKeyAnyLock(keycodeOfVk(vk), 0);
+  XFlush(dpy_);
+  hlog("installGrabs: buttons=%zu keys=%zu trigger=%d emote=%d enabled=%d",
+       grabbedButtons_.size(), grabbedKeys_.size(),
+       (int)c.trigger, (int)c.emoteTrigger, (int)c.enabled);
+}
+
+// X11 does NOT use an active keyboard grab. Trigger keys (Alt/Ctrl/Shift/Win) are owned by passive
+// XGrabKey and replayed with ReplayKeyboard, which keeps their modifier state correct WITHOUT XTest —
+// an active grab would force every pass-through key through XTestFakeKeyEvent, and when that extension
+// is disabled (UOS) the trigger-up would be lost and the modifier would stick. Esc-to-cancel still works
+// via the trigger key-up (releasing Alt/Ctrl ends the gesture). keyboardGrabbed_ stays false so replayKey
+// always takes the XTest-free ReplayKeyboard path.
+void XHooks::syncGrabs() {
+  keyboardGrabbed_ = false;
+}
+
+void XHooks::inject(const std::vector<Inject>& injects) {
+  // Replay happens grab-free: releases first, so faked events reach the app instead of ourselves.
+  XUngrabPointer(dpy_, CurrentTime);
+  XUngrabKeyboard(dpy_, CurrentTime);
+  keyboardGrabbed_ = false;
+  for (const auto& i : injects) {
+    if (i.kind == InjectKind::ButtonDown || i.kind == InjectKind::ButtonUp) {
+      const unsigned b = buttonOf(i.btn);
+      if (b != 0) XTestFakeButtonEvent(dpy_, b, i.kind == InjectKind::ButtonDown, CurrentTime);
+    } else {
+      const KeyCode kc = keycodeOfVk(i.vk);
+      if (kc != 0) XTestFakeKeyEvent(dpy_, kc, i.kind == InjectKind::KeyDown, CurrentTime);
+    }
+  }
+  XFlush(dpy_);
+}
+
+Result XHooks::apply(const Result& r) {
+  for (const auto& e : r.emits) out_->emit(e);
+  if (!r.injects.empty()) inject(r.injects);
+  syncGrabs();
+  return r;
+}
+
+void XHooks::replayKey(XKeyEvent& ev) {
+  // A key event only reaches us through a grab. ReplayKeyboard releases a passive grab (it re-arms
+  // for the next press), but it would drop the gesture's active keyboard grab — there, the key is
+  // re-faked after a quick ungrab/regrab so pass-through keeps the capture alive.
+  if (!keyboardGrabbed_) {
+    XAllowEvents(dpy_, ReplayKeyboard, ev.time);
+    return;
+  }
+  XUngrabKeyboard(dpy_, CurrentTime);
+  keyboardGrabbed_ = false;
+  const KeyCode kc = ev.keycode;
+  if (kc != 0) {
+    const bool press = ev.type == KeyPress;
+    XTestFakeKeyEvent(dpy_, kc, press, CurrentTime);
+  }
+  XFlush(dpy_);
+  keyboardGrabbed_ = XGrabKeyboard(dpy_, root_, False, GrabModeAsync, GrabModeAsync, CurrentTime) == GrabSuccess;
+}
+
+void XHooks::handleKeyEvent(XKeyEvent& ev, bool press) {
+  const uint32_t vk = vkOfKeycode(ev.keycode);
+  if (vk == 0) {
+    replayKey(ev);  // a key we don't map is never ours
+    return;
+  }
+  InputEvent e;
+  e.kind = press ? EvKind::KeyDown : EvKind::KeyUp;
+  e.vk = vk;
+  e.timeMs = steadyMs();
+  const Result r = decision_->onEvent(e);
+  for (const auto& em : r.emits) out_->emit(em);
+  if (!r.injects.empty()) inject(r.injects);
+  if (vk != 0) hlog("keyevent vk=0x%X %s swallow=%d state=%d", vk, press ? "down" : "up", r.swallow, (int)decision_->state());
+  if (r.swallow) {
+    // Sync keyboard grab: the frozen event MUST be released exactly once. AsyncKeyboard DROPS it (the
+    // window never sees it); ReplayKeyboard would re-deliver it and defeat the swallow. This is the path
+    // that makes Ctrl+Shift+P toggle without sticking the P key — and without it a swallowed key would
+    // freeze the queue forever.
+    XAllowEvents(dpy_, AsyncKeyboard, ev.time);
+    syncGrabs();
+    return;
+  }
+  replayKey(ev);
+  syncGrabs();
+}
+
+void XHooks::handleButtonEvent(XButtonEvent& ev, bool press) {
+  const std::optional<Btn> btn = btnOf(ev.button);
+  InputEvent e;
+  e.x = ev.x_root;
+  e.y = ev.y_root;
+  e.timeMs = steadyMs();
+  if (!btn) {
+    // Wheel/extra buttons during a gesture grab are dropped; outside a grab they never arrive. Still MUST
+    // be allowed once or the frozen event sticks.
+    XAllowEvents(dpy_, AsyncPointer, ev.time);
+    return;
+  }
+  e.kind = press ? EvKind::MouseDown : EvKind::MouseUp;
+  e.btn = *btn;
+  if (press) decision_->syncKeyStates([this](uint32_t vk) { return isKeyDown(vk); });
+  const Result r = decision_->onEvent(e);
+  for (const auto& em : r.emits) out_->emit(em);
+  if (!r.injects.empty()) inject(r.injects);
+  syncGrabs();
+  // Frozen event: replay it to the real window (re-arms the grab without re-freezing this event) so a
+  // normal click works; drop it (AsyncPointer) while a gesture owns the pointer. This does NOT use XTest.
+  if (btn) hlog("%s btn=%d swallow=%d state=%d", press ? "mousedown" : "mouseup", (int)*btn, r.swallow, (int)decision_->state());
+  // A swallowed gesture button event is DROPPED, not replayed. The entire gesture (press + drag +
+  // release) is owned by us; the window under the cursor never sees those events, so there is no
+  // half-click and the button cannot stick. Replaying a swallowed press would also deactivate the
+  // passive grab and silently drop the trailing drag motions — that was why repeated Alt+drags failed
+  // to open the wheel. Only an un-swallowed (normal) click is replayed so the app receives it. This
+  // path does NOT use XTest, so it works even when the XTest extension is disabled (e.g. on UOS).
+  XAllowEvents(dpy_, r.swallow ? AsyncPointer : ReplayPointer, ev.time);
+}
+
+void XHooks::handleMotion(XMotionEvent& ev) {
+  const Decision::State st = decision_->state();
+  if (st == Decision::State::Pending || st == Decision::State::Wheel) {
+    hlog("motion st=%d x=%d y=%d", (int)st, ev.x_root, ev.y_root);
+    InputEvent e;
+    e.kind = EvKind::MouseMove;
+    e.x = ev.x_root;
+    e.y = ev.y_root;
+    e.timeMs = steadyMs();
+    const Result r = decision_->onEvent(e);
+    for (const auto& em : r.emits) out_->emit(em);
+    // Gesture owns the pointer: drop motion so the window under the cursor doesn't follow the drag.
+    XAllowEvents(dpy_, AsyncPointer, ev.time);
+    return;
+  }
+  // Plain drag (button held, no gesture): forward motion so selection etc. reaches the window. MUST be
+  // allowed once or the pointer freezes (mouse stops moving). This does NOT use XTest.
+  XAllowEvents(dpy_, ReplayPointer, ev.time);
+}
+
+void XHooks::handleCommand(const std::string& line) {
+  const Command c = parseCommand(line, decision_->config());
+  switch (c.kind) {
+    case Command::Kind::Config:
+      apply(decision_->setConfig(c.config));
+      // X11 (Sync grab) must swallow an unfinished gesture instead of replaying it as a click, or the
+      // real button-up replayed to the window sticks the button down. Windows/macOS keep the default.
+      decision_->setSwallowUnfinishedClick(true);
+      installGrabs();
+      break;
+    case Command::Kind::SetEnabled:
+      apply(decision_->setEnabled(c.flag));
+      break;
+    case Command::Kind::Suspend:
+      apply(decision_->setSuspended(c.flag));
+      break;
+    case Command::Kind::Shutdown:
+      // loop-exit is checked after the command queue drains
+      break;
+    default:
+      out_->error("invalid command: " + line);
+      break;
+  }
+}
+
+int XHooks::run(Output& out) {
+  out_ = &out;
+  dpy_ = XOpenDisplay(nullptr);
+  if (dpy_ == nullptr) {
+    const bool wayland = getenv("WAYLAND_DISPLAY") != nullptr || (getenv("XDG_SESSION_TYPE") != nullptr &&
+                                                                   strcmp(getenv("XDG_SESSION_TYPE"), "wayland") == 0);
+    out.error(wayland ? "wayland" : "noDisplay",
+              wayland ? "no X display (Wayland session): run inside XWayland-capable sessions"
+                      : "XOpenDisplay failed: DISPLAY is not set");
+    return 2;
+  }
+  XSetErrorHandler(ignoreErrors);
+  root_ = DefaultRootWindow(dpy_);
+  buildKeymaps();
+  XkbSetDetectableAutoRepeat(dpy_, True, nullptr);  // hold-to-repeat floods Decision with synthetic keys otherwise
+
+  Decision decision;
+  decision_ = &decision;
+  decision.setFullscreenProbe([this](int x, int y) { return clickIsOnFullscreenApp(x, y); });
+  decision.setMaskMenuKeys(false);  // X11 has no Start menu / menu bar opened by a lone Alt or Win key-up
+
+  // stdin reader: Electron's pipe; EOF means Electron is gone and the helper must quit.
+  std::thread reader([this] {
+    std::string line;
+    while (std::getline(std::cin, line)) {
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      const std::lock_guard<std::mutex> lock(cmdMu_);
+      cmds_.push(std::move(line));
+    }
+    const std::lock_guard<std::mutex> lock(cmdMu_);
+    cmds_.push("\x1fquit");  // sentinel: stdin closed
+  });
+  reader.detach();
+
+  out.ready();
+
+  const int xfd = ConnectionNumber(dpy_);
+  bool quit = false;
+  uint64_t lastTick = steadyMs();
+  while (!quit) {
+    while (XPending(dpy_) > 0) {
+      XEvent ev{};
+      XNextEvent(dpy_, &ev);
+      switch (ev.type) {
+        case KeyPress:
+          handleKeyEvent(ev.xkey, true);
+          break;
+        case KeyRelease:
+          handleKeyEvent(ev.xkey, false);
+          break;
+        case ButtonPress:
+          handleButtonEvent(ev.xbutton, true);
+          break;
+        case ButtonRelease:
+          handleButtonEvent(ev.xbutton, false);
+          break;
+        case MotionNotify:
+          while (XCheckTypedWindowEvent(dpy_, root_, MotionNotify, &ev)) {  // collapse motion bursts
+          }
+          handleMotion(ev.xmotion);
+          break;
+        default:
+          break;  // grab unfocus etc.
+      }
+    }
+    XFlush(dpy_);
+
+    bool stop = false;
+    for (;;) {
+      std::string line;
+      {
+        const std::lock_guard<std::mutex> lock(cmdMu_);
+        if (cmds_.empty()) break;
+        line = std::move(cmds_.front());
+        cmds_.pop();
+      }
+      if (line == "\x1fquit") {
+        stop = true;
+        break;
+      }
+      handleCommand(line);
+      if (line == "shutdown") stop = true;
+    }
+    if (stop) break;
+
+    const uint64_t now = steadyMs();
+    if (now - lastTick >= 1000) {
+      lastTick = now;
+      decision.syncKeyStates([this](uint32_t vk) { return isKeyDown(vk); });
+      const Result r = decision.tick(now);
+      for (const auto& e : r.emits) out_->emit(e);
+      syncGrabs();
+    }
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(xfd, &fds);
+    timeval tv{1, 0};
+    select(xfd + 1, &fds, nullptr, nullptr, &tv);
+  }
+
+  clearGrabs();
+  if (keyboardGrabbed_) {
+    XUngrabKeyboard(dpy_, CurrentTime);
+    keyboardGrabbed_ = false;
+  }
+  XFlush(dpy_);
+  XCloseDisplay(dpy_);
   return 0;
 }
+
+}  // namespace
+
+int runHooks(Output& out) {
+  XHooks hooks;
+  return hooks.run(out);
 }
+
+}  // namespace lp

@@ -27,12 +27,6 @@ Bait and Vision Cleared are read straight from League's `.tex` files in `Global.
 py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --wad-textures
 ```
 
-`enemy_missing_flipped.png` is not a League file: it is `enemy_missing.png` turned 180° for the upside-down Enemy Missing ping. `--dds-dir` makes it again; on its own:
-
-```bash
-py -3.14 tools/extract-assets/extract_assets.py --derived
-```
-
 No game file says which sound those two pings play: `SRP_11` (Bait) and `SRP_6` (Vision Cleared) were identified by listening. `SRP_13` is the structure-defend ping.
 
 Never reference the colourblind (`*_cb*`) files in the app.

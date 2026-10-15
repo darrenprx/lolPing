@@ -1,7 +1,7 @@
 # lolPing — Design Spec
 
 **Date:** 2026-10-01
-**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1; rooms over LAN added in v0.3.0 (§12); emotes added in v0.5.0 (§13); foreign-chord pass-through and the fullscreen pause added in v0.5.1; custom emote stills travelling between room members added in v0.5.2 (§13)
+**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1; rooms over LAN added in v0.3.0 (§12); emotes added in v0.5.0 (§13); foreign-chord pass-through and the fullscreen pause added in v0.5.1
 
 ## 1. Purpose
 
@@ -24,7 +24,7 @@ A personal desktop toy for Windows that recreates League of Legends' ping wheel 
 | Stack | Electron (TypeScript) + React + Fluent UI React v9 for the UI. A small native C++ helper handles global input. |
 | Default trigger | Hold **Alt** and drag with the left mouse button to open the wheel. |
 | Trigger + click (no drag) | Configurable, **off** by default. Off: the click passes through untouched. On: it places a **generic** ping and the click is swallowed. |
-| Toggle | A global hotkey (default **Ctrl+Alt+P**) turns pinging on/off, mirrored in the tray. |
+| Toggle | A global hotkey (default **Alt+Win+P**) turns pinging on/off, mirrored in the tray. |
 | Wheel slots | 8 slices, top then clockwise. Default: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. The user can drag any of the 11 pings onto any slot, and pick the trigger+click ping (default Generic), in settings. |
 | Excluded pings | Defend/Hold, Target, the yellow "caution" circle: they need a target, so they wait until lolPing can pick one |
 | Textures | Only standard textures. **Never colourblind (`_cb`) variants.** |
@@ -47,14 +47,13 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 | `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.wav` | `#56d43c` |
 | `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.wav` | `#56d43c` |
 | `missing` | W | `enemy_missing.png` | `enemy_missing.png` | `MIA.wav` | `#f2c518` |
-| `enemyvision` | NW | `pingwheel_enemyvisionrender.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.wav` | `#ff3b55` |
+| `enemyvision` | NW | `enemy_vision.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.wav` | `#ff3b55` |
 | `generic` | (trigger+click) | `generic_ping.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
 | `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.wav` | `#efbc12` |
 | `visioncleared` | — | `vision_cleared.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
-| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
 | wheel tick | — | — | — | `button.wav` | — |
 
-Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures, `enemy_vision` (magenta, like the colourblind set; the wheel uses the red render), `caution`, `hold`, `target`, the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
+Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures, `caution`, `hold`, `target`, the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
 
 ### 3.2 Asset pipeline (already run; kept reproducible)
 
@@ -139,7 +138,7 @@ States: `Idle`, `Pending` (trigger held + button down, not yet moved past the th
 | `Pending`, left button up (trigger+click) | Option on: **swallow**, send `click{x,y}`. Option off: **replay** the down+up with `SendInput` (flagged as injected so the helper ignores its own events). Back to `Idle`. |
 | `Wheel`, right button down or Esc | **Swallow**, send `cancel`, go to `Idle` |
 | Trigger released during `Pending` | Treat as a plain click: replay it (or ping, if the option is on) |
-| Trigger released during `Wheel` | Nothing: the wheel stays open and the button up picks the slice, as in League. A trackpad's three-finger drag sends that up about a second late. |
+| Trigger released during `Wheel` | Send `cancel`, go to `Idle` (the matching button up will still be swallowed) |
 | Toggle hotkey | **Swallow**, flip enabled, send `toggled{enabled}`. If disabled mid-drag, also send `cancel`. |
 | Watchdog: no mouse event for 10 s while in `Wheel` or `Pending` | Send `cancel`, go to `Idle` |
 
@@ -148,8 +147,7 @@ States: `Idle`, `Pending` (trigger held + button down, not yet moved past the th
 ### 5.2 Modifier side effects
 
 - **Alt / Win menu activation.** Windows opens the menu bar (Alt) or Start menu (Win) when the key goes up without any other key in between. When a wheel or ping happened while the modifier was held, the helper injects a no-op "mask" key (`VK_NONAME`, 0xFC) before the modifier's key-up. AutoHotkey uses the same trick.
-- **Caps Lock as trigger:** its down/up is swallowed, so Caps state doesn't change.
-- **A custom key as trigger:** its down is held back. If a drag uses it, nothing is typed. A lone tap is replayed (down + up) when the key comes up, so it still types. Another key pressed while it is held sends it first and replays that key behind it, so fast typing keeps its order. A held custom key doesn't auto-repeat until another key flushes it.
+- **Caps Lock or a custom key as trigger:** that key's down/up is swallowed, so Caps state doesn't change and no character is typed.
 - **Mouse 4 / Mouse 5 as trigger:** the side button itself is the drag button (press side button, move, release). A side-button click without movement is replayed so browser Back/Forward still works, or it pings if the trigger+click option is on.
 
 ### 5.3 Protocol (JSON lines, defined once in `src/shared/protocol.ts`, mirrored in C++)
@@ -178,8 +176,7 @@ All coordinates are **physical screen pixels**.
   - Restarts the helper with backoff (0.5 s, 1 s, 2 s). After 3 crashes within 60 s, it stops, sets the tray to a warning state and shows a toast.
 - **OverlayManager:**
   - One `BrowserWindow` per display: `transparent`, `frame:false`, `focusable:false`, `skipTaskbar`, `alwaysOnTop` at level `screen-saver`, `setIgnoreMouseEvents(true)`, created with `showInactive()`.
-  - On Windows the level is set again each time an overlay gets something new to draw (`wheel:open`, `ping:spawn`, `emote:spawn`, `toast:show`), never on moves. Windows 10 users saw the overlay end up behind normal windows after a while, and only a restart fixed it. Setting the level again calls `SetWindowPos(HWND_TOPMOST)` without activating, which puts the overlay back above every window, other topmost ones included. macOS is unchanged: its panel stays on top.
-  - The windows cover each display's `bounds`, except that on Windows they stop one DIP short of the bottom edge. Explorer takes a shown window that covers a whole display for a full-screen app: it drops the taskbar behind it and won't slide an auto-hidden one up (`SHQueryUserNotificationState` reports `QUNS_BUSY`). Any smaller window doesn't count. The window still starts at the display's corner, so overlay coordinates don't change. They are rebuilt on `display-added`, `display-removed` and `display-metrics-changed`.
+  - Windows exactly cover each display's `bounds`. They are rebuilt on `display-added`, `display-removed` and `display-metrics-changed`.
   - Each event is routed to the overlay whose display contains the press point. A wheel near a screen edge may be clipped; it is not clamped, the same as in League.
 - **Coordinates:** `screen.screenToDipPoint({x,y})` converts physical pixels to DIP, then the display's DIP origin is subtracted to get overlay-local CSS pixels. Wheel moves are converted relative to the *wheel's* display, even when the cursor crosses onto another monitor.
 - **Toggle feedback:** tray icon state (normal or dimmed), the tray menu checkbox, and a small Fluent toast saying "Pings on" or "Pings off".
@@ -239,11 +236,9 @@ Several pings can be on screen at once, and each is independent.
 | `clickPing` | bool | false |
 | `clickPingId` | ping id | `generic` |
 | `wheel` | 8 distinct ping ids, top then clockwise | `DEFAULT_WHEEL` (an invalid list resets to it) |
-| `toggleHotkey` | `{mods, vk}` | Ctrl+Alt+P |
-| `wheelSizePx` | 300–900, step 10 (both wheels) | 600 |
+| `toggleHotkey` | `{mods, vk}` | Alt+Win+P |
 | `pingSizePx` | 60–220 | 110 |
 | `pingDurationS` | 1.0–8.0 | 3.2 |
-| `keepLastPing` | bool: our newest ping (wheel or click) stays after its animation until our next ping on any display (`ping:unkeep` to the others), a pause, or the switch going off. Room pings and previews still fade. | false |
 | `volume` | 0–100 | 70 |
 | `muted` | bool | false |
 | `tickSound` | bool | true |
@@ -300,7 +295,7 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 - **C++ unit tests** for `decision.cpp` (no OS hooks), as table-driven event sequences:
   - drag opens the wheel
   - click with the option on and off
-  - trigger released early (before the wheel opens, and while it is open)
+  - trigger released early
   - right-click / Esc cancel
   - toggle mid-drag
   - watchdog
@@ -322,17 +317,9 @@ Multiplayer/sync (rooms arrived in v0.3.0, §12), rebinding wheel slots, colourb
 
 macOS support was added in v0.2.0; see [design-macos.md](design-macos.md).
 
-### Linux (X11, experimental)
-
-The Linux port is an X11 backend. Setup, limits and testing are in [linux.md](linux.md). In short:
-
-- XInput 2.1 raw events watch the keyboard. The helper does not read `/dev/input` and does not take keyboard focus.
-- Passive grabs catch the wheel trigger. Normal clicks are passed on with `ReplayPointer`.
-- XTest replays short trigger clicks and tapped trigger keys to the application underneath.
-- Wayland sessions, including XWayland, are refused at start with a `noAccess` error.
-- Electron is forced to scale factor 1 to match X11 root coordinates. There is no updater; updates are manual. Autostart uses an XDG `.desktop` file.
-
 ## 12. Rooms (v0.3.0, internet in v0.4.0)
+
+Full design: [superpowers/specs/2026-10-04-room-ping-sharing-design.md](superpowers/specs/2026-10-04-room-ping-sharing-design.md). In short:
 
 - **Model:** a room is a code, `PING-XXXXX-XXXXX` (Crockford base32, 9 random characters + a Luhn mod 32 check character, `src/shared/roomCode.ts`). Parsing ranks candidates and never glues neighbouring words onto a code; clipboard reads are strict. Every finished ping (wheel or trigger+click, never a settings preview) goes to every member; up to 8 members.
 - **Crypto (`src/main/roomCrypto.ts`):** scrypt(code) → HKDF → AES-256-GCM. Each packet is `[0x01][nonce][ciphertext+tag]`, at most 1200 bytes. Keys never leave the main process.
@@ -341,22 +328,19 @@ The Linux port is an X11 backend. Setup, limits and testing are in [linux.md](li
 - **LAN transport (`src/main/lanTransport.ts`):** one UDP socket on port 47474. Presence is broadcast every 2 s to 255.255.255.255 and each interface's directed broadcast; pings go unicast to the address a member's packets come from. Before decryption, a flood guard allows 100 packets/s per source IP and 800/s in total, and tracks at most 1024 addresses. The socket is re-bound after sleep.
 - **Mapping:** displays are numbered #1 = primary, then left→right, top→bottom (`src/main/displayNumbers.ts`). A ping lands on the receiver's display with the same number, or #1, at the same fraction of its size. `resolveTarget` is the hook a later share-window mode replaces.
 - **Overlay:** wheel pings are reported back to main (`overlay:pinged`); remote pings carry a name tag. Safety ceiling: 60 pings on screen, 8 overlapping sounds.
-- **Relay transport (v0.4.0, `src/main/relayTransport.ts`):** each sealed packet becomes one ephemeral Nostr event (kind 24747, tag `x` = a topic derived from the code, base64 content), signed with a key made fresh on every join (`src/main/nostrEvent.ts`), and published to every live relay in `src/main/relays.ts`. No WebRTC and no server of our own; members never see each other's IP over it.
+- **Relay transport (v0.4.0, `src/main/relayTransport.ts`):** full design in [superpowers/specs/2026-10-05-internet-rooms-design.md](superpowers/specs/2026-10-05-internet-rooms-design.md). Each sealed packet becomes one ephemeral Nostr event (kind 24747, tag `x` = a topic derived from the code, base64 content), signed with a key made fresh on every join (`src/main/nostrEvent.ts`), and published to every live relay in `src/main/relays.ts`. No WebRTC and no server of our own; members never see each other's IP over it.
   - `RelayPool` drops copies by event id and caps intake at 200 events/s. `RelayConnection` judges each relay by our own events coming back: no echo for 25 s means down and a reconnect with backoff (2 s → 60 s); `rate-limited` cools it for 30 s; `blocked`/`restricted`/`auth-required`/`pow`/`invalid`, a message over 64 KB or over 400 messages/s retire it for the session.
   - Status is `ok` while any relay echoes, `unavailable` after 15 s without one (the Room page then offers Retry). "Allow internet connections" off means no relay is contacted; turning it off mid-room sends no bye.
   - The relay list came from `tools/relay-probe`. Any later list must keep at least 3 of the previous one, or old and new versions can't meet. Development builds read `LOLPING_RELAYS` instead.
 
 ## 13. Emotes (v0.5.0)
 
-A second wheel, opened by its own key, places a League emote (a short animation and a sound) the way a ping is placed, and rooms carry it like a ping.
+Full design: [superpowers/specs/2026-10-06-emotes-design.md](superpowers/specs/2026-10-06-emotes-design.md). In short: a second wheel, opened by its own key, places a League emote (a short animation and a sound) the way a ping is placed, and rooms carry it like a ping.
 
 - **Helper, two triggers:** `config` gains `emoteTrigger` (a trigger name or `"off"`), `emoteTriggerVk` and `emoteClick`, and the helper's `ready` version becomes 2. Every `wheelOpen`, `wheelMove`, `wheelRelease` and `click` event carries `wheel`: `"ping"` or `"emote"` (a missing field means `"ping"`, so an older helper still works). A press that both triggers claim, such as Alt and Ctrl held together, is ambiguous and passes through untouched. The emote key defaults to Ctrl, so Ctrl + drag no longer reaches the app underneath while lolPing is on; that is listed under known limitations in the README. It can't be the ping trigger (Caps Lock counts as one key however it was picked) or the pause shortcut's key; a settings file edited by hand into a clash turns the emote key off and shows a problem in About.
 - **Settings:** `emoteTrigger` (default `ctrl`), `emoteClick` (false), `emoteWheel` (8 distinct emote refs, top then clockwise), `clickEmoteId`, `emoteSizePx` (80–300, default 150), `emoteSound` (true) and `customEmotes` (at most 24). An emote ref is a bundled slug or `c:` plus the 32 hex characters of an imported image's hash. The ping and emote wheels share one generic `WheelEditor` in the settings window.
 - **Overlay:** the emote wheel is a second copy of the wheel's SVG with its own centre label. `EmoteStage` (`src/renderer/overlay/emoteFx.ts`) shows the emotes: at most one per owner (`self`, `preview` or a room member's peer ID), each for 3 s. A bundled emote's animated WebP plays once and Chromium gives images with the same URL one shared clock, so the stage fetches each file as a Blob once and gives every spawn its own object URL, revoked when the emote ends. A new emote from an owner replaces their old one on every display: main sends `emote:clear` to the other overlays. Main works out what an emote looks like (`resolveEmoteArt`): bundled, a custom image, or the "?" placeholder for a custom emote whose files are missing here, and the overlay trusts that.
-- **`lolping://emotes/<hash>.webp`, `.anim` and `.sound`:** the custom protocol (`src/main/appProtocol.ts`) serves imported emotes from `<settings folder>/emotes`, in development too. It only answers those three names for a 32-hex hash (`.sound` is the `.sound.ogg`, `.mp3` or `.wav` on disk), never caches (an image can be removed and imported again under the same name), and gives the still when the animation is gone.
+- **`lolping://emotes/<hash>.webp` and `.anim`:** the custom protocol (`src/main/appProtocol.ts`) serves imported emotes from `<settings folder>/emotes`, in development too. It only answers those two names for a 32-hex hash, never caches (an image can be removed and imported again under the same name), and gives the still when the animation is gone.
 - **Imported emotes (`src/main/emoteLibrary.ts`):** the settings window turns a file into a still of at most 12,288 bytes and 160 px on its longest side (128 px as a fallback), and keeps the original GIF or WebP when it is at most 5 MB and 1024 px. Main checks it all again and names the emote by the first 32 hex characters of the SHA-256 of the still. Files are written through temporary names and renamed together, so a failed import leaves nothing behind.
-- **Imported emote sounds (v0.5.2):** the speaker on one of our own image tiles gives it a sound. The settings window refuses anything but OGG, MP3 or WAV by its first bytes, over 1 MB, or longer than 5 s once decoded; main checks the type and size again (`setSound`) and writes `<hash>.sound.<type>`, deleting one in another format. The entry gets `sound: true` (`normalizeSettings` keeps the flag only when it is `true`, so older settings files read as before). `resolveEmoteArt` adds the sound URL only for our own emotes, so it plays when we place the emote or preview it, under the emote sound setting, and never for a room member's. Sounds never travel: rooms and relays carry nothing new. The overlay loads a sound on its first play and drops loaded custom sounds whenever settings change, since a sound can be replaced under the same URL.
-- **Rooms (`emote` message):** same fields as a ping with an emote ref in place of the ping ID. It follows a ping's routes and checks (paused, room and member mute, update needed, display number), the same incoming limit per member, and over relays the same 5/s, burst-of-10 cap, which pings and emotes share. An unknown but well-formed ref is accepted and shows the placeholder. Members whose presence says an app older than 0.5.0 are marked "Can't see emotes, needs an update".
-- **Custom stills travel (v0.5.2, `src/main/emoteTransfer.ts` and `src/main/emoteCache.ts`):** presence gains `em`, the distinct hashes on the wheel and centre, at most 9 (validated to at most 9 32-hex strings; an app before 0.5.2 just leaves the field out). A member whose announced hash is neither in the library nor the cache asks for it with `want {to, h, need}` and gets the still in `chunk {h, i, n, b}` messages: 750 bytes of base64 per chunk, at most 17 per still, each sealed packet under the 1,200-byte cap. Over LAN chunks go unicast to the requester, two per 100 ms tick and at most eight per tick across the whole room (~60 KB/s egress however many members ask); over relays they are broadcast on the ping bucket but only while five of its ten burst tokens stay, so pings keep their burst and an idle sender streams a still in a few seconds. Wants over relays follow the same rule: joining a room can find 9 hashes per member at once, and the ones without a spare token go on later ticks. want and chunk messages count against their own per-member bucket (60/s), a paused lolPing neither fetches nor serves stills, the room cap is judged on every presence (not only at settle) and one LAN address backs at most two members — a room member cannot grow the room afterwards to farm serving quota. The receiver assembles at most 16 hashes and 256 KB at once, drops an assembly after 60 s or three unanswered re-asks 3 s apart, and keeps a finished one only when it hashes back to its ID and passes the import checks (a still WebP of at most 12,288 bytes and 160 px) — the hash is the identity, so nobody can substitute another member's image, and the bytes are only ever written as `<hash>.webp` in the cache and only ever decoded by Chromium as an `<img>`. The cache (`<settings folder>/emote-cache/`) holds at most 200 stills and 4 MB, evicting least recently used; a still shown on screen counts as used. Its index is read once at launch, which also clears temp files a crashed write left, so a put never lists the folder. Everything is sealed with the room key like every room message. **Show friends' custom emotes** (Settings → Room, `friendEmotes`, default on) stops both directions at once: no wants sent or answered, no chunks taken, pending work dropped, and friends' images show as the placeholder, cached ones included. Animations never travel.
-- **Known limitation (room protocol v1):** every member shares one room key, so a member can forge another member's peer id — a forged `bye` silently removes them from everyone's member list for the session, and a forged high `seq` blocks their later messages. Fixing this needs per-member authentication (a protocol bump); until then a hostile room member can always do this, to pings and emotes as much as to stills.
+- **Rooms (`emote` message):** same fields as a ping with an emote ref in place of the ping ID. It follows a ping's routes and checks (paused, room and member mute, update needed, display number), the same incoming limit per member, and over relays the same 5/s, burst-of-10 cap, which pings and emotes share. An unknown but well-formed ref is accepted and shows the placeholder. Members whose presence says an app older than 0.5.0 are marked "Can't see emotes, needs an update". In this version friends see your own images as the placeholder.
 - **Baker:** `tools/extract-assets/emote_bake.py` (run with `--emotes`) reads League's emote effect files and bakes each emote at 30 fps on a 320 × 320 canvas holding 256 px of art, as a 3 s animated WebP (quality 80, played once), with an icon PNG and an Opus `.ogg` sound at 96 kbps. It also writes `src/shared/emoteCatalog.ts`, the single list of bundled emotes, and the build leaves out any emote file that list doesn't name.

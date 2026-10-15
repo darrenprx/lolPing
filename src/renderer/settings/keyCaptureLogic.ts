@@ -1,5 +1,4 @@
 import { HOTKEY_PRIMARY_MODS, codeToVk, eventMods } from '../../shared/keys';
-import type { Platform } from '../../shared/platform';
 
 const MODIFIER_CODES = new Set(['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight']);
 
@@ -14,7 +13,6 @@ export interface KeyDownLike {
 }
 
 export interface CaptureRules {
-  platform?: Platform;
   /** A shortcut: at least one of Ctrl, Alt or Win must be held (Shift alone is rejected). */
   requireModifier: boolean;
   /** Virtual-key codes that may not be captured. */
@@ -35,8 +33,6 @@ export function evaluateKeyDown(e: KeyDownLike, rules: CaptureRules): CaptureOut
   if (MODIFIER_CODES.has(e.code)) return { kind: 'ignore' };
   const vk = codeToVk(e.code);
   if (vk === null) return { kind: 'hint', hint: 'hintUnusable' };
-  // Caps Lock arrives as flagsChanged on macOS, not a key event the helper can capture.
-  if (rules.platform === 'mac' && vk === 0x14) return { kind: 'hint', hint: 'hintUnusable' };
   if (rules.forbiddenVks?.includes(vk)) return { kind: 'hint', hint: 'hintNotTrigger' };
   const mods = rules.requireModifier ? eventMods(e) : 0;
   if (rules.requireModifier && (mods & HOTKEY_PRIMARY_MODS) === 0) return { kind: 'hint', hint: 'hintNeedModifier' };

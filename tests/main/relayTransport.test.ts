@@ -200,7 +200,6 @@ describe('RelayTransport under RoomManager', () => {
       transports: [net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0x12),
       deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => ({ name: 'Me', color: 1, limit: 5 }),
       resolveTarget: () => null,
-      announceEmotes: () => [],
     });
     /** A relay that answers OK to everything it was sent. */
     const ackAll = (): void => {

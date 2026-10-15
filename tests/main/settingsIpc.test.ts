@@ -104,31 +104,6 @@ describe('settings IPC', () => {
     expect(readdirSync(library.dir)).toEqual([]);
   });
 
-  it('gives one of our emotes a sound and takes it away again', async () => {
-    const s = still(4);
-    const hash = idOf(s).slice(2);
-    await call(SETTINGS_CH.emoteImport, { name: 'cow', still: s });
-    const sound = new Uint8Array(300).fill(1);
-    sound.set(ascii('OggS'));
-    expect(await call(SETTINGS_CH.emoteSound, idOf(s), sound)).toEqual({ ok: true });
-    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'cow', animated: false, sound: true }]);
-    expect(readdirSync(library.dir).sort()).toEqual([`${hash}.sound.ogg`, `${hash}.webp`]);
-    expect(await call(SETTINGS_CH.emoteSound, idOf(s), null)).toEqual({ ok: true });
-    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'cow', animated: false }]);
-    expect(readdirSync(library.dir)).toEqual([`${hash}.webp`]);
-  });
-
-  it('refuses a sound for an emote that is not ours, or that is not sound bytes', async () => {
-    const s = still(5);
-    await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });
-    const sound = new Uint8Array(ascii('OggS'));
-    expect(await call(SETTINGS_CH.emoteSound, `c:${'ab'.repeat(16)}`, sound)).toEqual({ ok: false, error: 'type' });
-    expect(await call(SETTINGS_CH.emoteSound, 'facepalm', sound)).toEqual({ ok: false, error: 'type' });
-    expect(await call(SETTINGS_CH.emoteSound, idOf(s), [1, 2, 3])).toEqual({ ok: false, error: 'type' });
-    expect(await call(SETTINGS_CH.emoteSound, idOf(s), new Uint8Array(300))).toEqual({ ok: false, error: 'type' });
-    expect(store.get().customEmotes[0]).not.toHaveProperty('sound');
-  });
-
   it('ignores a removal that is not an imported emote id', async () => {
     const s = still(3);
     await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });

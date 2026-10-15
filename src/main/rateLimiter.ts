@@ -17,14 +17,6 @@ export class RateLimiter {
     return true;
   }
 
-  /** Tokens in `key`'s bucket right now, without spending any. Unlimited buckets read as Infinity. */
-  tokens(key: string, perSecond: number, burst = perSecond): number {
-    if (perSecond <= 0) return Infinity;
-    const now = this.now();
-    const b = this.buckets.get(key) ?? { tokens: burst, at: now };
-    return Math.min(burst, b.tokens + ((now - b.at) / 1000) * perSecond);
-  }
-
   forget(key: string): void {
     this.buckets.delete(key);
   }

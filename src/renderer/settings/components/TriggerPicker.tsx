@@ -28,8 +28,7 @@ export function TriggerPicker({ value, onChange, offOption, blocked }: {
   const selected = showCustom ? 'custom' : (value as NamedTrigger | 'off');
   const isBlocked = (k: NamedTrigger) => blocked !== undefined && sameTrigger(k, blocked);
   const blockedVk = blocked === undefined ? null : triggerVk(blocked);
-  const forbiddenVks = [...UNSAFE_TRIGGER_VKS, ...(api.platform === 'linux' ? [0x14] : []),
-    ...(blockedVk === null ? [] : [blockedVk])];
+  const forbiddenVks = blockedVk === null ? UNSAFE_TRIGGER_VKS : [...UNSAFE_TRIGGER_VKS, blockedVk];
 
   return (
     <>

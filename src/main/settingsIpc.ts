@@ -1,5 +1,5 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
-import { isCustomRef, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
+import { isCustomRef, isEmoteRefShape, type EmoteRef, type ImportResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
@@ -17,7 +17,7 @@ export const LATEST_RELEASE_URL = `${PROJECT_URL}/releases/latest`;
 
 export interface SettingsIpcDeps {
   store: SettingsStore;
-  /** Imported emotes' files. Only the import, remove and sound handlers change `customEmotes`. */
+  /** Imported emotes' files. Only the import and remove handlers change `customEmotes`. */
   library: EmoteLibrary;
   getStatus(): AppStatus;
   setEnabled(on: boolean): void;
@@ -109,15 +109,6 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     await d.library.remove(id);
     // Normalising the shorter list puts each wheel slot (and the click emote) that used it back to a default.
     d.store.update({ customEmotes: d.store.get().customEmotes.filter((c) => c.id !== id) });
-  }));
-  ipcMain.handle(SETTINGS_CH.emoteSound, (_e, id: unknown, raw: unknown) => oneAtATime(async (): Promise<SoundResult> => {
-    if (!isCustomRef(id) || !d.store.get().customEmotes.some((c) => c.id === id)) return { ok: false, error: 'type' };
-    if (raw !== null && !(raw instanceof Uint8Array)) return { ok: false, error: 'type' };
-    const error = await d.library.setSound(id, raw);
-    if (error) return { ok: false, error };
-    const withSound = ({ sound: _old, ...c }: CustomEmote): CustomEmote => (raw === null ? c : { ...c, sound: true });
-    d.store.update({ customEmotes: d.store.get().customEmotes.map((c) => (c.id === id ? withSound(c) : c)) });
-    return { ok: true };
   }));
   ipcMain.handle(SETTINGS_CH.about, () => d.about());
   ipcMain.handle(SETTINGS_CH.openFolder, async () => {

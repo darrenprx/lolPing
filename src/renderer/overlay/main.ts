@@ -1,7 +1,6 @@
 import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
 import {
-  CUSTOM_EMOTE_URL, allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customSoundUrl, customStillUrl, emoteIconUrl, emoteSoundUrl,
-  isBundledEmote,
+  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
 import {
@@ -49,47 +48,30 @@ function emoteItem(ref: EmoteRef): WheelItem {
   return { key: ref, icon: textureUrl('generic_ping') };
 }
 
-/** This machine's own emotes: the settings know what an imported one looks like, whether it moves and has a sound. */
+/** This machine's own emotes: the settings know what an imported one looks like, and whether it moves. */
 function localArt(ref: EmoteRef): EmoteArt {
   if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
   const custom = settings.customEmotes.find((c) => c.id === ref);
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
-  const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound };
-}
-
-/** Our newest ping on this display while "Keep my last ping on screen" is on. */
-let keptPing: HTMLElement | null = null;
-
-function dropKeptPing(): void {
-  keptPing?.remove();
-  keptPing = null;
+  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated };
 }
 
 function applySettings(s: OverlaySettings): void {
   settings = s;
-  sounds.forget(CUSTOM_EMOTE_URL); // an imported emote's sound may have been replaced: load it again when it next plays
-  if (!s.keepLastPing) dropKeptPing();
-  pingWheel.setSize(s.wheelSizePx);
-  emoteWheel.setSize(s.wheelSizePx);
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
 }
 applySettings(settings);
 
-function ping(def: PingDef, x: number, y: number, tag?: PingTag, keep = false): void {
-  if (keep) dropKeptPing();
-  const el = spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag, keep });
-  if (keep) keptPing = el;
+function ping(def: PingDef, x: number, y: number, tag?: PingTag): void {
+  spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag });
   sounds.play(def.sound, volume());
 }
 
 function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag): void {
   stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag });
-  if (!settings.emoteSound) return;
-  if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound) sounds.play(`emote:${art.slug}`, volume());
-  if (art.kind === 'custom' && art.sound) void sounds.playUrl(art.sound, volume());
+  if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound) sounds.play(`emote:${art.slug}`, volume());
 }
 
 const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);
@@ -105,7 +87,7 @@ window.overlay.on('wheel:release', (p) => {
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
   } else {
     const def = pingById(chosen.key) ?? fallbackPing;
-    ping(def, chosen.x, chosen.y, undefined, settings.keepLastPing);
+    ping(def, chosen.x, chosen.y);
     window.overlay.reportPing(def.id, chosen.x, chosen.y);
   }
 });
@@ -113,8 +95,7 @@ window.overlay.on('wheel:cancel', () => {
   pingWheel.cancel();
   emoteWheel.cancel();
 });
-window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag, p.keep === true));
-window.overlay.on('ping:unkeep', dropKeptPing);
+window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag));
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));

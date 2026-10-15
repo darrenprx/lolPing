@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type ChunkMsg, type EmoteMsg,
-  type PingMsg, type PresenceMsg, type RoomMessage, type WantMsg,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type EmoteMsg, type PingMsg,
+  type PresenceMsg, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
-const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on', em: [] };
+const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on' };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
@@ -114,78 +114,6 @@ describe('emote messages', () => {
 
   it('keeps known fields only', () => {
     expect(validateMessage({ ...emote, extra: 'ignored', ping: 'danger' })).toEqual(emote);
-  });
-});
-
-describe('presence announcements (em)', () => {
-  const hash = '0123456789abcdef0123456789abcdef';
-  const hash2 = 'fedcba9876543210fedcba9876543210';
-
-  it('round-trips the announced hashes', () => {
-    const m: PresenceMsg = { ...presence, em: [hash, hash2] };
-    expect(decodeMessage(encodeMessage(m))).toEqual(m);
-  });
-
-  it('reads a presence without em as announcing nothing (an app before 0.6.0)', () => {
-    expect(validateMessage({ t: 'presence', peer: presence.peer, seq: 1, ts: 1, proto: 1, app: '0.5.1', name: 'A', color: 0, status: 'on' }))
-      .toMatchObject({ em: [] });
-  });
-
-  it('rebuilds the list: malformed entries dropped, duplicates kept once, at most 9', () => {
-    const raw = { ...presence, em: [hash, hash, 'XYZ', 7, hash2, `${hash}0`] };
-    expect(validateMessage(raw)).toMatchObject({ em: [hash, hash2] });
-    expect(validateMessage({ ...presence, em: Array.from({ length: 20 }, () => hash) })).toMatchObject({ em: [hash] });
-    const many = [hash, hash2, ...Array.from({ length: 20 }, (_, i) => i.toString(16).padStart(32, '0'))];
-    expect(validateMessage({ ...presence, em: many })).toMatchObject({ em: many.slice(0, 9) });
-  });
-
-  it.each([
-    ['em not an array', { ...presence, em: hash }],
-    ['em entry not a string', { ...presence, em: [7] }],
-    ['em entry upper-case', { ...presence, em: [hash.toUpperCase()] }],
-    ['em entry short', { ...presence, em: ['0123'] }],
-  ])('reads %s as announcing nothing', (_label, raw) => {
-    expect(validateMessage(raw)).toMatchObject({ em: [] });
-  });
-});
-
-describe('want and chunk messages', () => {
-  const hash = '0123456789abcdef0123456789abcdef';
-  const want: WantMsg = { ...base, t: 'want', to: 'fedcba9876543210', h: hash, need: [0, 2] };
-  const chunk: ChunkMsg = { ...base, t: 'chunk', h: hash, i: 0, n: 17, b: Buffer.from('x'.repeat(750)).toString('base64') };
-
-  it('round-trips a want and a chunk', () => {
-    expect(decodeMessage(encodeMessage(want))).toEqual(want);
-    expect(decodeMessage(encodeMessage(chunk))).toEqual(chunk);
-  });
-
-  it('deduplicates a want’s need list', () => {
-    expect(validateMessage({ ...want, need: [2, 2, 0, 2] })).toMatchObject({ need: [2, 0] });
-  });
-
-  it.each([
-    ['to that is not a peer id', { ...want, to: 'nope' }],
-    ['to shaped like a hash', { ...want, to: hash }],
-    ['hash upper-case', { ...want, h: hash.toUpperCase() }],
-    ['need not an array', { ...want, need: 0 }],
-    ['need over 64 entries', { ...want, need: Array(65).fill(0) }],
-    ['need index at the chunk max', { ...want, need: [17] }],
-    ['need index negative', { ...want, need: [-1] }],
-    ['chunk count 0', { ...chunk, n: 0 }],
-    ['chunk count 18', { ...chunk, n: 18 }],
-    ['index at the count', { ...chunk, i: 17 }],
-    ['index above the count', { ...chunk, n: 3, i: 3 }],
-    ['base64 over 1000 characters', { ...chunk, b: 'QQ'.repeat(501) }],
-    ['base64 of a ragged length', { ...chunk, b: 'QQQ' }],
-    ['base64 with a stray character', { ...chunk, b: `${'A'.repeat(999)}*` }],
-    ['base64 not a string', { ...chunk, b: 9 }],
-  ])('rejects %s', (_label, raw) => {
-    expect(validateMessage(raw)).toBeNull();
-  });
-
-  it('accepts an empty need (all of it) and a full-size chunk', () => {
-    expect(validateMessage({ ...want, need: [] })).toMatchObject({ need: [] });
-    expect(validateMessage(chunk)).toEqual(chunk);
   });
 });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl,
-  emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
+  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl, emoteName,
+  emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
 } from '../../src/shared/emotes';
 
 const HASH = 'a'.repeat(32);
@@ -158,17 +158,5 @@ describe('emoteName', () => {
   it('gives ? for a ref it does not know', () => {
     expect(emoteName('not_in_catalog', 'en', [])).toBe('?');
     expect(emoteName(`c:${HASH}`, 'en', [])).toBe('?');
-  });
-});
-
-describe('announcedEmoteHashes', () => {
-  it('lists the custom emotes on the centre and wheel, distinct, centre first', () => {
-    expect(announcedEmoteHashes([`c:${HASH}`, 'gg', `c:${HASH}`], `c:${HASH_B}`)).toEqual([HASH_B, HASH]);
-    expect(announcedEmoteHashes(['gg', 'bait'], 'gg')).toEqual([]);
-  });
-
-  it('announces at most 9 hashes', () => {
-    const many = Array.from({ length: 12 }, (_, i) => `c:${i.toString(16).padStart(32, '0')}`);
-    expect(announcedEmoteHashes(many.slice(1), many[0])).toHaveLength(9);
   });
 });

@@ -3,7 +3,6 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
-import { WHEEL } from './geometry';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -20,9 +19,9 @@ export type TriggerKey = NamedTrigger | { vk: number };
 export type EmoteTriggerKey = TriggerKey | 'off';
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
 
-/** Keyboard triggers offered on each platform. macOS and X11 can't reliably stop Caps Lock from toggling, so only Windows offers it. */
+/** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
-  platform !== 'win' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
+  platform === 'mac' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
 
 export interface Settings {
   version: 1;
@@ -34,15 +33,11 @@ export interface Settings {
   clickPingId: PingId;
   /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
   gameCheck: boolean;
-  /** The displayed SVG size, shared by the ping and emote wheels. */
-  wheelSizePx: number;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
   pingSizePx: number;
   pingDurationS: number;
-  /** Your newest ping stays on screen until your next one or a pause (pings from the room still fade). */
-  keepLastPing: boolean;
   volume: number;
   muted: boolean;
   tickSound: boolean;
@@ -70,8 +65,6 @@ export interface Settings {
   emoteSound: boolean;
   /** Imported emotes, at most MAX_CUSTOM_EMOTES. Their files live in the data folder. */
   customEmotes: CustomEmote[];
-  /** Fetch and show room members' custom emotes. Off: nothing is fetched or served, and their images show as the placeholder. */
-  friendEmotes: boolean;
   /** Look for a new version on launch and every few hours. Checking by hand always works. */
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
@@ -92,12 +85,10 @@ export const DEFAULT_SETTINGS: Settings = {
   clickPing: false,
   gameCheck: true,
   clickPingId: DEFAULT_CLICK_PING,
-  wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
-  toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
+  toggleHotkey: { mods: MOD.alt | MOD.win, vk: 0x50 }, // Alt+Win+P: UOS 占用 Ctrl+Alt+P（讲述人），改用 Win 组合
   pingSizePx: 110,
   pingDurationS: 3.2,
-  keepLastPing: false,
   volume: 70,
   muted: false,
   tickSound: true,
@@ -117,14 +108,12 @@ export const DEFAULT_SETTINGS: Settings = {
   emoteSizePx: 150,
   emoteSound: true,
   customEmotes: [],
-  friendEmotes: true,
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
 };
 
 export const LIMITS = {
   dragThresholdPx: { min: 2, max: 40, step: 1 },
-  wheelSizePx: { min: 300, max: 900, step: 10 },
   pingSizePx: { min: 60, max: 220, step: 1 },
   pingDurationS: { min: 1, max: 8, step: 0.1 },
   volume: { min: 0, max: 100, step: 1 },
@@ -133,8 +122,8 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'keepLastPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
-  | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
+  | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -149,7 +138,7 @@ function num(raw: unknown, key: NumKey): number {
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
-  if (platform !== 'win' && (raw === 'capslock' || (isObj(raw) && raw.vk === CAPS_LOCK_VK))) return fallback;
+  if (platform === 'mac' && raw === 'capslock') return fallback;
   if (typeof raw === 'string' && (NAMED_TRIGGERS as readonly string[]).includes(raw)) return raw as NamedTrigger;
   if (isObj(raw) && isVk(raw.vk)) return { vk: raw.vk };
   return fallback;
@@ -201,7 +190,7 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
-/** Valid entries only, rebuilt field by field: well-formed unique ids, boolean flags, a safe name; the first MAX_CUSTOM_EMOTES. */
+/** Valid entries only, rebuilt field by field: well-formed unique ids, a boolean flag, a safe name; the first MAX_CUSTOM_EMOTES. */
 function customEmotes(raw: unknown): CustomEmote[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomEmote[] = [];
@@ -211,8 +200,7 @@ function customEmotes(raw: unknown): CustomEmote[] {
     const id = e.id;
     if (out.some((c) => c.id === id)) continue;
     // A name with nothing left shows the first characters of its id, which reads the same in every language.
-    const name = sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX);
-    out.push({ id, name, animated: e.animated, ...(e.sound === true ? { sound: true } : {}) });
+    out.push({ id, name: sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX), animated: e.animated });
   }
   return out;
 }
@@ -234,13 +222,11 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
     gameCheck: bool(r.gameCheck, 'gameCheck'),
-    wheelSizePx: num(r.wheelSizePx, 'wheelSizePx'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
-    keepLastPing: bool(r.keepLastPing, 'keepLastPing'),
     volume: num(r.volume, 'volume'),
     muted: bool(r.muted, 'muted'),
     tickSound: bool(r.tickSound, 'tickSound'),
@@ -260,7 +246,6 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     emoteSizePx: num(r.emoteSizePx, 'emoteSizePx'),
     emoteSound: bool(r.emoteSound, 'emoteSound'),
     customEmotes: custom,
-    friendEmotes: bool(r.friendEmotes, 'friendEmotes'),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
   };
@@ -283,9 +268,10 @@ export function rendererPatch(raw: unknown): Partial<Settings> {
 
 type KeyTrigger = Exclude<NamedTrigger, 'mouse4' | 'mouse5'>;
 const KEY_LABELS: Record<Platform, Record<KeyTrigger, string>> = {
-  linux: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Super', capslock: 'Caps Lock' },
   win: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Win', capslock: 'Caps Lock' },
   mac: { alt: '⌥ Option', ctrl: '⌃ Control', shift: '⇧ Shift', win: '⌘ Command', capslock: '⇪ Caps Lock' },
+  // Linux key labels: Alt/Ctrl/Shift/Caps Lock match Windows; the Windows key is the Super key on Linux.
+  linux: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Super', capslock: 'Caps Lock' },
 };
 
 export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platform = 'win'): string {
@@ -296,13 +282,13 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'keepLastPing' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
-  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, keepLastPing: s.keepLastPing, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
-  wheelSizePx: s.wheelSizePx, wheel: [...s.wheel], clickPingId: s.clickPingId,
+  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
+  wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
 });

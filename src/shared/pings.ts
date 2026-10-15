@@ -1,6 +1,6 @@
 export type PingId =
   | 'danger' | 'push' | 'omw' | 'allin' | 'assist' | 'needvision' | 'missing' | 'enemyvision' | 'generic'
-  | 'bait' | 'visioncleared' | 'missingflip';
+  | 'bait' | 'visioncleared';
 
 export interface PingDef {
   id: PingId;
@@ -24,12 +24,10 @@ export const ALL_PINGS: readonly PingDef[] = [
   { id: 'assist', name: 'Assist Me', icon: 'assist_me', art: ['assist_me'], sound: 'ComeHere', color: '#56d43c' },
   { id: 'needvision', name: 'Need Vision', icon: 'need_vision', art: ['need_vision'], sound: 'SRP_7', color: '#56d43c' },
   { id: 'missing', name: 'Enemy Missing', icon: 'enemy_missing', art: ['enemy_missing'], sound: 'MIA', color: '#f2c518' },
-  { id: 'enemyvision', name: 'Enemy Vision', icon: 'pingwheel_enemyvisionrender', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
+  { id: 'enemyvision', name: 'Enemy Vision', icon: 'enemy_vision', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
   { id: 'generic', name: 'Generic', icon: 'generic_ping', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
   { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
-  // Not a League ping: Enemy Missing turned upside down ("¿"), asked for in #24. Older room peers drop it.
-  { id: 'missingflip', name: 'Upside-down Missing', icon: 'enemy_missing_flipped', art: ['enemy_missing_flipped'], sound: 'MIA', color: '#f2c518' },
 ];
 
 /** The wheel as League ships it, top (N) then clockwise. Array index = slice index from pickSlice(). */

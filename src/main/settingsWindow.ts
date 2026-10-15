@@ -1,6 +1,6 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
 import { SETTINGS_CH } from '../shared/settingsChannels';
-import { assetPath, IS_LINUX, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
+import { assetPath, IS_LINUX, IS_MAC, IS_WIN, loadPage, pageUrl, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
 const goneListeners: Array<() => void> = [];
@@ -24,24 +24,34 @@ const captionColors = () => ({
   height: 40,
 });
 
-/** Windows 11: Mica with custom caption buttons. macOS: sidebar vibrancy with inset traffic lights. */
-const chromeOptions = (): BrowserWindowConstructorOptions => (IS_MAC
-  ? {
-    vibrancy: 'sidebar',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 19 },
+/** Linux has no Windows Mica or macOS vibrancy. Paint a solid background that follows the system colour
+ *  scheme, so the (transparent) settings page reads the way Mica would on Windows — light on a light
+ *  desktop, dark on a dark one. The page itself is transparent, so this colour shows through. */
+const linuxBg = (): string => (nativeTheme.shouldUseDarkColors ? '#1a1a1a' : '#faf9f8');
+
+/** Windows 11: Mica with custom caption buttons. macOS: sidebar vibrancy with inset traffic lights. Linux: neutral (no Mica/vibrancy). */
+const chromeOptions = (): BrowserWindowConstructorOptions => {
+  if (IS_MAC) {
+    return {
+      vibrancy: 'sidebar',
+      visualEffectState: 'active',
+      backgroundColor: '#00000000',
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 20, y: 19 },
+    };
   }
-  : IS_LINUX ? {
-    frame: true, // use the desktop's native close/minimize/maximize controls
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3',
-  } : {
+  if (IS_LINUX) {
+    // No Windows Mica or macOS vibrancy on Linux: a solid background that follows the system colour scheme
+    // (see linuxBg) keeps the transparent settings page readable, the way Mica would on Windows.
+    return { backgroundColor: linuxBg() };
+  }
+  return {
     backgroundMaterial: 'mica',
     backgroundColor: '#00000000',
     titleBarStyle: 'hidden',
     titleBarOverlay: captionColors(),
-  });
+  };
+};
 
 /** lolPing lives in the macOS menu bar: it only has a Dock icon (and ⌘-Tab entry) while settings are open. */
 function showInDock(on: boolean): void {
@@ -72,59 +82,14 @@ export function settingsWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null;
 }
 
-/**
- * macOS can drop the sidebar vibrancy across a Dock minimize/restore (whatever the Dock animation), leaving the nav
- * column unfilled — the page paints nothing there, so the material itself has to be rebuilt. Called from both the
- * restore event and the reopen path below: the event is the safety net for a native deminiaturize, the direct call
- * covers reopening through the tray or the Dock icon, where restore() runs but has been seen not to emit the event.
- */
-function reviveVibrancy(w: BrowserWindow): void {
-  w.setVibrancy(null);
-  w.setVibrancy('sidebar');
-}
-
-/**
- * The Dock genie/scale animation warps the window's last rendered frame, and the nav column in that frame is fully
- * transparent — the vibrancy material lives behind the page, not in it, so the sidebar looks unfilled for the whole
- * animation. While the window sits minimized, paint a plain sidebar fill into the page so the snapshot has something
- * to show, and take it back out on restore so the live vibrancy returns.
- */
-const MINIMIZED_SIDEBAR_CSS = `
-  [data-platform="mac"] nav.side { background: #ececec !important; }
-  @media (prefers-color-scheme: dark) { [data-platform="mac"] nav.side { background: #2a2a2d !important; } }
-`;
-
-/** Key of the minimized-fill stylesheet currently inserted into the settings page, if any. */
-let minimizedCssKey: string | null = null;
-
-function paintMinimizedSidebar(w: BrowserWindow): void {
-  void w.webContents.insertCSS(MINIMIZED_SIDEBAR_CSS).then((key) => {
-    if (w.isDestroyed()) return;
-    // A restore can beat the insert; the fill would then stay over the live vibrancy.
-    if (w.isMinimized()) minimizedCssKey = key;
-    else void w.webContents.removeInsertedCSS(key).catch(() => undefined);
-  });
-}
-
-function clearMinimizedSidebar(w: BrowserWindow): void {
-  const key = minimizedCssKey;
-  minimizedCssKey = null;
-  if (key) w.webContents.removeInsertedCSS(key).catch(() => undefined);
-}
-
 /** `section`: the id of a settings section to scroll to, e.g. 'room'. */
 export function openSettingsWindow(section?: string): BrowserWindow {
   const existing = settingsWindow();
   if (existing) {
     showInDock(true);
-    const wasMinimized = existing.isMinimized();
-    if (wasMinimized) existing.restore();
+    if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
-    if (IS_MAC) {
-      clearMinimizedSidebar(existing);
-      if (wasMinimized) reviveVibrancy(existing);
-    }
     if (section) existing.webContents.send(SETTINGS_CH.showSection, section);
     return existing;
   }
@@ -137,21 +102,12 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     icon: nativeImage.createFromPath(assetPath('textures', 'generic_ping.png')),
     show: false,
     ...chromeOptions(),
-    webPreferences: { preload: preloadPath('settings'), spellcheck: false, backgroundThrottling: !IS_MAC },
+    webPreferences: { preload: preloadPath('settings'), spellcheck: false },
   });
   if (!IS_MAC) w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing (macOS keeps the app menu)
-  if (IS_MAC) {
-    w.on('restore', () => {
-      clearMinimizedSidebar(w); // a click on the window in the Dock restores it without the reopen path
-      reviveVibrancy(w);
-    });
-    w.on('minimize', () => paintMinimizedSidebar(w));
-  }
   const onTheme = () => {
-    if (!w.isDestroyed() && !IS_MAC) {
-      if (IS_LINUX) w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3');
-      else w.setTitleBarOverlay(captionColors());
-    }
+    if (!w.isDestroyed() && IS_WIN) w.setTitleBarOverlay(captionColors()); // Windows-only: Linux/macOS have no titlebar overlay here
+    if (!w.isDestroyed() && IS_LINUX) w.setBackgroundColor(linuxBg()); // keep the Linux window in step with the system colour scheme
   };
   nativeTheme.on('updated', onTheme);
   w.on('closed', () => {

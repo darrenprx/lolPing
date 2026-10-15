@@ -1,10 +1,11 @@
-// `node native/hook-helper/run.mjs build|test`: builds the hook helper (and runs its C++ tests) on Windows, macOS or Linux.
+// `node native/hook-helper/run.mjs build|test`: builds the hook helper (and runs its C++ tests) on Windows or macOS.
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const win = process.platform === 'win32';
+const linux = process.platform === 'linux';
 const run = (cmd, args) => {
   const r = spawnSync(cmd, args, { stdio: 'inherit', cwd: here });
   if (r.status !== 0) process.exit(r.status ?? 1);
@@ -17,6 +18,6 @@ if (action !== 'build' && action !== 'test') {
 }
 // The explicit .\ matters: cmd may be set to not search the current directory for commands.
 if (win) run('cmd.exe', ['/d', '/c', '.\\build.cmd']);
+else if (linux) run('sh', ['build-linux.sh']);
 else run('sh', ['build.sh']);
 if (action === 'test') run(join(here, 'build', win ? 'helper_tests.exe' : 'helper_tests'), []);
-if (action === 'test' && process.platform === 'darwin') run(join(here, 'build', 'hooks_mac_tests'), []);

@@ -72,11 +72,6 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weRemove:hover, .weRemove:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }
 .weRemove:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
 .weCell.removable .weWhere { right: auto; left: 4px; }
-.weTool { position: absolute; bottom: 3px; right: 3px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; font-size: 12px; cursor: pointer;
-  background: var(--colorNeutralBackground3); color: var(--colorNeutralForeground3); opacity: .75; }
-.weTool.on { color: var(--colorBrandForeground1); opacity: 1; }
-.weTool:hover, .weTool:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }
-.weTool:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
 .wePool.filesOver .weTiles { outline: 2px dashed var(--colorBrandStroke1); outline-offset: -1px; border-radius: 6px; }
 /* Add image… sits under the scroll box, so it stays in view however far the pool is scrolled. */
 .weImport { display: grid; gap: 4px; margin-top: 10px; }
@@ -123,8 +118,3 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.update.failed { border-color: #ff9c48; }
 .card.update.failed .icon { color: #ff9c48; }
 .updateBar { margin-top: 4px; }
-
-/* Linux uses native window decorations and the desktop font. */
-[data-platform="linux"] .app { grid-template-rows: 1fr; }
-[data-platform="linux"] .titlebar { display: none; }
-[data-platform="linux"] body { font-family: system-ui, sans-serif; }

@@ -1,6 +1,6 @@
 import { Button, Input, Slider, Spinner } from '@fluentui/react-components';
 import {
-  ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Image24Regular, Person24Regular, PeopleCommunity24Regular,
+  ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
   SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -185,8 +185,6 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           onChange={(_, d) => void update({ incomingPingLimit: fromSlider(d.value) })} />
         <span className="value">{t.roomLimitValue(s.incomingPingLimit)}</span>
       </SettingRow>
-      <SwitchRow icon={<Image24Regular />} title={t.friendEmotes} description={t.friendEmotesDesc}
-        checked={s.friendEmotes} onChange={(v) => void update({ friendEmotes: v })} />
       <SwitchRow icon={<Globe24Regular />} title={t.roomInternet} description={t.roomInternetDesc}
         checked={s.allowInternet} onChange={(v) => void update({ allowInternet: v })} />
       <SwitchRow icon={<ArrowSync24Regular />} title={t.roomRejoin} checked={s.rejoinRoom} onChange={(v) => void update({ rejoinRoom: v })} />

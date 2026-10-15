@@ -5,13 +5,12 @@ Requirements:
   * Python 3.14+ (uses the built-in compression.zstd module)
   * ffmpeg on PATH
   * vgmstream-cli (https://github.com/vgmstream/vgmstream/releases), passed with --vgmstream
-  * Pillow, only for --dds-dir, --derived, --wad-textures, --emote-gallery and --emotes; NumPy, only for the last two
+  * Pillow, only for --dds-dir, --wad-textures, --emote-gallery and --emotes; NumPy, only for the last two
 
 Examples:
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --wad-textures
   py -3.14 tools/extract-assets/extract_assets.py --dds-dir C:/Users/me/Downloads/need
-  py -3.14 tools/extract-assets/extract_assets.py --derived
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emote-gallery --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emotes --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
 """
@@ -299,20 +298,6 @@ def convert_textures(dds_dir: Path) -> None:
         print('texture', dds.stem)
 
 
-# output texture -> (extracted texture it is made from, degrees to rotate it). Not League files: made by --derived.
-DERIVED_TEXTURES = {
-    'enemy_missing_flipped': ('enemy_missing', 180),  # the upside-down Enemy Missing ping (#24)
-}
-
-
-def derive_textures() -> None:
-    from PIL import Image
-
-    for name, (source, degrees) in DERIVED_TEXTURES.items():
-        Image.open(TEXTURE_OUT / f'{source}.png').rotate(degrees).save(TEXTURE_OUT / f'{name}.png')
-        print('derived texture', name)
-
-
 def tex_to_png(data: bytes, out: Path | None = None):
     """League TEX (DXT1 or DXT5, mipmaps stored smallest first) -> RGBA PIL image, also saved as PNG when out is given.
     Decodes by wrapping the full-size level in a DDS header."""
@@ -339,8 +324,6 @@ def main() -> None:
     ap.add_argument('--vgmstream', default='vgmstream-cli', help='path to vgmstream-cli.exe')
     ap.add_argument('--dds-dir', type=Path, help='folder of .dds textures to convert to PNG')
     ap.add_argument('--wad-textures', action='store_true', help='with --league: extract only the WAD_TEXTURES, no sounds')
-    ap.add_argument('--derived', action='store_true',
-                    help='make the DERIVED_TEXTURES from textures already in assets/textures (also runs after --dds-dir)')
     ap.add_argument('--emote-gallery', action='store_true',
                     help='with --league: list every emote in <temp>/lolping-emote-gallery/gallery.html (EMOTE_SET '
                          'pre-ticked; candidates baked with their sounds), no ping sounds')
@@ -350,16 +333,14 @@ def main() -> None:
     ap.add_argument('--glow-opacity', type=float,
                     help='with --emotes: draw the emote halos at this opacity instead of emote_bake.GLOW_OPACITY')
     args = ap.parse_args()
-    if not args.league and not args.dds_dir and not args.derived:
-        ap.error('pass --league, --dds-dir and/or --derived')
+    if not args.league and not args.dds_dir:
+        ap.error('pass --league and/or --dds-dir')
     if args.wad_textures and not args.league:
         ap.error('--wad-textures needs --league')
     if (args.emote_gallery or args.emotes) and not args.league:
         ap.error('--emote-gallery and --emotes need --league')
     if args.dds_dir:
         convert_textures(args.dds_dir)
-    if args.dds_dir or args.derived:
-        derive_textures()
     if args.emote_gallery:
         import emote_bake
 

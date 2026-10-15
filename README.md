@@ -1,3 +1,5 @@
+<p><strong>UOS / Linux (X11) 适配分支：</strong>本分支（<code>uos-port</code>）基于 <a href="https://github.com/darrenprx/lolPing">darrenprx/lolPing</a>（MIT，Danrui Meng）改编，新增统信 UOS（X11）支持：X11 输入钩子、Alt+Win+P 切换快捷键、局域网房间功能。原仓库仅支持 Windows / macOS。</p>
+
 <h1 align="center"><img src="assets/textures/generic_ping.png" width="56" alt=""><br>lolPing</h1>
 
 <p align="center">
@@ -25,12 +27,6 @@
 
 Pings and emotes show up in whole-screen capture, so friends watching your Discord or OBS stream see them too. lolPing is a desktop toy: it doesn't read, change or hook into League itself.
 
-## Linux (experimental)
-
-This source tree includes an **X11 Linux port**, with AppImage and Debian package targets. It requires a genuine X11 session, XInput 2.1/XTest and a compositor. Wayland sessions, including XWayland inside Wayland, are not supported yet. Caps Lock triggers and automatic fullscreen-game detection are not available on Linux. Build with Node.js 22.12+, a C++20 compiler and `libx11-dev libxi-dev libxtst-dev`, then run `npm ci` and `npm run dist:linux`.
-
-See [Linux build, installation and testing instructions](docs/linux.md) for package usage, desktop shortcut conflicts, tray requirements, HiDPI behavior and manual updates. Upstream releases may not yet contain this port.
-
 ## Install
 
 ### Windows
@@ -43,7 +39,7 @@ lolPing is built for Windows 11, 64-bit. Windows 10 may work, but it isn't teste
 
 ### macOS (experimental)
 
-The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 13 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
+The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 12 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
 
 1. Download `lolPing-<version>-arm64.dmg` from the [latest release](https://github.com/darrenprx/lolPing/releases/latest), open it, and drag lolPing into Applications.
 2. Open lolPing. It isn't signed by a registered Apple developer, so macOS says it can't check it for malware. Select **Done**, open **System Settings → Privacy & Security**, scroll down, select **Open Anyway** next to the lolPing message, and confirm.
@@ -70,19 +66,19 @@ Updating from v0.4 or earlier: download the new version by hand once. From v0.5 
 
 On a Mac, use **⌥ Option** instead of Alt, **⌃ Control** instead of Ctrl for emotes, **⌃⌥P** to pause, and the ping icon in the menu bar instead of the tray icon.
 
-The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait, Vision Cleared or an upside-down Enemy Missing ("¿") in settings. The emote wheel has 8 slots too, and you pick its emotes in settings.
+The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait or Vision Cleared in settings. The emote wheel has 8 slots too, and you pick its emotes in settings.
 
 ## Settings
 
 <img src="docs/media/settings.png" width="760" alt="The lolPing settings window, with sections for trigger, toggle, pings and sound, wheel, emotes, room and app">
 
-- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). A custom key still types when tapped, but its letter appears when the key comes up, and holding it alone doesn't repeat.
+- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). The custom key won't type in other apps while pinging is on.
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
 - **Pause in fullscreen apps:** on by default. A fullscreen game keeps every click — trigger + click does nothing there — and gestures resume on the desktop and on other monitors. Windowed games aren't detected, and with an auto-hiding taskbar only borderless fullscreen counts. Windows only for now.
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
-- **Pings and sound:** size, duration, volume, mute and the wheel's tick sound. **Keep my last ping on screen** leaves your newest ping up until your next one or until you pause lolPing, for example to mark where you stopped reading.
-- **Wheel:** adjust the size of both the ping and emote wheels, without changing placed pings or emotes. Drag any ping onto any slice, including Bait, Vision Cleared and the upside-down Enemy Missing, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
-- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only. The speaker on one of your images gives it a sound (MP3, OGG or WAV, up to 1 MB and 5 seconds), which plays on your computer only.
+- **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
+- **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
+- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only.
 - **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
 - **Language:** follows the system display language, or pick English or 简体中文.
 
@@ -109,10 +105,10 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - **Same network:** the first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
 - **Different networks:** with **Allow internet connections** on (the default), friends anywhere join with the same code. Their pings travel through free public [Nostr](https://nostr.com) relays and take a moment longer than on a local network, which is still used whenever it works. Virtual LANs such as ZeroTier or Radmin VPN work too, and Tailscale users simply connect over the internet.
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
-- **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images reach friends as a small still picture; animations and sounds stay on your computer. Friends' images are kept in a small cache on your computer. **Show friends' custom emotes** in Settings → Room turns this off both ways: nothing is sent or fetched, and friends' images show as "?". Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
+- **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images show as a "?" to friends for now. Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
 - **Mute room**, muting one person, and an **Incoming ping and emote limit** (up to Unlimited, counted for both together) keep the spam under control. Pausing lolPing with the shortcut pauses room pings and emotes too.
 - A room holds up to 8 people. Leave and create a new room to get rid of someone.
-- **Privacy:** pings, emotes, your emote images and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes, images or name. Turn **Allow internet connections** off to stay on your local network.
+- **Privacy:** pings, emotes and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes or name. Turn **Allow internet connections** off to stay on your local network.
 
 ## Known limitations
 
@@ -163,15 +159,6 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 - **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows, restyled like System Settings on macOS.
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.
 - **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths. [docs/design-macos.md](docs/design-macos.md) covers the Mac port.
-
-## Contributing
-
-Pull requests and ideas are welcome. Before you start:
-
-- Read [AGENTS.md](AGENTS.md): the layout, the behaviour every change keeps, and the code, test and commit conventions. If you use an AI tool, give it that file too. Claude Code reads it through `CLAUDE.md`, and most other agents read `AGENTS.md` on their own.
-- Title the pull request in [Conventional Commits](https://www.conventionalcommits.org/) style, such as `fix(helper): keep clicks in order after a cancelled wheel`. Pull requests are squash-merged, so the title becomes the commit on `main`.
-- Keep one change per pull request and fill in the template. CI has to pass on Windows and macOS before anything merges.
-- For bigger ideas, open an issue or a [discussion](https://github.com/darrenprx/lolPing/discussions) first, so we can agree on the approach before you write it.
 
 ## Ping assets
 

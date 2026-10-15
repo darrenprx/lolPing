@@ -25,7 +25,7 @@ export function StatusCard({ settings, status }: { settings: Settings; status: A
         <span className="desc">{hint}</span>
       </div>
       <div className="ctl">
-        {noAccess && api.platform === 'mac' ? null : failed || noAccess ? (
+        {noAccess ? null : failed ? (
           <Button appearance="primary" onClick={() => void api.retryHelper()}>{t.restartHelper}</Button>
         ) : (
           <Switch checked={status.enabled} onChange={(_, d) => void api.setEnabled(d.checked)} label={status.enabled ? t.on : t.off} labelPosition="before" />

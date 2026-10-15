@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
@@ -9,7 +9,7 @@ import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
-import { IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
+import { IS_LINUX, IS_MAC, IS_WIN, loadPage, preloadPath } from './paths';
 
 /** A ping the user just placed, in overlay-local CSS px: the room shares these. */
 export interface SharedPing {
@@ -28,16 +28,6 @@ export interface SharedEmote {
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
-/**
- * Where a display's overlay window goes. Windows takes a shown window that covers a whole display for a full-screen app:
- * the taskbar drops behind it and an auto-hidden one won't slide up. One DIP short of the bottom edge, it doesn't.
- */
-export const overlayBounds = (d: Display): Rectangle =>
-  IS_MAC || IS_LINUX ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
-
-/** Messages that put something new on an overlay. */
-const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show']);
 
 /**
  * One transparent, click-through, always-on-top window per display.
@@ -66,9 +56,7 @@ export class OverlayManager extends EventEmitter {
       const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
-      if (displayId === undefined) return;
-      this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
-      this.unkeepElsewhere(displayId); // the wheel's own overlay already swapped its kept ping for this one
+      if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
     });
     ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
       const p = raw as { ref?: unknown; x?: unknown; y?: unknown } | null;
@@ -119,9 +107,7 @@ export class OverlayManager extends EventEmitter {
           this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
           break;
         }
-        const keep = this.settings.keepLastPing ? { keep: true } : {};
-        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y, ...keep });
-        this.unkeepElsewhere(p.displayId);
+        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
         this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
         break;
       }
@@ -169,12 +155,6 @@ export class OverlayManager extends EventEmitter {
     this.windows.clear();
   }
 
-  /** Removes our kept ping, whichever display it is on (lolPing was paused). */
-  dropKeptPings(): void {
-    if (!this.settings.keepLastPing) return;
-    for (const id of this.windows.keys()) this.send(id, 'ping:unkeep', null);
-  }
-
   /** Dismisses a wheel that is on screen, if any. Also used when the helper stops: its cancel would never arrive. */
   cancelWheel(): void {
     if (this.wheelDisplay === null) return;
@@ -187,12 +167,6 @@ export class OverlayManager extends EventEmitter {
     return [...this.windows].find(([, w]) => w === win)?.[0];
   }
 
-  /** We keep one ping on screen: drop it on every display but the one that just showed our new one. */
-  private unkeepElsewhere(displayId: number): void {
-    if (!this.settings.keepLastPing) return;
-    for (const id of this.windows.keys()) if (id !== displayId) this.send(id, 'ping:unkeep', null);
-  }
-
   /** Each owner has one emote on screen: clear theirs on every display but the one that just showed their new one. */
   private clearElsewhere(displayId: number, owner: string): void {
     for (const id of this.windows.keys()) if (id !== displayId) this.send(id, 'emote:clear', { owner });
@@ -201,10 +175,29 @@ export class OverlayManager extends EventEmitter {
   private rebuild(): void {
     this.cancelWheel();
     const displays = screen.getAllDisplays();
-    // macOS reports DIPs; Linux is forced to scale 1 at startup. dipToScreenRect exists only on Windows.
-    this.maps = displays.map((d) => IS_MAC || IS_LINUX
-      ? { id: d.id, dip: d.bounds, phys: d.bounds, scale: 1 }
-      : { id: d.id, dip: d.bounds, phys: screen.dipToScreenRect(null, d.bounds), scale: d.scaleFactor });
+    // The macOS helper already reports points in Electron's DIP space; dipToScreenRect only exists on Windows.
+    this.maps = displays.map((d) => {
+      // phys = physical-pixel rect, which the X11/Win helper needs for screen-coordinate math.
+      let phys: Display['bounds'];
+      if (IS_MAC) {
+        // macOS helper already reports points in Electron's DIP space; no conversion needed.
+        phys = d.bounds;
+      } else if (IS_WIN) {
+        // Windows-only API: converts a DIP rect to physical screen pixels.
+        phys = screen.dipToScreenRect(null, d.bounds);
+      } else {
+        // Linux: screen.dipToScreenRect does not exist. Electron reports Display.bounds in DIP on every
+        // platform, so scale by the display's scaleFactor to recover physical pixels ourselves.
+        const s = d.scaleFactor;
+        phys = {
+          x: Math.round(d.bounds.x * s),
+          y: Math.round(d.bounds.y * s),
+          width: Math.round(d.bounds.width * s),
+          height: Math.round(d.bounds.height * s),
+        };
+      }
+      return { id: d.id, dip: d.bounds, phys, scale: IS_MAC ? 1 : d.scaleFactor };
+    });
     this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
     this.emit('displays', this.numberedList);
     for (const [id, win] of this.windows) {
@@ -215,14 +208,14 @@ export class OverlayManager extends EventEmitter {
     }
     for (const d of displays) {
       const win = this.windows.get(d.id);
-      if (win) win.setBounds(overlayBounds(d));
+      if (win) win.setBounds(d.bounds);
       else this.windows.set(d.id, this.createWindow(d));
     }
   }
 
   private createWindow(d: Display): BrowserWindow {
     const win = new BrowserWindow({
-      ...overlayBounds(d),
+      ...d.bounds,
       transparent: true,
       backgroundColor: '#00000000',
       frame: false,
@@ -247,15 +240,11 @@ export class OverlayManager extends EventEmitter {
     });
     win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
-    if (IS_LINUX) win.setVisibleOnAllWorkspaces(true);
-    if (IS_MAC) {
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-      win.setHiddenInMissionControl(true); // the overlay isn't a window to the user: keep it out of Mission Control
-    }
+    if (IS_MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
     win.once('ready-to-show', () => {
       win.showInactive();
-      win.setBounds(overlayBounds(d)); // re-apply: mixed-DPI setups can size the first frame wrong
+      win.setBounds(d.bounds); // re-apply: mixed-DPI setups can size the first frame wrong
     });
     void loadPage(win, 'overlay');
     return win;
@@ -263,10 +252,6 @@ export class OverlayManager extends EventEmitter {
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
     const w = this.windows.get(displayId);
-    if (!w || w.isDestroyed()) return;
-    // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
-    // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
-    if (!IS_MAC && !IS_LINUX && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
-    w.webContents.send(channel, payload);
+    if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
   }
 }

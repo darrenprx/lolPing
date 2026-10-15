@@ -1,18 +1,15 @@
 import { Button, Spinner } from '@fluentui/react-components';
-import {
-  CursorClick24Regular, Emoji24Regular, ImageAdd24Regular, ResizeLarge24Regular, Speaker2Regular, Speaker224Regular, SpeakerMuteRegular,
-} from '@fluentui/react-icons';
+import { CursorClick24Regular, Emoji24Regular, ImageAdd24Regular, ResizeLarge24Regular, Speaker224Regular } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../../shared/emoteCatalog';
 import {
-  MAX_CUSTOM_EMOTES, customHash, customStillUrl, emoteIconUrl, emoteName, type CustomEmote, type EmoteRef, type ImportError,
-  type SoundError,
+  MAX_CUSTOM_EMOTES, customHash, customStillUrl, emoteIconUrl, emoteName, type EmoteRef, type ImportError,
 } from '../../../shared/emotes';
 import type { Strings } from '../../../shared/i18n';
 import { triggerLabel, type Settings } from '../../../shared/settings';
 import type { WheelPatch } from '../../../shared/wheelLayout';
 import { api } from '../api';
-import { prepareEmote, prepareSound } from '../emoteImport';
+import { prepareEmote } from '../emoteImport';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
 import { SettingRow, SliderRow, SwitchRow } from './rows';
@@ -20,7 +17,6 @@ import { TriggerPicker } from './TriggerPicker';
 import { WheelEditor, type PoolItem } from './WheelEditor';
 
 const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
-const ACCEPT_SOUND = 'audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav';
 
 function importMessage(t: Strings, error: ImportError, file: string): string {
   switch (error) {
@@ -31,27 +27,6 @@ function importMessage(t: Strings, error: ImportError, file: string): string {
     case 'full': return t.importErrFull;
     case 'duplicate': return t.importErrDuplicate(file);
     default: return t.importErrDisk(file);
-  }
-}
-
-function soundMessage(t: Strings, error: SoundError, file: string): string {
-  switch (error) {
-    case 'type': return t.soundErrType(file);
-    case 'size': return t.soundErrSize(file);
-    case 'long': return t.soundErrLong(file);
-    default: return t.importErrDisk(file);
-  }
-}
-
-/** Checks a sound here and hands it to main, which checks and saves it again. */
-async function soundFile(id: EmoteRef, file: File): Promise<SoundError | null> {
-  try {
-    const prepared = await prepareSound(file);
-    if (!prepared.ok) return prepared.error;
-    const result = await api.setEmoteSound(id, prepared.bytes);
-    return result.ok ? null : result.error;
-  } catch {
-    return 'disk';
   }
 }
 
@@ -104,16 +79,7 @@ function useImports(t: Strings) {
       setBusy(false);
     });
   };
-  /** Gives emote `id` the sound in `file`, in the same queue as the imports; its error shows with theirs. */
-  const importSound = (id: EmoteRef, file: File) => {
-    queue.current = queue.current.then(async () => {
-      setBusy(true);
-      const error = await soundFile(id, file);
-      setErrors(error ? [soundMessage(t, error, file.name)] : []);
-      setBusy(false);
-    });
-  };
-  return { busy, errors, importFiles, importSound, clearErrors: () => setErrors([]) };
+  return { busy, errors, importFiles, clearErrors: () => setErrors([]) };
 }
 
 /** The settings change for a wheel edit: only the fields it touches, since an undefined field would reset that setting. */
@@ -135,30 +101,13 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
   // With no key there is nothing to name in the labels, so they fall back to the row's own title.
   const key = s.emoteTrigger === 'off' ? t.emoteKey : triggerLabel(s.emoteTrigger, t.lang, api.platform);
 
-  const { busy, errors, importFiles, importSound, clearErrors } = useImports(t);
+  const { busy, errors, importFiles, clearErrors } = useImports(t);
   const picker = useRef<HTMLInputElement>(null);
-  const soundPicker = useRef<HTMLInputElement>(null);
-  const soundFor = useRef<EmoteRef | null>(null); // the emote whose speaker opened the sound picker
-  const soundTool = (c: CustomEmote): PoolItem<EmoteRef>['tool'] => (c.sound
-    ? {
-      label: t.removeSound(c.name), icon: <Speaker2Regular />, on: true,
-      onClick: () => {
-        clearErrors();
-        void api.setEmoteSound(c.id, null);
-      },
-    }
-    : {
-      label: t.addSound(c.name), icon: <SpeakerMuteRegular />, on: false,
-      onClick: () => {
-        soundFor.current = c.id;
-        soundPicker.current?.click();
-      },
-    });
 
   const pool: PoolItem<EmoteRef>[] = [
     ...EMOTE_CATALOG.map((e) => ({ id: e.slug, icon: emoteIconUrl(e.slug), name: emoteName(e.slug, t.lang, s.customEmotes) })),
     ...s.customEmotes.map((c) => ({
-      id: c.id, icon: customStillUrl(customHash(c.id)), name: c.name, tool: soundTool(c),
+      id: c.id, icon: customStillUrl(customHash(c.id)), name: c.name,
       onRemove: () => {
         clearErrors();
         void api.removeEmote(c.id);
@@ -180,12 +129,6 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
           const files = [...(e.target.files ?? [])]; // copied before the reset below empties the list
           e.target.value = ''; // so picking the same file again still counts as a change
           importFiles(files);
-        }} />
-      <input ref={soundPicker} type="file" accept={ACCEPT_SOUND} hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file && soundFor.current) importSound(soundFor.current, file);
         }} />
     </div>
   );

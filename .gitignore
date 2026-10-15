@@ -8,8 +8,3 @@ native/hook-helper/build/
 .DS_Store
 tools/extract-assets/.cache/
 tools/extract-assets/__pycache__/
-
-# Maintainers' local notes: specs, plans and issue triage stay out of the repo
-.superpowers/
-docs/superpowers/
-docs/fix/

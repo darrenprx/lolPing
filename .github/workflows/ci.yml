@@ -4,51 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch: # Actions → CI → Run workflow: always runs everything
 
 permissions:
   contents: read
-  actions: read # the changes job looks up main's last green run
-
-# A new push cancels the older run on the same branch or pull request: the newest commit contains the older ones.
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  # Skips the tests when only docs changed. Not paths-ignore: test and test-mac are required checks, and a skipped
-  # job passes them where a workflow that never ran would leave the pull request waiting.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      code: ${{ steps.diff.outputs.code }}
-    steps:
-      - id: diff
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          # A push compares with the last commit main passed CI on, not the previous push: that push's run may have
-          # been cancelled, and its code would otherwise go untested behind a docs-only commit.
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            BASE=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push --status success \
-              -L 1 --json headSha --jq '.[0].headSha // ""') || BASE=
-          fi
-          # The compare API lists at most 300 files; past that, with no base (a manual run), or on any error, run
-          # everything.
-          if [ -n "$BASE" ] && files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq '.files | if length < 300 then .[].filename else "too-many" end') \
-            && [ -n "$files" ] \
-            && ! grep -qvE '\.md$|^docs/|^\.github/ISSUE_TEMPLATE/|^LICENSE$' <<< "$files"; then
-            echo "code=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "$files"
-
   test:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -65,8 +26,6 @@ jobs:
       - run: npm run build:site
 
   test-mac:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: macos-latest # Apple Silicon
     steps:
       - uses: actions/checkout@v7
@@ -94,34 +53,4 @@ jobs:
         with:
           name: lolPing-mac-arm64
           path: release/*.dmg
-          retention-days: 14
-
-  test-linux:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y libx11-dev libxi-dev libxtst-dev xvfb
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test:helper
-      - run: npm run test:linux-input
-      - run: npm test
-      - run: npm run dist:linux
-      - name: Check native helper in the Linux package
-        run: |
-          test -x release/linux-unpacked/resources/hook-helper
-          ldd release/linux-unpacked/resources/hook-helper
-          dpkg-deb --info release/*.deb
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lolPing-linux-x64
-          path: |
-            release/*.AppImage
-            release/*.deb
           retention-days: 14

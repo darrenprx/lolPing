@@ -2,7 +2,6 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-#include <array>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -27,8 +26,6 @@ Decision* g_decision = nullptr;
 Output* g_out = nullptr;
 CFMachPortRef g_tap = nullptr;
 CGEventFlags g_flags = 0;  // the modifier state Decision last saw
-// Keep the press's click count until its replay, including replays caused by a trigger key-up.
-std::array<int64_t, 6> g_clickStates{1, 1, 1, 1, 1, 1};
 
 uint64_t nowMs() {
   using namespace std::chrono;
@@ -76,33 +73,20 @@ void postButton(Btn btn, bool down) {
   CGEventRef e = CGEventCreateMouseEvent(nullptr, type, cursorLocation(), button);
   if (e == nullptr) return;
   CGEventSetIntegerValueField(e, kCGMouseEventButtonNumber, static_cast<int64_t>(button));
-  CGEventSetIntegerValueField(e, kCGMouseEventClickState, g_clickStates[static_cast<size_t>(btn)]);
+  CGEventSetIntegerValueField(e, kCGMouseEventClickState, 1);
   CGEventSetFlags(e, g_flags);  // a replayed Option-click keeps its Option
   CGEventSetIntegerValueField(e, kCGEventSourceUserData, kSelfMarker);
   CGEventPost(kCGHIDEventTap, e);
   CFRelease(e);
 }
 
-// Modifiers are left out: their real flag change always passes, and a posted key carries g_flags.
-void postKey(uint32_t vk, bool down) {
-  const int code = mac::vkToKeyCode(vk);
-  if (code < 0 || isModifierVk(vk)) return;
-  CGEventRef e = CGEventCreateKeyboardEvent(nullptr, static_cast<CGKeyCode>(code), down);
-  if (e == nullptr) return;
-  CGEventSetFlags(e, g_flags);  // a replayed Shift+G stays a capital G
-  CGEventSetIntegerValueField(e, kCGEventSourceUserData, kSelfMarker);
-  CGEventPost(kCGHIDEventTap, e);
-  CFRelease(e);
-}
-
-// Reports emits, replays buttons and keys, and returns whether to swallow the event.
+// Reports emits, replays buttons, and returns whether to swallow the event.
+// Key injections only carry the Windows menu-key mask, which is switched off on macOS.
 bool apply(const Result& r) {
   for (const auto& e : r.emits) g_out->emit(e);
   for (const auto& i : r.injects) {
     if (i.kind == InjectKind::ButtonDown) postButton(i.btn, true);
     if (i.kind == InjectKind::ButtonUp) postButton(i.btn, false);
-    if (i.kind == InjectKind::KeyDown) postKey(i.vk, true);
-    if (i.kind == InjectKind::KeyUp) postKey(i.vk, false);
   }
   return r.swallow;
 }
@@ -184,10 +168,7 @@ CGEventRef tapCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void
     default:
       return event;
   }
-  if (e.kind == EvKind::MouseDown) {
-    g_clickStates[static_cast<size_t>(e.btn)] = CGEventGetIntegerValueField(event, kCGMouseEventClickState);
-    g_decision->syncKeyStates(isKeyDown);
-  }
+  if (e.kind == EvKind::MouseDown) g_decision->syncKeyStates(isKeyDown);
   return apply(g_decision->onEvent(e)) ? nullptr : event;
 }
 

@@ -20,8 +20,8 @@ body:
   - type: input
     id: os
     attributes:
-      label: Operating system and desktop session
-      placeholder: Windows 11 24H2, macOS 15.4 on an M2, or Ubuntu 24.04 GNOME X11
+      label: Windows or macOS version
+      placeholder: Windows 11 24H2, or macOS 15.4 on an M2
   - type: textarea
     id: setup
     attributes:

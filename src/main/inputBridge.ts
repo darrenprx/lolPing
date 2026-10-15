@@ -15,7 +15,7 @@ export interface BridgeOptions {
 
 /**
  * Runs the hook helper, parses its stdout and restarts it when it crashes.
- * An exit with HELPER_EXIT_NO_ACCESS (macOS Accessibility or Linux X11 unavailable) is not a crash: the status becomes 'noAccess'
+ * An exit with HELPER_EXIT_NO_ACCESS (macOS Accessibility missing) is not a crash: the status becomes 'noAccess'
  * and the helper stays stopped until `retry()`.
  * Events: 'event' (HelperEvent), 'status' (HelperStatus), 'log' (string).
  */

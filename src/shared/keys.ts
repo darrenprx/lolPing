@@ -88,7 +88,7 @@ export function modLabels(mods: number, platform: Platform = 'win'): string[] {
   if (mods & MOD.ctrl) out.push('Ctrl');
   if (mods & MOD.alt) out.push('Alt');
   if (mods & MOD.shift) out.push('Shift');
-  if (mods & MOD.win) out.push(platform === 'linux' ? 'Super' : 'Win');
+  if (mods & MOD.win) out.push('Win');
   return out;
 }
 

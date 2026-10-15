@@ -41,9 +41,14 @@ struct Config {
   uint32_t emoteTriggerVk = 0;           // only for Trigger::CustomVk
   bool emoteClick = false;
   int dragThresholdPx = 8;
-  uint32_t toggleMods = ModCtrl | ModAlt;
+  uint32_t toggleMods = ModAlt | ModWin;  // Alt+Win+P: user-chosen on UOS (Ctrl+Alt+P reserved for screen reader)
   uint32_t toggleVk = 0x50;  // 'P'
   bool enabled = true;
+  // X11 (Sync grab) cannot safely replay a swallowed press as a fresh click: the real button-up would
+  // be replayed to the window while our injected down had no matched-down there, sticking the button.
+  // When true, an unfinished gesture (trigger released or button up before it became a wheel) is
+  // swallowed whole instead of replayed. Off on Windows, where events are suppressed at the source.
+  bool swallowUnfinishedClick = false;
 };
 
 struct Emit {
@@ -95,6 +100,12 @@ class Decision {
   State state() const { return state_; }
   bool enabled() const { return enabled_; }
   const Config& config() const { return cfg_; }
+  // X11-only: swallow an unfinished gesture instead of replaying it as a click (Sync grab would stick
+  // the button). Set by the Linux hook; no effect on Windows/macOS builds that target it differently.
+  void setSwallowUnfinishedClick(bool on) { cfg_.swallowUnfinishedClick = on; }
+  // X11-only: the gesture's current drag button, so the hook can REPLAY (not drop) its events to the
+  // window. Dropping a swallowed left-button press makes it feel "dead" on X11.
+  Btn dragButton() const { return dragBtn_; }
 
  private:
   // One wheel's trigger settings, read from the ping or emote fields of cfg_.
@@ -117,7 +128,6 @@ class Decision {
   bool startsGesture(WheelKind k, Btn btn) const;
   void markSwallow();
   void cancelGesture(Result& r);
-  bool flushHeldBack(uint32_t vk, Result& r);
   void onKeyDown(const InputEvent& e, Result& r);
   void onKeyUp(const InputEvent& e, Result& r);
   void onMouseDown(const InputEvent& e, Result& r);
@@ -137,13 +147,6 @@ class Decision {
   // that chord belongs to another program, so clicks pass through until every trigger is released.
   bool foreignKey_ = false;
   bool maskMenuKeys_ = true;
-  // Tap-through, so a custom trigger key still types: a lone tap is replayed on release, and a key pressed while
-  // it is held flushes it first. State (custom-key triggers only, 0 = none):
-  // heldBackVk_: the trigger key is down but not sent yet; a drag consumes it, a lone release types it.
-  // typedVk_: the held-back key was flushed because another key was pressed (the user is typing):
-  // its repeats and its real key-up now pass through to the OS.
-  uint32_t heldBackVk_ = 0;
-  uint32_t typedVk_ = 0;
   WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   Btn dragBtn_ = Btn::None;
   int px_ = 0;

@@ -10,7 +10,7 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 
 const api: SettingsApi = {
   // Inlined rather than imported: a sandboxed preload can't require a shared chunk.
-  platform: process.platform === 'darwin' ? 'mac' : process.platform === 'linux' ? 'linux' : 'win',
+  platform: process.platform === 'linux' ? 'linux' : process.platform === 'darwin' ? 'mac' : 'win',
   getSettings: () => ipcRenderer.invoke(SETTINGS_CH.get),
   setSettings: (patch) => ipcRenderer.invoke(SETTINGS_CH.set, patch),
   onSettings: (cb) => subscribe(SETTINGS_CH.changed, cb),
@@ -21,7 +21,6 @@ const api: SettingsApi = {
   previewEmote: (ref) => ipcRenderer.invoke(SETTINGS_CH.previewEmote, ref),
   importEmote: (file) => ipcRenderer.invoke(SETTINGS_CH.emoteImport, file),
   removeEmote: (id) => ipcRenderer.invoke(SETTINGS_CH.emoteRemove, id),
-  setEmoteSound: (id, sound) => ipcRenderer.invoke(SETTINGS_CH.emoteSound, id, sound),
   getAbout: () => ipcRenderer.invoke(SETTINGS_CH.about),
   openSettingsFolder: () => ipcRenderer.invoke(SETTINGS_CH.openFolder),
   openProjectPage: () => ipcRenderer.invoke(SETTINGS_CH.openProject),

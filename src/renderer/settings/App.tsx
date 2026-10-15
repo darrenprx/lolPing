@@ -1,6 +1,6 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular, Pin24Regular,
+  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
   Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
@@ -42,7 +42,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'missingflip']);
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared']);
 
 /** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
 function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {
@@ -140,7 +140,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
       </nav>
       <main className="content" ref={mainRef} onScroll={onScroll}>
         <h1 className="pageTitle">{t.pageTitle}</h1>
-        {MAC && status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
+        {status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
         <StatusCard settings={s} status={status} />
 
         <div className="section" id="trigger">{t.navTrigger}</div>
@@ -159,7 +159,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
-        {PLATFORM === 'win' && ( // only the Windows helper has a fullscreen probe
+        {!MAC && ( // the macOS helper has no fullscreen probe yet
           <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
@@ -185,8 +185,6 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ pingSizePx: v })} />
         <SliderRow limit="pingDurationS" icon={<Timer24Regular />} title={t.pingDuration} description={t.pingDurationDesc}
           value={s.pingDurationS} format={(v) => `${v.toFixed(1)} s`} onChange={(v) => void update({ pingDurationS: v })} />
-        <SwitchRow icon={<Pin24Regular />} title={t.keepLastPing} description={t.keepLastPingDesc}
-          checked={s.keepLastPing} onChange={(v) => void update({ keepLastPing: v })} />
         <SliderRow limit="volume" icon={<Speaker224Regular />} title={t.volume} value={s.volume}
           format={(v) => `${v}`} onChange={(v) => void update({ volume: v })} dim={s.muted} />
         <SwitchRow icon={<SpeakerMute24Regular />} title={t.mute} checked={s.muted} onChange={(v) => void update({ muted: v })} />
@@ -194,8 +192,6 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           checked={s.tickSound} onChange={(v) => void update({ tickSound: v })} />
 
         <div className="section" id="wheel">{t.navWheel}</div>
-        <SliderRow limit="wheelSizePx" icon={<ResizeLarge24Regular />} title={t.wheelSize} description={t.wheelSizeDesc}
-          value={s.wheelSizePx} format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ wheelSizePx: v })} />
         <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
           defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
           labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}

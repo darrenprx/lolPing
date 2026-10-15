@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=lolPing
+Exec=/opt/lolPing/lolping --no-sandbox %U
+Terminal=false
+Type=Application
+Icon=lolping
+StartupWMClass=lolping
+Comment=League of Legends 风格信号/表情轮盘桌面工具
+Categories=Utility;

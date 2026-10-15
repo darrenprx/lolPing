@@ -54,14 +54,10 @@ const en = {
   pingSize: 'Ping size',
   pingDuration: 'Ping duration',
   pingDurationDesc: 'How long a ping stays on screen',
-  keepLastPing: 'Keep my last ping on screen',
-  keepLastPingDesc: 'Your newest ping stays until your next one or until you pause lolPing. Pings from your room still fade.',
   volume: 'Volume',
   mute: 'Mute ping sounds',
   tickSound: 'Wheel tick sound',
   tickSoundDesc: 'Plays a quiet click when hovering a new slice',
-  wheelSize: 'Wheel size',
-  wheelSizeDesc: 'Scales both the ping and emote wheels, without changing placed pings or emotes',
   wheelTitle: 'Customize the wheel',
   wheelDesc: (trigger: string) => `Drag a ping onto a slice to put it there. Drop it on the centre to make it the ${trigger} + click ping.`,
   wheelReset: 'Reset to default',
@@ -89,12 +85,7 @@ const en = {
   allEmotesDesc: 'Click to preview. Drag onto the wheel to assign, or click an emote and then a slot.',
   removeImage: (name: string) => `Remove ${name}`,
   addImage: 'Add image…',
-  addImageDesc: 'PNG, JPG, GIF or WebP, up to 8 MB and 8192 pixels on the longest side. You can also drop images on the list. The speaker on one of your images gives it a sound: MP3, OGG or WAV, up to 1 MB and 5 seconds. It plays on your computer only.',
-  addSound: (name: string) => `Add a sound to ${name}`,
-  removeSound: (name: string) => `Remove the sound from ${name}`,
-  soundErrType: (file: string) => `${file} isn’t an MP3, OGG or WAV sound.`,
-  soundErrSize: (file: string) => `${file} is too big: a sound can be up to 1 MB.`,
-  soundErrLong: (file: string) => `${file} is too long: a sound can be up to 5 seconds.`,
+  addImageDesc: 'PNG, JPG, GIF or WebP, up to 8 MB and 8192 pixels on the longest side. You can also drop images on the list.',
   yourImages: (n: number, max: number) => `Your images: ${n} of ${max}`,
   importErrType: (file: string) => `${file} isn’t a PNG, JPG, GIF or WebP image.`,
   importErrSize: (file: string) => `${file} is too big: an image can be up to 8 MB and 8192 pixels on its longest side.`,
@@ -181,8 +172,6 @@ const en = {
   roomLimitDesc: 'Pings and emotes together, per person. Unlimited lets friends spam you',
   roomLimitValue: (n: number) => (n === 0 ? 'Unlimited' : `${n} / s`),
   roomRejoin: 'Rejoin last room on launch',
-  friendEmotes: 'Show friends’ custom emotes',
-  friendEmotesDesc: 'Their still images travel through the room into a small local cache. Animations never leave their computer.',
   roomInternet: 'Allow internet connections',
   roomInternetDesc: 'Meet friends on other networks through public relays. Off: same network only.',
   roomInternetUnavailable: 'Internet unavailable',
@@ -197,7 +186,7 @@ const en = {
   pingNames: {
     danger: 'Danger', push: 'Push', omw: 'On My Way', allin: 'All In', assist: 'Assist Me',
     needvision: 'Need Vision', missing: 'Enemy Missing', enemyvision: 'Enemy Vision', generic: 'Generic',
-    bait: 'Bait', visioncleared: 'Vision Cleared', missingflip: 'Upside-down Missing',
+    bait: 'Bait', visioncleared: 'Vision Cleared',
   } as Record<PingId, string>,
 
   // main process
@@ -312,14 +301,10 @@ const zh: Strings = {
   pingSize: '信号大小',
   pingDuration: '信号持续时间',
   pingDurationDesc: '信号在屏幕上停留多久',
-  keepLastPing: '保留我最后一个信号',
-  keepLastPingDesc: '你最新的信号会一直留在屏幕上，直到你发出下一个信号或暂停 lolPing。房间里其他人的信号照常消失。',
   volume: '音量',
   mute: '静音信号声音',
   tickSound: '轮盘提示音',
   tickSoundDesc: '悬停到新的扇区时播放轻微的点击声',
-  wheelSize: '轮盘大小',
-  wheelSizeDesc: '同时调整信号和表情轮盘，不影响已放出的信号或表情大小',
   wheelTitle: '自定义轮盘',
   wheelDesc: (trigger) => `把信号拖到扇区上即可放置。拖到中心则设为 ${trigger} + 单击发送的信号。`,
   wheelReset: '恢复默认',
@@ -346,12 +331,7 @@ const zh: Strings = {
   allEmotesDesc: '单击可预览。拖到轮盘上即可分配，也可以先单击表情，再单击位置。',
   removeImage: (name) => `移除“${name}”`,
   addImage: '添加图片…',
-  addImageDesc: '支持 PNG、JPG、GIF 和 WebP，最大 8 MB，最长边不超过 8192 像素。也可以把图片拖到列表上。点自己图片上的喇叭可以给它加声音：MP3、OGG 或 WAV，最大 1 MB，最长 5 秒，只在你自己的电脑上播放。',
-  addSound: (name) => `给“${name}”添加声音`,
-  removeSound: (name) => `移除“${name}”的声音`,
-  soundErrType: (file) => `“${file}”不是 MP3、OGG 或 WAV 声音。`,
-  soundErrSize: (file) => `“${file}”太大：声音最大 1 MB。`,
-  soundErrLong: (file) => `“${file}”太长：声音最长 5 秒。`,
+  addImageDesc: '支持 PNG、JPG、GIF 和 WebP，最大 8 MB，最长边不超过 8192 像素。也可以把图片拖到列表上。',
   yourImages: (n, max) => `我的图片：${n}/${max}`,
   importErrType: (file) => `“${file}”不是 PNG、JPG、GIF 或 WebP 图片。`,
   importErrSize: (file) => `“${file}”太大：图片最大 8 MB，最长边不超过 8192 像素。`,
@@ -436,8 +416,6 @@ const zh: Strings = {
   roomLimitDesc: '信号和表情合计，按每人计算。选择“不限”时朋友可以随意刷屏',
   roomLimitValue: (n) => (n === 0 ? '不限' : `${n} 次/秒`),
   roomRejoin: '启动时重新加入上次的房间',
-  friendEmotes: '显示好友的自定义表情',
-  friendEmotesDesc: '好友的静态图会通过房间传到一个很小的本地缓存。动图永远不会离开对方的电脑。',
   roomInternet: '允许互联网连接',
   roomInternetDesc: '通过公共中继与其他网络上的朋友连接。关闭后仅限同一网络。',
   roomInternetUnavailable: '互联网不可用',
@@ -452,7 +430,7 @@ const zh: Strings = {
   pingNames: {
     danger: '危险', push: '推进', omw: '正在赶来', allin: '全力进攻', assist: '请求协助',
     needvision: '需要视野', missing: '敌人消失', enemyvision: '敌方视野', generic: '普通信号',
-    bait: '诱饵', visioncleared: '视野已清除', missingflip: '反向问号',
+    bait: '诱饵', visioncleared: '视野已清除',
   },
 
   limitations: [
@@ -566,49 +544,11 @@ const MAC: Record<Lang, Partial<Strings>> = {
   },
 };
 
-const LINUX: Record<Lang, Partial<Strings>> = {
-  en: {
-    launchAtStartup: 'Open at login',
-    languageDesc: 'Follow the system, or pick one',
-    languageAuto: 'Follow the system',
-    openSettingsFolder: 'Open settings folder',
-    hintNeedModifier: 'Add Ctrl, Alt or Super',
-    statusNoAccess: 'X11 input unavailable',
-    trayTipNoAccess: 'lolPing: requires an X11 desktop session',
-    statusNoAccessHint: 'Use an X11 desktop session with XInput 2.1 and XTest. Wayland sessions are not supported yet.',
-    roomNetworkHint: 'Allow lolPing through your firewall on trusted local networks to discover other room members.',
-    limitations: [
-      'Linux currently requires an X11 session with a compositor. Native Wayland and XWayland sessions are not supported.',
-      'Desktop shortcuts (for example Alt + drag or Super) can reserve a gesture. Select Ctrl, Shift or a mouse side button if it conflicts.',
-      'Caps Lock and automatic fullscreen-game detection are unavailable on Linux. Pause lolPing before playing a game.',
-      'Linux uses 1:1 screen pixels for accurate overlay placement. Automatic updates are unavailable; install new Linux packages manually.',
-      'GNOME needs an AppIndicator extension to display the tray icon.',
-    ],
-  },
-  'zh-CN': {
-    launchAtStartup: '登录时启动',
-    languageDesc: '跟随系统，或手动选择',
-    languageAuto: '跟随系统',
-    openSettingsFolder: '打开设置文件夹',
-    hintNeedModifier: '请加上 Ctrl、Alt 或 Super',
-    statusNoAccess: '无法使用 X11 输入',
-    trayTipNoAccess: 'lolPing：需要 X11 桌面会话',
-    statusNoAccessHint: '请登录支持 XInput 2.1 和 XTest 的 X11 桌面。目前不支持 Wayland 会话。',
-    roomNetworkHint: '请在受信任的局域网中允许 lolPing 通过防火墙，以发现房间中的其他成员。',
-    limitations: [
-      'Linux 目前需要带合成器的 X11 桌面，不支持原生 Wayland 或 Wayland 会话内的 XWayland。',
-      '桌面快捷键可能占用 Alt + 拖动或 Super 等操作。发生冲突时，请改用 Ctrl、Shift 或鼠标侧键。',
-      'Linux 暂不提供 Caps Lock 触发键和全屏游戏自动检测，玩游戏前请暂停 lolPing。',
-      'Linux 使用 1:1 屏幕像素以确保覆盖层位置准确。暂不自动更新，请手动安装新版 Linux 包。',
-      'GNOME 桌面需要 AppIndicator 扩展才能显示托盘图标。',
-    ],
-  },
-};
-
 const TABLES: Record<Platform, Record<Lang, Strings>> = {
   win: { en, 'zh-CN': zh },
-  linux: { en: { ...en, ...LINUX.en }, 'zh-CN': { ...zh, ...LINUX['zh-CN'] } },
   mac: { en: { ...en, ...MAC.en }, 'zh-CN': { ...zh, ...MAC['zh-CN'] } },
+  // Linux reuses the base (Windows) strings: no macOS-only menu bar / accessibility wording applies.
+  linux: { en, 'zh-CN': zh },
 };
 
 /** The same object for the same arguments, so it can be a React dependency. */

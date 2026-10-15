@@ -18,7 +18,6 @@ const MEANINGS: Record<PingId, string> = {
   generic: 'Look here.',
   bait: 'Act weak and lure them in.',
   visioncleared: 'Their ward here is gone.',
-  missingflip: 'Enemy Missing, upside down.',
 };
 
 const $ = <T extends HTMLElement>(sel: string): T => document.querySelector(sel) as T;

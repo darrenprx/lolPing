@@ -5,7 +5,7 @@ export type WheelKind = 'ping' | 'emote';
 
 /**
  * Messages the hook helper writes to stdout, one JSON object per line.
- * Coordinates are physical pixels on Windows/Linux and global points (Electron DIPs) on macOS.
+ * Coordinates are physical pixels on Windows and global points (Electron DIPs) on macOS.
  */
 export type HelperEvent =
   | { type: 'ready'; version: number }
@@ -15,10 +15,10 @@ export type HelperEvent =
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
-/** `noAccess`: macOS Accessibility access or a supported Linux X11 session is missing. */
+/** `noAccess`: macOS hasn't given lolPing Accessibility access, so the helper can't run. */
 export type HelperStatus = 'starting' | 'running' | 'failed' | 'noAccess';
 
-/** The helper's exit code when OS input is unavailable (macOS permissions / unsupported Linux session). */
+/** The helper's exit code when it can't create its event tap (macOS Accessibility access missing). */
 export const HELPER_EXIT_NO_ACCESS = 3;
 
 type PointType = 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click';

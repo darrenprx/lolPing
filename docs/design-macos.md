@@ -10,7 +10,6 @@ Bring lolPing to macOS with the same behaviour as on Windows: hold a key, drag, 
 | Topic | Decision |
 |---|---|
 | Hardware | Apple Silicon (arm64) only |
-| Minimum OS | macOS 13 (Ventura), required by Electron 44 |
 | Testing | No Mac available to the developer. CI on an Apple Silicon runner builds, unit-tests and packages it. A friend tries the published release. |
 | Signing | Ad-hoc (`codesign -s -`), no Apple Developer account, no notarization |
 | Codebase | One codebase. Developed on the `mac` branch, merged into `main`, released together with Windows as v0.2.0 |
@@ -33,7 +32,7 @@ The helper stays one C++ program. `decision.cpp`, `commands`, `json`, `output`, 
 ### 2.1 Event tap
 
 - A `CGEventTap` (session level, head insert, active) on its own thread with a `CFRunLoop`. The main thread reads stdin and forwards commands to the tap thread's run loop.
-- **Swallow:** the callback returns `NULL`. **Replay:** a new down + up posted with `CGEventPost`, for buttons and for a tapped custom trigger key (with the current modifier flags; modifier keys are never posted, their real flag change passes). Our own events carry `kSelfMarker` in `kCGEventSourceUserData` and are ignored.
+- **Swallow:** the callback returns `NULL`. **Replay:** a new down + up posted with `CGEventPost`. Our own events carry `kSelfMarker` in `kCGEventSourceUserData` and are ignored.
 - **Watchdog:** a 1 s `CFRunLoopTimer`, same as the Windows `WM_TIMER`.
 - **Tap disabled** (`kCGEventTapDisabledByTimeout` / `ByUserInput`): re-enable it and resync key state.
 - **stdin EOF or `shutdown`:** stop the run loop, remove the tap, exit.
@@ -60,7 +59,7 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 - **Platform:** `src/shared/platform.ts` (`'win' | 'mac'`), detected in main and passed to the settings page by its preload.
 - **Helper path:** `hook-helper.exe` on Windows, `hook-helper` on Mac.
 - **Coordinates:** on Mac each display map uses `phys = dip` and `scale = 1`, so `physicalToLocal` needs no change and `screen.dipToScreenRect` (Windows-only) is never called.
-- **Overlays:** `type: 'panel'`, `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`, hidden in Mission Control, level `screen-saver`, click-through.
+- **Overlays:** `type: 'panel'`, `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`, level `screen-saver`, click-through.
 - **App shell:** Dock icon hidden except while the settings window is open; a minimal application menu (app, Edit, Window) so ⌘Q, ⌘W and clipboard shortcuts work.
 - **Menu bar icon:** a template image (`build/trayTemplate.png`, `@2x`). Off = half alpha. Failed or no access = a non-template orange icon. A click opens the menu, which includes Settings….
 - **Startup:** start in the menu bar with a toast pointing at the menu bar icon. The settings window opens on first run (no settings file yet), when Accessibility is missing, and on `activate`/`second-instance`. Open at login uses `setLoginItemSettings({ openAtLogin })`.
@@ -74,11 +73,10 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 
 - `<html data-platform="mac">`. A Fluent theme made with `createLightTheme`/`createDarkTheme` from macOS-blue brand ramps, the system font and Mac radii.
 - `mac.css`, scoped to `[data-platform="mac"]`: translucent sidebar on `vibrancy: 'sidebar'`, 52 px drag bar leaving room for the traffic lights (`titleBarStyle: 'hiddenInset'`), grouped inset rows with separators and no per-row icons, iOS-style green switches without On/Off text, Mac keycaps.
-- The Dock animation warps the page's last frame, where the sidebar is transparent (the vibrancy sits behind the page). While the window is minimized, the main process inserts a plain sidebar fill and keeps the renderer painting; on restore it removes the fill and rebuilds the vibrancy.
 - `PermissionCard` appears at the top while the status is `noAccess`.
 - `triggerLabel`, `hotkeyParts`, `hotkeyLabel` take the platform: Mac shows ⌥ Option / ⌃ Control / ⇧ Shift / ⌘ Command and hotkeys as `⌃⌥P`.
 - `strings(lang, platform)` overlays Mac wording in English and Chinese (Open at login, Follow macOS, menu bar instead of tray, Mac limitations, "Add ⌃, ⌥ or ⌘").
-- Key capture rejects Caps Lock on Mac, including the custom-key and shortcut paths. `normalizeSettings(raw, platform)` repairs both named and custom Caps Lock triggers to Option (ping) or Control (emote).
+- The trigger picker hides Caps Lock on Mac, and `normalizeSettings(raw, platform)` maps a stored Caps Lock trigger to Option.
 
 ## 5. Packaging, CI, release
 

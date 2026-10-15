@@ -1,5 +1,5 @@
 /** Wheel geometry in CSS pixels (matches prototype/wheel-demo.html). */
-export const WHEEL = { size: 600, innerR: 86, outerR: 188, extR: 288, iconR: 137, iconSize: 48 } as const;
+export const WHEEL = { innerR: 86, outerR: 188, extR: 288, iconR: 137, iconSize: 48 } as const;
 
 /**
  * Slice under an offset from the wheel centre. Screen coordinates (y down).

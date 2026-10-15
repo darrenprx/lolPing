@@ -1,12 +1,9 @@
-import { sniffAudio } from '../../shared/audioSniff';
 import {
-  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, SOUND_MAX_BYTES, SOUND_MAX_S, STILL_FALLBACK_SIDE, STILL_MAX_BYTES,
-  STILL_SIDE, type EmoteFile, type ImportError, type SoundError,
+  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, STILL_FALLBACK_SIDE, STILL_MAX_BYTES, STILL_SIDE, type EmoteFile, type ImportError,
 } from '../../shared/emotes';
 import { imageSize, sniffImage, type ImageType } from '../../shared/imageSniff';
 
 export type Prepared = { ok: true; file: EmoteFile } | { ok: false; error: ImportError };
-export type PreparedSound = { ok: true; bytes: Uint8Array } | { ok: false; error: SoundError };
 
 const QUALITIES: readonly number[] = [0.85, 0.75, 0.65, 0.55, 0.45];
 const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
@@ -102,28 +99,5 @@ export async function prepareEmote(file: File): Promise<Prepared> {
   } finally {
     frame?.close();
     decoder?.close();
-  }
-}
-
-/** A sound's type by its first bytes, its size, and its length in seconds once decoded (null before decoding). */
-export function checkSound(head: Uint8Array, size: number, seconds: number | null): SoundError | null {
-  if (!sniffAudio(head)) return 'type';
-  if (size > SOUND_MAX_BYTES) return 'size';
-  return seconds !== null && seconds > SOUND_MAX_S + 0.05 ? 'long' : null; // a little slack for encoder padding
-}
-
-/** Reads a picked sound file and checks it: OGG, MP3 or WAV, at most SOUND_MAX_BYTES and SOUND_MAX_S seconds. */
-export async function prepareSound(file: File): Promise<PreparedSound> {
-  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const early = checkSound(head, file.size, null); // refused without reading the rest of what may be a huge file
-  if (early) return { ok: false, error: early };
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const ctx = new OfflineAudioContext(1, 1, 44100);
-  try {
-    const decoded = await ctx.decodeAudioData(bytes.slice().buffer); // decoding detaches the buffer it gets: hand it a copy
-    const long = checkSound(head, bytes.length, decoded.duration);
-    return long ? { ok: false, error: long } : { ok: true, bytes };
-  } catch {
-    return { ok: false, error: 'type' }; // looked like a sound, but doesn't decode
   }
 }

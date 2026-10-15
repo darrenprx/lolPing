@@ -16,7 +16,6 @@ node tools/room-peer/run.mjs PING-XXXXX-XXXXX --name Bot --rate 1
 | `--display` | `1` | Display number its pings target |
 | `--relay` | off | Join through the public relays instead of the LAN |
 | `--emotes` | off | Also send emotes (see below) |
-| `--image` | none | A still `.webp` this peer owns and shares (see below) |
 
 Start lolPing, create a room, copy the code and run the command with it. Several peers can run at once on different ports.
 
@@ -27,18 +26,6 @@ With `--emotes` the peer alternates pings and random bundled emotes at `--rate`,
 ```bash
 node tools/room-peer/run.mjs PING-XXXXX-XXXXX --emotes --rate 0.5
 ```
-
-## Custom emote images
-
-The peer always fetches the images lolPing announces (the custom emotes on its wheel and centre) and prints `[in] still <hash> arrived and passed the hash and image checks` for each.
-
-With `--image still.webp` it also owns that image: it announces it, prints `[in] want <hash>` when lolPing asks for it, and sends it in chunks. With `--emotes`, its custom emote every 10 s is that image, so lolPing shows the picture instead of "?". The file must pass the import checks: a still WebP of at most 12,288 bytes and 160 px. The still lolPing writes for an imported image (`<settings folder>/emotes/<hash>.webp`) is one; copy it out, then remove that emote in lolPing so it has to fetch it.
-
-```bash
-node tools/room-peer/run.mjs PING-XXXXX-XXXXX --emotes --rate 0.5 --image still.webp
-```
-
-Two peers on different ports reach each other too: the second one sends to the first on port 47474, and the first answers.
 
 ## Over the internet path
 
