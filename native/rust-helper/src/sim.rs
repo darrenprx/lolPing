@@ -47,7 +47,10 @@ pub fn run<R: BufRead, W: Write>(reader: R, writer: &mut W) {
                 report(writer, &r, true);
             }
             Command::Invalid => {
-                let _ = writeln!(writer, "{{\"type\":\"error\",\"message\":\"invalid command: {}\"}}", line);
+                // Serialize (not string-interpolate): the raw command contains quotes that must be escaped,
+                // matching the C++ helper's jsonEscape (output.cpp).
+                let obj = serde_json::json!({ "type": "error", "message": format!("invalid command: {}", line) });
+                let _ = writeln!(writer, "{}", obj);
             }
         }
         writer.flush().ok();
