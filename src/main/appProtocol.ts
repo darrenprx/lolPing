@@ -17,7 +17,7 @@ export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|sound)$/;
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
     // corsEnabled: a page fetches an animation's bytes to time one loop of it (emoteStage). Without this the browser
-    // drops a cross-origin fetch to the scheme before it ever reaches the handler.
+    // drops a cross-origin fetch to the scheme before it ever reaches the handler, whatever the response headers say.
     { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
 }
@@ -49,9 +49,6 @@ async function fetchUncached(file: string): Promise<Response> {
   const res = await net.fetch(pathToFileURL(file).toString());
   const headers = new Headers(res.headers);
   headers.set('Cache-Control', 'no-store');
-  // corsEnabled lets a cross-origin fetch through; this answers its origin check for every caller, the dev
-  // server's pages (http://localhost) included.
-  headers.set('Access-Control-Allow-Origin', '*');
   return new Response(res.body, { status: res.status, headers });
 }
 

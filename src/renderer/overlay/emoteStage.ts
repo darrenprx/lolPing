@@ -14,9 +14,9 @@ export interface EmoteOptions {
 interface Live {
   root: HTMLElement;
   timer: ReturnType<typeof setTimeout>;
-  /** The object URL of a bundled emote's image, once its Blob has arrived. */
+  /** The object URL an animation plays from, once its bytes have arrived. */
   url: string | null;
-  /** The moment an animation freezes on the still, when its loop ends before the emote's time is up. */
+  /** The moment a custom animation freezes on its still, when its loop ends before the emote's time is up. */
   freeze: ReturnType<typeof setTimeout> | null;
   gone: boolean;
 }
@@ -35,11 +35,11 @@ function image(cls = ''): HTMLImageElement {
   return el;
 }
 
-/** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), gone after EMOTE_DURATION_S — or, for a custom animation, after one loop of it. */
+/** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), gone after EMOTE_DURATION_S — or, for a custom animation, after one loop of it plus its frozen hold. */
 export class EmoteStage {
   private readonly live = new Map<string, Live>();
-  private readonly blobs = new Map<string, Promise<Blob>>();
-  private readonly anims = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
+  /** An animation file's bytes, fetched once per URL: every spawn plays them from a fresh object URL. */
+  private readonly files = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
 
   constructor(private readonly layer: HTMLElement, private readonly fetchBlob: (url: string) => Promise<Blob> = fetchImage) {}
 
@@ -59,7 +59,7 @@ export class EmoteStage {
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
     else if (art.kind === 'custom') {
-      if (art.animated) this.showCustomAnim(owner, live, art.fx, art.url, art.still);
+      if (art.animated) this.showAnimation(owner, live, art);
       else root.append(emoteFxContent(art.fx, art.url));
     } else root.append(envelope(bubble(), 0));
 
@@ -79,14 +79,12 @@ export class EmoteStage {
   }
 
   /**
-   * The baked animation plays once from frame 0, but Chromium gives images with the same URL one shared clock, so each
-   * spawn gets its own object URL (the Blob is fetched once per emote).
+   * A missing file (the asset check lists it in About) or one that arrives but can't be decoded: the placeholder plays
+   * instead, for the emote's usual time. It replaces the sheet once, and not at all after the emote is gone.
    */
   private showBundled(live: Live, slug: string): void {
     const img = image('sheet');
     live.root.append(img);
-    // A missing file (the asset check lists it in About) or one that arrives but can't be decoded: the placeholder plays
-    // instead, for the emote's usual time. It replaces the sheet once, and not at all after the emote is gone.
     let swapped = false;
     const placeholder = (): void => {
       if (swapped || live.gone) return;
@@ -94,10 +92,10 @@ export class EmoteStage {
       img.replaceWith(envelope(bubble(), 0));
     };
     img.addEventListener('error', placeholder, { once: true });
-    this.blob(slug).then(
-      (blob) => {
+    this.file(emoteAnimUrl(slug)).then(
+      (data) => {
         if (live.gone) return;
-        live.url = URL.createObjectURL(blob);
+        live.url = URL.createObjectURL(new Blob([data], { type: 'image/webp' }));
         img.src = live.url;
       },
       placeholder,
@@ -105,17 +103,15 @@ export class EmoteStage {
   }
 
   /**
-   * A custom animation: the image plays from its own object URL per spawn (Chromium gives images with the same URL one
-   * shared clock, as for a bundled emote), and the emote stays up for one loop of the file plus a hold — capped at the
-   * default, never shorter than its effect needs. The hold is frozen on the imported still, so the goodbye never
-   * interrupts the animation and the gif never replays its start. A file we can't fetch or time plays the shared URL
-   * for the default time instead.
+   * A custom animation stays up for one loop of its file plus a hold, frozen on the imported still — the loop's first
+   * frame, which is what a well-looped gif's last frame looks like — so the goodbye never interrupts the animation and
+   * the gif never replays its start. A file we can't fetch or time plays the shared URL for the default time instead.
    */
-  private showCustomAnim(owner: string, live: Live, variant: number, url: string, still: string): void {
+  private showAnimation(owner: string, live: Live, art: Extract<EmoteArt, { kind: 'custom' }>): void {
     const img = image();
     img.addEventListener('error', () => img.replaceWith(envelope(bubble(), 0)), { once: true });
-    live.root.append(envelope(img, variant));
-    this.anim(url).then(
+    live.root.append(envelope(img, art.fx));
+    this.file(art.url).then(
       (data) => {
         if (live.gone) return;
         live.url = URL.createObjectURL(new Blob([data], { type: sniffImage(data) === 'gif' ? 'image/gif' : 'image/webp' }));
@@ -124,45 +120,35 @@ export class EmoteStage {
         if (loopMs === null) return;
         const totalS = emoteDurationS(loopMs);
         this.retime(owner, live, totalS);
-        // For a loop that closes well, the still (its first frame) is what the last frame looks like, so the swap reads as freezing.
         const holdS = totalS - loopMs / 1000;
         if (holdS > 0.05) {
           live.freeze = setTimeout(() => {
-            if (!live.gone) img.src = still;
+            if (!live.gone) img.src = art.still;
           }, loopMs);
         }
       },
       () => {
-        if (!live.gone) img.src = url;
+        if (!live.gone) img.src = art.url;
       },
     );
   }
 
-  private blob(slug: string): Promise<Blob> {
-    let blob = this.blobs.get(slug);
-    if (!blob) {
-      blob = this.fetchBlob(emoteAnimUrl(slug));
-      this.blobs.set(slug, blob);
-      const fetched = blob;
-      blob.catch(() => {
-        if (this.blobs.get(slug) === fetched) this.blobs.delete(slug); // try again next time
+  /**
+   * An animation file's bytes, fetched once per URL and fetched again after a failure. Every spawn plays them from a
+   * fresh object URL, because Chromium gives images with the same URL one shared clock and a new emote should start
+   * at frame 0.
+   */
+  private file(url: string): Promise<Uint8Array<ArrayBuffer>> {
+    let file = this.files.get(url);
+    if (!file) {
+      file = this.fetchBlob(url).then((b) => b.arrayBuffer()).then((ab) => new Uint8Array(ab));
+      this.files.set(url, file);
+      const fetched = file;
+      file.catch(() => {
+        if (this.files.get(url) === fetched) this.files.delete(url); // try again next time
       });
     }
-    return blob;
-  }
-
-  /** An animation's bytes, fetched once per URL: they carry the object URL each spawn plays from and its loop time. */
-  private anim(url: string): Promise<Uint8Array<ArrayBuffer>> {
-    let anim = this.anims.get(url);
-    if (!anim) {
-      anim = this.fetchBlob(url).then((b) => b.arrayBuffer()).then((ab) => new Uint8Array(ab));
-      this.anims.set(url, anim);
-      const fetched = anim;
-      anim.catch(() => {
-        if (this.anims.get(url) === fetched) this.anims.delete(url); // try again next time
-      });
-    }
-    return anim;
+    return file;
   }
 
   /** Moves an emote's goodbye, and the timer that removes it, to `durS` after it appeared. */
