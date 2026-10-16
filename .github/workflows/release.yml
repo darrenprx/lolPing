@@ -46,22 +46,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe" --clobber
-
-  mac:
-    needs: release
-    runs-on: macos-latest # Apple Silicon
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:helper
-      - run: npm test
-      - run: npm run dist:mac
-      - run: codesign --verify --deep --strict "release/mac-arm64/lolPing.app"
-      - name: Upload the disk image
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "release/lolPing-${GITHUB_REF_NAME#v}-arm64.dmg" --clobber

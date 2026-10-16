@@ -20,7 +20,7 @@ trait.
 | `src/decision.rs`         | `decision.{h,cpp}`            | Pure input-decision state machine (Idle/Pending/Wheel/SwallowUp). **Fully ported + unit-tested.** |
 | `src/protocol.rs`         | `commands.cpp` + `output.cpp` | JSON-lines command parser + event formatter. |
 | `src/sim.rs`              | `simulate.cpp`                | `--simulate` test mode. |
-| `src/platform/mod.rs`     | `main_win.cpp` + `hooks_win.cpp` + `macinput.cpp` | OS hook backend (gated by `hooks` feature). Windows is **implemented** (direct Win32 FFI); macOS/Linux are the remaining adapters. |
+| `src/platform/mod.rs`     | `main_win.cpp` + `hooks_win.cpp` | OS hook backend (gated by `hooks` feature). Windows is **implemented** (direct Win32 FFI); the app is Windows-only. |
 | `src/platform/windows.rs` | `hooks_win.cpp` + `main_win.cpp` (`wmain`) | **Implemented**: WH_MOUSE_LL/WH_KEYBOARD_LL + SendInput + GetAsyncKeyState + 1 s watchdog. Compiled, needs on-device validation. |
 | `src/main.rs`             | `main_win.cpp` (`wmain`)      | Entry point, `--simulate` dispatch, DPI awareness. |
 
@@ -35,7 +35,7 @@ cargo run -- --simulate    # identical to the C++ helper's test mode; feed sim J
 `cargo test` runs the decision unit tests (drag opens wheel, click with/without option, trigger
 released early, Esc cancel, toggle mid-gesture, watchdog, mask key for Alt/Win, self-injected
 ignored) **and** the simulate-mode tests — these prove the port is behaviourally identical to the
-original without needing a Windows/macOS dev box.
+original without any OS hooks or platform SDK.
 
 ## Wire it into Electron — DONE
 
@@ -49,8 +49,8 @@ The binary is already wired in (this repo, v0.2.1 checkout):
   - Force the C++ helper with `LOLPING_HELPER=cpp`.
 - **`package.json`**: `build:helper:rust` builds it (`cargo build --release --features hooks`),
   `dist` runs it before packaging, and `win.extraResources` ships `lolping-helper.exe`
-  (from `native/rust-helper/target/release/lolping-helper.exe`). macOS packaging still ships only
-  the C++ helper (no Rust macOS backend yet).
+  (from `native/rust-helper/target/release/lolping-helper.exe`). The project is Windows-only, so
+  there is no macOS packaging.
 
 Validate with the app's own harness: `tests/helper/protocol.test.ts` spawns the helper with
 `--simulate`; point its `exe` at `native/rust-helper/target/release/lolping-helper.exe` to run the
@@ -69,10 +69,10 @@ same assertions against the Rust binary (a good continuous parity check — the 
   `cargo build --features hooks`; then `npm run dev` and drag over an app to confirm the wheel
   and the Alt/Win menu-suppression behave like the C++ build.
 
-- **macOS/Linux — remaining:** implement `InputBackend` + the event-tap/grab loop. `rdev` is the
-  recommended cross-platform crate here (`grab` to intercept/swallow, `simulate` to inject). Because
-  rdev does **not** feed your own synthesized events back into the callback, the `self_injected`
-  concept becomes unused — kept only for parity with the decision tests.
+- **Other platforms — not needed:** the project is Windows-only. Should a macOS/Linux port return,
+  implement `InputBackend` + the grab loop with `rdev` (`grab` to intercept/swallow, `simulate` to
+  inject); rdev does **not** feed your own synthesized events back into the callback, so the
+  `self_injected` concept stays unused.
 
 > Why the Windows backend uses raw FFI + `SendInput` rather than `rdev`: the decision core is
 > VK-code centric (custom trigger VK, toggle VK, and the `VK_NONAME`/0xFC mask key have no

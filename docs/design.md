@@ -112,9 +112,9 @@ lolPing/
       settings/                index.html, App.tsx, useAppState.ts, components/ (Fluent UI)
     shared/                    pings.ts, settings.ts (schema + defaults), keys.ts,
                                protocol.ts (helper messages), ipc.ts, geometry.ts
-  native/hook-helper/          build.cmd (MSVC via vswhere), build.sh (macOS), run.mjs, src/ main_win.cpp,
-                               hooks_win.cpp, simulate.cpp, decision.{h,cpp} (pure logic), commands, json, output,
-                               macOS: main_posix.cpp, hooks_mac.cpp, macinput.{h,cpp}; tests/
+  native/hook-helper/          build.cmd (MSVC via vswhere), run.mjs, src/ main_win.cpp,
+                               hooks_win.cpp, simulate.cpp, decision.{h,cpp} (pure logic), commands, json, output; tests/
+  native/rust-helper/          Rust port of the input helper (decision + protocol + --simulate + Windows backend)
   assets/textures, assets/sounds
   tools/extract-assets/
   prototype/                   throwaway demos (wheel-demo.html, settings-demo.html)
@@ -312,6 +312,4 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 
 ## 11. Out of scope for v1
 
-Multiplayer/sync, rebinding wheel slots, colourblind texture sets, per-ping volume, macOS/Linux, ping spam throttling, and a minimap.
-
-macOS support was added in v0.2.0; see [design-macos.md](design-macos.md).
+Multiplayer/sync, rebinding wheel slots, colourblind texture sets, per-ping volume, Linux, ping spam throttling, and a minimap.

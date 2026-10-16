@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createInterface } from 'node:readline';
 import {
-  HELPER_EXIT_NO_ACCESS, parseHelperLine, serializeCommand, type HelperCommand, type HelperStatus,
+  parseHelperLine, serializeCommand, type HelperCommand, type HelperStatus,
 } from '../shared/protocol';
 import { RestartPolicy } from './restartPolicy';
 
@@ -15,8 +15,6 @@ export interface BridgeOptions {
 
 /**
  * Runs the hook helper, parses its stdout and restarts it when it crashes.
- * An exit with HELPER_EXIT_NO_ACCESS (macOS Accessibility missing) is not a crash: the status becomes 'noAccess'
- * and the helper stays stopped until `retry()`.
  * Events: 'event' (HelperEvent), 'status' (HelperStatus), 'log' (string).
  */
 export class InputBridge extends EventEmitter {
@@ -117,10 +115,6 @@ export class InputBridge extends EventEmitter {
   private onExit(reason: string, code: number | null): void {
     if (this.stopping) return;
     this.emit('log', `hook helper stopped: ${reason}`);
-    if (code === HELPER_EXIT_NO_ACCESS) {
-      this.setStatus('noAccess');
-      return;
-    }
     const delay = this.policy.onExit(this.now());
     if (delay === 'giveUp') {
       this.setStatus('failed');

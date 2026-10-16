@@ -1,5 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
-import { assetPath, IS_MAC, loadPage, preloadPath } from './paths';
+import { assetPath, loadPage, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
 const goneListeners: Array<() => void> = [];
@@ -23,32 +23,13 @@ const captionColors = () => ({
   height: 40,
 });
 
-/** Windows 11: Mica with custom caption buttons. macOS: sidebar vibrancy with inset traffic lights. */
-const chromeOptions = (): BrowserWindowConstructorOptions => (IS_MAC
-  ? {
-    vibrancy: 'sidebar',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 19 },
-  }
-  : {
-    backgroundMaterial: 'mica',
-    backgroundColor: '#00000000',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: captionColors(),
-  });
-
-/** lolPing lives in the macOS menu bar: it only has a Dock icon (and ⌘-Tab entry) while settings are open. */
-function showInDock(on: boolean): void {
-  if (!IS_MAC) return;
-  if (on) {
-    void app.dock?.show();
-    app.focus({ steal: true });
-  } else {
-    app.dock?.hide();
-  }
-}
+/** Windows 11: Mica with custom caption buttons. */
+const chromeOptions = (): BrowserWindowConstructorOptions => ({
+  backgroundMaterial: 'mica',
+  backgroundColor: '#00000000',
+  titleBarStyle: 'hidden',
+  titleBarOverlay: captionColors(),
+});
 
 export function settingsWindow(): BrowserWindow | null {
   return win && !win.isDestroyed() ? win : null;
@@ -57,7 +38,6 @@ export function settingsWindow(): BrowserWindow | null {
 export function openSettingsWindow(): BrowserWindow {
   const existing = settingsWindow();
   if (existing) {
-    showInDock(true);
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
@@ -74,20 +54,19 @@ export function openSettingsWindow(): BrowserWindow {
     ...chromeOptions(),
     webPreferences: { preload: preloadPath('settings'), spellcheck: false },
   });
-  if (!IS_MAC) w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing (macOS keeps the app menu)
+  w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing
   const onTheme = () => {
-    if (!w.isDestroyed() && !IS_MAC) w.setTitleBarOverlay(captionColors());
+    if (!w.isDestroyed()) w.setTitleBarOverlay(captionColors());
   };
   nativeTheme.on('updated', onTheme);
   w.on('closed', () => {
     nativeTheme.off('updated', onTheme);
     win = null;
-    showInDock(false);
     notifyGone();
   });
   w.webContents.on('render-process-gone', notifyGone); // the window can stay open on a dead page
   w.once('ready-to-show', () => {
-    showInDock(true);
+    app.focus({ steal: true });
     w.show();
   });
   void loadPage(w, 'settings');

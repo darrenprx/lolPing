@@ -7,10 +7,9 @@ import { APP_SCHEME } from './appProtocol';
 export type Page = 'overlay' | 'settings';
 
 export const PLATFORM: Platform = platformOf(process.platform);
-export const IS_MAC = PLATFORM === 'mac';
 
-const CPP_HELPER_FILE = IS_MAC ? 'hook-helper' : 'hook-helper.exe';
-const RUST_HELPER_FILE = IS_MAC ? 'lolping-helper' : 'lolping-helper.exe';
+const CPP_HELPER_FILE = 'hook-helper.exe';
+const RUST_HELPER_FILE = 'lolping-helper.exe';
 
 /** Rust-port binary locations, most-preferred first (release, then debug for local dev). */
 const rustHelperCandidates = (): string[] =>
@@ -40,7 +39,7 @@ export const helperExePath = (): string => {
   return cppHelperPath();
 };
 
-/** Files from build/ that ship as extraResources (the macOS menu bar icon). */
+/** Files from build/ that ship as extraResources. */
 export const buildResourcePath = (file: string): string =>
   app.isPackaged ? join(process.resourcesPath, file) : join(app.getAppPath(), 'build', file);
 

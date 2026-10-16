@@ -33,7 +33,6 @@ vi.mock('electron', async () => {
 });
 
 vi.mock('../../src/main/paths', () => ({
-  IS_MAC: false,
   assetPath: () => 'icon.png',
   loadPage: () => Promise.resolve(),
   preloadPath: () => 'preload.js',

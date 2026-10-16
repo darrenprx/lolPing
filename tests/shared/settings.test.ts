@@ -98,19 +98,9 @@ describe('helpers', () => {
     expect(triggerLabel({ vk: 0x56 })).toBe('V');
   });
 
-  it('labels triggers with Mac names on macOS', () => {
-    expect(triggerLabel('alt', 'en', 'mac')).toBe('⌥ Option');
-    expect(triggerLabel('win', 'en', 'mac')).toBe('⌘ Command');
-    expect(triggerLabel({ vk: 0x0d }, 'en', 'mac')).toBe('Return');
-  });
-
-  it('offers Caps Lock only on Windows, and replaces a stored one on macOS', () => {
+  it('offers Caps Lock and keeps a stored one', () => {
     expect(keyboardTriggers('win')).toContain('capslock');
-    expect(keyboardTriggers('mac')).not.toContain('capslock');
     expect(normalizeSettings({ trigger: 'capslock' }).trigger).toBe('capslock');
-    expect(normalizeSettings({ trigger: 'capslock' }, 'mac').trigger).toBe('alt');
-    expect(mergeSettings(DEFAULT_SETTINGS, { trigger: 'capslock' }, 'mac').trigger).toBe('alt');
-    expect(normalizeSettings({ trigger: 'win' }, 'mac').trigger).toBe('win');
   });
 
   it('extracts overlay settings', () => {

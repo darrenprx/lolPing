@@ -85,19 +85,4 @@ describe('AppTray', () => {
     expect(() => tray.destroy()).not.toThrow();
     expect(created[0].destroyCalls).toBe(1);
   });
-
-  it('uses template icons on macOS and leaves clicks to the menu', () => {
-    const tray = new AppTray('icon.png', handlers, undefined, { on: 'on.png', off: 'off.png' });
-    expect(created[0].events).not.toContain('click');
-    expect((created[0].images[0] as { template: boolean }).template).toBe(true);
-    tray.set('off', false);
-    expect((created[0].images.at(-1) as { template: boolean }).template).toBe(true);
-  });
-
-  it('disables the Enabled item while Accessibility access is missing', () => {
-    const tray = new AppTray('icon.png', handlers);
-    tray.set('noAccess', true);
-    const menu = created[0].menus.at(-1) as { label?: string; enabled?: boolean }[];
-    expect(menu[0].enabled).toBe(false);
-  });
 });

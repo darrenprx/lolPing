@@ -5,13 +5,12 @@
 </p>
 
 <p align="center">
-  League of Legends pings for your whole desktop, on Windows and macOS.<br>
-  Hold <b>Alt</b> (<b>⌥ Option</b> on a Mac), drag, and let go on a ping. The animation pops and the sound plays on top of any app, on any monitor.
+  League of Legends pings for your whole desktop, on Windows.<br>
+  Hold <b>Alt</b>, drag, and let go on a ping. The animation pops and the sound plays on top of any app, on any monitor.
 </p>
 
 <p align="center">
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>Download for Windows</b></a> ·
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>Download for Mac</b></a> (Apple Silicon, experimental)
+  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>Download for Windows</b></a>
 </p>
 
 <p align="center">
@@ -34,18 +33,6 @@ Pings show up in whole-screen capture, so friends watching your Discord or OBS s
 
 lolPing is built for Windows 11, 64-bit. Windows 10 may work, but it isn't tested.
 
-### macOS (experimental)
-
-The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 12 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
-
-1. Download `lolPing-<version>-arm64.dmg` from the [latest release](https://github.com/darrenprx/lolPing/releases/latest), open it, and drag lolPing into Applications.
-2. Open lolPing. It isn't signed by a registered Apple developer, so macOS says it can't check it for malware. Select **Done**, open **System Settings → Privacy & Security**, scroll down, select **Open Anyway** next to the lolPing message, and confirm.
-   If macOS instead says lolPing "is damaged", run `xattr -dr com.apple.quarantine /Applications/lolPing.app` in Terminal and open it again.
-3. lolPing asks for **Accessibility** access, which it needs to read the mouse and keyboard. Select **Open System Settings** and turn lolPing on. Pinging starts as soon as it's allowed.
-4. lolPing lives in the menu bar. Hold ⌥ Option and drag anywhere to ping.
-
-**After every update**, macOS forgets the Accessibility permission, because the app isn't signed with a fixed developer identity. In **Privacy & Security → Accessibility**, select lolPing, remove it with **–**, then turn it on again. The settings window walks you through it.
-
 ## Use
 
 | To | Do this |
@@ -56,37 +43,33 @@ The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 12 or later. 
 | Open settings | Click the tray icon |
 | Quit, or restart the input helper | Right-click the tray icon |
 
-On a Mac, use **⌥ Option** instead of Alt, **⌃⌥P** to pause, and the ping icon in the menu bar instead of the tray icon.
-
 The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait or Vision Cleared in settings.
 
 ## Settings
 
 <img src="docs/media/settings.png" width="760" alt="The lolPing settings window">
 
-- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). The custom key won't type in other apps while pinging is on.
+- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key. The custom key won't type in other apps while pinging is on.
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
-- **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
+- **Enable / disable shortcut:** must include Ctrl, Alt or Win.
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
 - **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
-- **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
+- **Launch at Windows startup**: starts hidden in the tray.
 - **Language:** follows the system display language, or pick English or 简体中文.
 
-Settings are saved in `%APPDATA%\lolPing\settings.json` on Windows and `~/Library/Application Support/lolPing/settings.json` on a Mac.
+Settings are saved in `%APPDATA%\lolPing\settings.json` on Windows.
 
 ## Known limitations
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
 - Exclusive-fullscreen games draw above the overlay.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
-- On a Mac, the wheel can't open while a secure screen is showing, such as the login window or a password prompt, and Accessibility has to be allowed again after each update.
 
 ## Build from source
 
 You need Node 22.12 or later, plus:
 
 - **Windows:** Windows 11 and Visual Studio 2022 or later with the "Desktop development with C++" workload.
-- **macOS:** an Apple Silicon Mac with the Xcode Command Line Tools (`xcode-select --install`). Allow Accessibility for the app that runs `npm run dev` (for example Terminal) so the helper can read input.
 
 ```bash
 npm install
@@ -103,21 +86,20 @@ npm run dev
 | `npm run test:helper` | Builds the helper and runs its C++ tests |
 | `npm run typecheck` | Type-checks everything |
 | `npm run dist` | Builds the Windows installer into `release/` |
-| `npm run dist:mac` | Builds the Mac disk image into `release/` (on a Mac) |
 | `npm run dev:site` | Serves a browser demo of the wheel (`site/`) |
 | `npm run media` | Re-records `docs/media/demo.gif` and `docs/media/og.png` from that demo (needs ffmpeg) |
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow builds the Windows installer and the Mac disk image and attaches both to a GitHub release.
+Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow builds the Windows installer and attaches it to a GitHub release.
 
 ## How it works
 
-- **Input:** [`native/hook-helper`](native/hook-helper) is a small C++ process that owns the low-level mouse and keyboard hooks on Windows, or an event tap on macOS. It swallows the Alt + drag so the app underneath never sees it, and talks to Electron in JSON lines over stdin and stdout.
+- **Input:** [`native/hook-helper`](native/hook-helper) is a small C++ process that owns the low-level mouse and keyboard hooks on Windows. It swallows the Alt + drag so the app underneath never sees it, and talks to Electron in JSON lines over stdin and stdout. A [Rust port](native/rust-helper) of the same helper is wired in as the preferred backend (falls back to C++).
 - **Display:** Electron draws the wheel and pings in one transparent, click-through, always-on-top window per monitor ([`src/renderer/overlay`](src/renderer/overlay)), and plays the sounds through Web Audio.
-- **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows, restyled like System Settings on macOS.
+- **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows.
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.
-- **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths. [docs/design-macos.md](docs/design-macos.md) covers the Mac port.
+- **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths.
 
 ## Ping assets
 

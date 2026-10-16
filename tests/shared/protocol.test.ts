@@ -12,7 +12,7 @@ describe('parseHelperLine', () => {
     expect(parseHelperLine('{"type":"cancel"}')).toEqual({ type: 'cancel' });
     expect(parseHelperLine('{"type":"toggled","enabled":false}')).toEqual({ type: 'toggled', enabled: false });
     expect(parseHelperLine('{"type":"error","message":"boom"}')).toEqual({ type: 'error', message: 'boom' });
-    expect(parseHelperLine('{"type":"error","code":"noAccess","message":"x"}')).toEqual({ type: 'error', code: 'noAccess', message: 'x' });
+    expect(parseHelperLine('{"type":"error","code":"conflict","message":"x"}')).toEqual({ type: 'error', code: 'conflict', message: 'x' });
     expect(parseHelperLine('{"type":"sim","swallow":true,"inject":"down:left"}')).toEqual({ type: 'sim', swallow: true, inject: 'down:left' });
   });
 

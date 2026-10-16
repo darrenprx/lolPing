@@ -77,18 +77,3 @@ describe('eventMods', () => {
     expect(eventMods({ ctrlKey: false, altKey: false, shiftKey: true, metaKey: true })).toBe(12);
   });
 });
-
-describe('macOS labels', () => {
-  it('uses Apple modifier symbols in Apple order', () => {
-    expect(modLabels(MOD.win | MOD.ctrl | MOD.shift | MOD.alt, 'mac')).toEqual(['⌃', '⌥', '⇧', '⌘']);
-    expect(hotkeyParts({ mods: MOD.ctrl | MOD.alt, vk: 0x50 }, 'mac')).toEqual(['⌃', '⌥', 'P']);
-    expect(hotkeyLabel({ mods: MOD.ctrl | MOD.alt, vk: 0x50 }, 'mac')).toBe('⌃⌥P');
-  });
-
-  it('names keys the Mac way', () => {
-    expect(vkLabel(0x0d, 'mac')).toBe('Return');
-    expect(vkLabel(0x08, 'mac')).toBe('Delete');
-    expect(vkLabel(0x0d)).toBe('Enter');
-    expect(vkLabel(0x50, 'mac')).toBe('P');
-  });
-});

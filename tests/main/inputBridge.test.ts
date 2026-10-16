@@ -58,23 +58,6 @@ describe('InputBridge', () => {
     expect(b.status).toBe('failed');
   });
 
-  it('treats the no-access exit as noAccess, without restarting, until retry()', async () => {
-    const b = bridge('noaccess');
-    const events: HelperEvent[] = [];
-    b.on('event', (e: HelperEvent) => events.push(e));
-    const statuses: string[] = [];
-    b.on('status', (s: string) => statuses.push(s));
-    const noAccess = waitFor<string>(b, 'status', (s) => s === 'noAccess');
-    b.start();
-    await noAccess;
-    await new Promise((r) => setTimeout(r, 100)); // a restart would be scheduled after 10 ms
-    expect(statuses).toEqual(['noAccess']);
-    expect(events).toContainEqual({ type: 'error', code: 'noAccess', message: 'no access' });
-    const again = waitFor<string>(b, 'status', (s) => s === 'starting');
-    b.retry();
-    await again;
-  });
-
   it('reports a missing executable as failed instead of throwing', async () => {
     const b = bridge('echo', 'C:\\definitely\\missing\\hook-helper.exe');
     const failed = waitFor<string>(b, 'status', (s) => s === 'failed');

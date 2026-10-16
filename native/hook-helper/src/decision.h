@@ -72,7 +72,7 @@ class Decision {
   Result onEvent(const InputEvent& e);
   Result tick(uint64_t nowMs);
   // Windows opens the menu bar / Start menu on a lone Alt / Win key-up, so a swallowed press while one is held
-  // gets a mask key before that key-up. macOS has no such behaviour: its hook layer turns this off.
+  // gets a mask key before that key-up.
   void setMaskMenuKeys(bool on) { maskMenuKeys_ = on; }
 
   // Resync with the OS: forget keys we believe are down but isDown(vk) says are up

@@ -13,19 +13,15 @@ import { triggerLabel, type Settings } from '../../shared/settings';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
 import { KeyCapture } from './components/KeyCapture';
-import { PermissionCard } from './components/PermissionCard';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
 import { WheelEditor } from './components/WheelEditor';
 import { TextContext, useText } from './text';
-import { macDarkTheme, macLightTheme } from './macTheme';
 import { useAppState, type Update } from './useAppState';
 
 const PLATFORM = api.platform;
-const MAC = PLATFORM === 'mac';
-/** macOS measures the screen in points. */
-const LENGTH_UNIT = MAC ? 'pt' : 'px';
+const LENGTH_UNIT = 'px';
 
 const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[] = [
   { id: 'trigger', label: (t) => t.navTrigger, icon: <Cursor24Regular /> },
@@ -50,10 +46,7 @@ function useDarkMode(): boolean {
 export function App() {
   const dark = useDarkMode();
   const { settings, status, update } = useAppState();
-  useEffect(() => {
-    document.documentElement.dataset.platform = PLATFORM; // mac.css restyles the page for macOS
-  }, []);
-  const theme = MAC ? (dark ? macDarkTheme : macLightTheme) : dark ? webDarkTheme : webLightTheme;
+  const theme = dark ? webDarkTheme : webLightTheme;
   return (
     <FluentProvider theme={theme} style={{ background: 'transparent', height: '100%' }}>
       {settings && status ? (
@@ -112,7 +105,6 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
       </nav>
       <main className="content" ref={mainRef} onScroll={onScroll}>
         <h1 className="pageTitle">{t.pageTitle}</h1>
-        {status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
         <StatusCard settings={s} status={status} />
 
         <div className="section" id="trigger">{t.navTrigger}</div>

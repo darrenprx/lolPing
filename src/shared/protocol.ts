@@ -2,7 +2,7 @@ import type { Settings } from './settings';
 
 /**
  * Messages the hook helper writes to stdout, one JSON object per line.
- * Coordinates are physical pixels on Windows and global points (Electron DIPs) on macOS.
+ * Coordinates are physical screen pixels.
  */
 export type HelperEvent =
   | { type: 'ready'; version: number }
@@ -12,11 +12,7 @@ export type HelperEvent =
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
-/** `noAccess`: macOS hasn't given lolPing Accessibility access, so the helper can't run. */
-export type HelperStatus = 'starting' | 'running' | 'failed' | 'noAccess';
-
-/** The helper's exit code when it can't create its event tap (macOS Accessibility access missing). */
-export const HELPER_EXIT_NO_ACCESS = 3;
+export type HelperStatus = 'starting' | 'running' | 'failed';
 
 type PointType = 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click';
 const POINT_TYPES = new Set<string>(['wheelOpen', 'wheelMove', 'wheelRelease', 'click']);

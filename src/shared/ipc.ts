@@ -31,11 +31,6 @@ export const OVERLAY_ASSETS = 'overlay:assets';
 export interface AppStatus {
   enabled: boolean;
   helper: HelperStatus;
-  /**
-   * macOS only: lolPing is in the Accessibility list but the helper still can't read input. That is a stale entry
-   * left by an update (ad-hoc signatures change every build): it has to be removed and added again.
-   */
-  staleAccess?: boolean;
 }
 
 export interface About {
@@ -65,6 +60,4 @@ export interface SettingsApi {
   openProjectPage(): Promise<void>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
-  /** macOS: asks for Accessibility access and opens that page of System Settings. */
-  openAccessibility(): Promise<void>;
 }

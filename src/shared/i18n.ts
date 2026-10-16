@@ -88,23 +88,6 @@ const en = {
   chooseKey: 'Choose a key',
   mouse4: 'Mouse 4',
   mouse5: 'Mouse 5',
-  // macOS Accessibility permission (settings window)
-  statusNoAccess: 'Waiting for Accessibility access',
-  statusNoAccessHint: 'lolPing can’t see the mouse and keyboard until macOS allows it.',
-  permTitle: 'lolPing needs Accessibility access',
-  permSteps: [
-    'Click Open System Settings.',
-    'Turn on lolPing under Privacy & Security → Accessibility.',
-    'Already on after an update? Select lolPing, remove it with –, and turn it on again.',
-  ],
-  permStaleTitle: 'Turn Accessibility access on again',
-  permStaleSteps: [
-    'macOS forgets the permission each time lolPing is updated.',
-    'In Privacy & Security → Accessibility, select lolPing and remove it with –.',
-    'Click Open System Settings, turn lolPing on again, then click Try again.',
-  ],
-  permOpen: 'Open System Settings',
-  permRetry: 'Try again',
   pingNames: {
     danger: 'Danger', push: 'Push', omw: 'On My Way', allin: 'All In', assist: 'Assist Me',
     needvision: 'Need Vision', missing: 'Enemy Missing', enemyvision: 'Enemy Vision', generic: 'Generic',
@@ -126,9 +109,6 @@ const en = {
   toastHelperStoppedBody: 'Right-click the tray icon to restart it',
   trayTip: (on: boolean) => `lolPing: pings ${on ? 'on' : 'off'}`,
   trayTipFailed: 'lolPing: input helper stopped',
-  trayTipNoAccess: 'lolPing: needs Accessibility access',
-  toastMenuBar: 'lolPing is running',
-  toastMenuBarBody: 'Click the ping icon in the menu bar for settings',
   trayEnabled: 'Enabled',
   trayRestart: 'Restart input helper',
   traySettings: 'Settings…',
@@ -209,22 +189,6 @@ const zh: Strings = {
   chooseKey: '选择一个键',
   mouse4: '鼠标侧键 4',
   mouse5: '鼠标侧键 5',
-  statusNoAccess: '等待辅助功能权限',
-  statusNoAccessHint: '在 macOS 允许之前，lolPing 无法读取鼠标和键盘。',
-  permTitle: 'lolPing 需要辅助功能权限',
-  permSteps: [
-    '点按“打开系统设置”。',
-    '在“隐私与安全性 → 辅助功能”中打开 lolPing。',
-    '更新后已经是打开状态？选中 lolPing，点按 – 移除，再重新打开。',
-  ],
-  permStaleTitle: '请重新打开辅助功能权限',
-  permStaleSteps: [
-    '每次更新 lolPing 后，macOS 都会忘记这项权限。',
-    '在“隐私与安全性 → 辅助功能”中选中 lolPing，点按 – 将其移除。',
-    '点按“打开系统设置”，重新打开 lolPing，然后点按“重试”。',
-  ],
-  permOpen: '打开系统设置',
-  permRetry: '重试',
   pingNames: {
     danger: '危险', push: '推进', omw: '正在赶来', allin: '全力进攻', assist: '请求协助',
     needvision: '需要视野', missing: '敌人消失', enemyvision: '敌方视野', generic: '普通信号',
@@ -245,53 +209,12 @@ const zh: Strings = {
   toastHelperStoppedBody: '右键单击托盘图标以重启',
   trayTip: (on) => `lolPing：信号${on ? '已开启' : '已关闭'}`,
   trayTipFailed: 'lolPing：输入助手已停止',
-  trayTipNoAccess: 'lolPing：需要辅助功能权限',
-  toastMenuBar: 'lolPing 正在运行',
-  toastMenuBarBody: '点按菜单栏中的信号图标打开设置',
   trayEnabled: '启用',
   trayRestart: '重启输入助手',
   traySettings: '设置…',
   trayQuit: '退出 lolPing',
 };
 
-/** Wording that differs on macOS: menu bar instead of tray, Finder, login items, ⌃ ⌥ ⌘. */
-const MAC: Record<Lang, Partial<Strings>> = {
-  en: {
-    hintNeedModifier: 'Add ⌃, ⌥ or ⌘',
-    launchAtStartup: 'Open at login',
-    launchAtStartupDesc: 'Starts in the menu bar',
-    languageDesc: 'Follow macOS, or pick one',
-    languageAuto: 'Follow macOS',
-    openSettingsFolder: 'Show in Finder',
-    limitations: [
-      'macOS asks for Accessibility access again after every lolPing update.',
-      'The wheel can’t open while a secure screen is up, such as the login window or a password prompt.',
-      'Some full-screen games draw above the overlay.',
-      'Single-window screen sharing doesn’t include the pings; share the entire screen.',
-    ],
-    toastHelperStoppedBody: 'Click the menu bar icon to restart it',
-  },
-  'zh-CN': {
-    hintNeedModifier: '请加上 ⌃、⌥ 或 ⌘',
-    launchAtStartup: '登录时打开',
-    launchAtStartupDesc: '启动后显示在菜单栏中',
-    languageDesc: '跟随 macOS，或手动选择',
-    languageAuto: '跟随 macOS',
-    openSettingsFolder: '在访达中显示',
-    limitations: [
-      '每次更新 lolPing 后，macOS 都会再次要求辅助功能权限。',
-      '登录窗口或密码提示等安全界面出现时无法打开轮盘。',
-      '部分全屏游戏会盖住信号层。',
-      '只共享单个窗口时看不到信号，请共享整个屏幕。',
-    ],
-    toastHelperStoppedBody: '点按菜单栏图标以重启',
-  },
-};
-
-const TABLES: Record<Platform, Record<Lang, Strings>> = {
-  win: { en, 'zh-CN': zh },
-  mac: { en: { ...en, ...MAC.en }, 'zh-CN': { ...zh, ...MAC['zh-CN'] } },
-};
-
 /** The same object for the same arguments, so it can be a React dependency. */
-export const strings = (lang: Lang, platform: Platform = 'win'): Strings => TABLES[platform][lang];
+export const strings = (lang: Lang, _platform: Platform = 'win'): Strings =>
+  lang === 'zh-CN' ? zh : en;

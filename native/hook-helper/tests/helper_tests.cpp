@@ -9,7 +9,6 @@
 
 #include "../src/decision.h"
 #include "../src/json.h"
-#include "../src/macinput.h"
 #include "../src/output.h"
 
 using namespace lp;
@@ -495,65 +494,6 @@ static void test_mask_menu_keys_off_leaves_alt_up_alone() {
   CHECK(!r.swallow && r.injects.empty());
 }
 
-static void test_mac_keycodes_map_to_vks() {
-  CHECK(mac::keyCodeToVk(0x23) == KEY_P);
-  CHECK(mac::keyCodeToVk(0x00) == 'A');
-  CHECK(mac::keyCodeToVk(0x1D) == '0');
-  CHECK(mac::keyCodeToVk(0x35) == ESC);
-  CHECK(mac::keyCodeToVk(0x7A) == 0x70);  // F1
-  CHECK(mac::keyCodeToVk(0x5A) == 0x83);  // F20
-  CHECK(mac::keyCodeToVk(0x7B) == 0x25);  // left arrow
-  CHECK(mac::keyCodeToVk(0x3F) == 0);     // fn has no VK
-  CHECK(mac::vkToKeyCode(KEY_P) == 0x23);
-  CHECK(mac::vkToKeyCode(0x0D) == 0x24);  // Return, not keypad Enter
-  CHECK(mac::vkToKeyCode(ALT) == 0x3A);
-  CHECK(mac::vkToKeyCode(0x87) == -1);    // F24 doesn't exist on a Mac
-  for (uint16_t code = 0; code < 0x80; ++code) {
-    const uint32_t vk = mac::keyCodeToVk(code);
-    if (vk != 0 && code != 0x4C) CHECK(mac::vkToKeyCode(vk) == code);  // round trip (keypad Enter shares Return's VK)
-  }
-}
-
-static void test_mac_modifier_held() {
-  using namespace mac;
-  CHECK(modifierHeld(kFlagOption | kDevLAlt, 0xA4));
-  CHECK(!modifierHeld(kFlagOption | kDevLAlt, 0xA5));
-  CHECK(modifierHeld(kFlagOption | kDevRAlt, 0xA5));
-  CHECK(modifierHeld(kFlagOption, 0xA4));            // synthetic event without side bits: left
-  CHECK(!modifierHeld(kFlagOption, 0xA5));
-  CHECK(!modifierHeld(kDevLAlt, 0xA4));              // stale side bit with the group up
-  CHECK(modifierHeld(kFlagCommand | kDevRCmd, 0x5C));
-  CHECK(modifierHeld(kFlagControl | kDevRCtrl, 0xA3));
-  CHECK(!modifierHeld(kFlagShift | kDevLShift, 'A'));
-}
-
-static void test_mac_modifier_transitions() {
-  using namespace mac;
-  auto t = modifierTransitions(0, kFlagOption | kDevLAlt);
-  CHECK(t.size() == 1 && t[0].vk == 0xA4 && t[0].down);
-  t = modifierTransitions(kFlagOption | kDevLAlt, 0);
-  CHECK(t.size() == 1 && t[0].vk == 0xA4 && !t[0].down);
-  // Option released and Control pressed in one step: ups come first.
-  t = modifierTransitions(kFlagOption | kDevLAlt, kFlagControl | kDevLCtrl);
-  CHECK(t.size() == 2 && t[0].vk == 0xA4 && !t[0].down && t[1].vk == 0xA2 && t[1].down);
-  // Right Command added to left Command.
-  t = modifierTransitions(kFlagCommand | kDevLCmd, kFlagCommand | kDevLCmd | kDevRCmd);
-  CHECK(t.size() == 1 && t[0].vk == 0x5C && t[0].down);
-  CHECK(modifierTransitions(kFlagShift | kDevLShift, kFlagShift | kDevLShift).empty());
-}
-
-static void test_mac_option_drag_through_transitions() {
-  // The Mac hook feeds flag transitions to Decision as key events: Option + drag must open the wheel.
-  Decision d;
-  d.setMaskMenuKeys(false);
-  for (const auto& k : mac::modifierTransitions(0, mac::kFlagOption | mac::kDevLAlt)) {
-    d.onEvent(k.down ? kd(k.vk) : ku(k.vk));
-  }
-  CHECK(d.onEvent(md(Btn::Left, 10, 10)).swallow);
-  Result r = d.onEvent(mv(40, 10));
-  CHECK(findEmit(r, Emit::Kind::WheelOpen) != nullptr);
-}
-
 int main() {
   test_json_parses_flat_objects();
   test_json_rejects_bad_input();
@@ -593,10 +533,6 @@ int main() {
   test_custom_key_trigger();
   test_mouse4_trigger_drags_with_side_button();
   test_mask_menu_keys_off_leaves_alt_up_alone();
-  test_mac_keycodes_map_to_vks();
-  test_mac_modifier_held();
-  test_mac_modifier_transitions();
-  test_mac_option_drag_through_transitions();
   std::printf("%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

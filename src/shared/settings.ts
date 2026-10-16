@@ -8,9 +8,9 @@ export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mous
 export type TriggerKey = NamedTrigger | { vk: number };
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
 
-/** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
-export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
-  platform === 'mac' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
+/** Keyboard triggers offered. */
+export const keyboardTriggers = (_platform: Platform): NamedTrigger[] =>
+  ['alt', 'ctrl', 'shift', 'win', 'capslock'];
 
 export interface Settings {
   version: 1;
@@ -72,8 +72,7 @@ function num(raw: unknown, key: NumKey): number {
 
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
 
-function trigger(raw: unknown, platform: Platform): TriggerKey {
-  if (platform === 'mac' && raw === 'capslock') return DEFAULT_SETTINGS.trigger;
+function trigger(raw: unknown, _platform: Platform): TriggerKey {
   if (typeof raw === 'string' && (NAMED_TRIGGERS as readonly string[]).includes(raw)) return raw as NamedTrigger;
   if (isObj(raw) && isVk(raw.vk)) return { vk: raw.vk };
   return DEFAULT_SETTINGS.trigger;
@@ -119,7 +118,6 @@ export function mergeSettings(current: Settings, patch: Partial<Settings>, platf
 type KeyTrigger = Exclude<NamedTrigger, 'mouse4' | 'mouse5'>;
 const KEY_LABELS: Record<Platform, Record<KeyTrigger, string>> = {
   win: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Win', capslock: 'Caps Lock' },
-  mac: { alt: '⌥ Option', ctrl: '⌃ Control', shift: '⇧ Shift', win: '⌘ Command', capslock: '⇪ Caps Lock' },
 };
 
 export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platform = 'win'): string {

@@ -1,6 +1,6 @@
 import type { Platform } from './platform';
 
-/** Modifier bitmask shared with the native helper (`toggleMods`). On macOS `win` is Command. */
+/** Modifier bitmask shared with the native helper (`toggleMods`). */
 export const MOD = { ctrl: 1, alt: 2, shift: 4, win: 8 } as const;
 
 /**
@@ -62,29 +62,15 @@ const VK_LABELS: Record<number, string> = {
   0x6b: 'Num +', 0x6d: 'Num -', 0x6e: 'Num .', 0x6f: 'Num /',
 };
 
-/** Keys macOS labels differently. */
-const VK_LABELS_MAC: Record<number, string> = {
-  0x0d: 'Return', 0x08: 'Delete', 0x2e: 'Forward Delete', 0x2d: 'Help', 0x1b: 'Esc',
-};
-
-export function vkLabel(vk: number, platform: Platform = 'win'): string {
-  if (platform === 'mac' && VK_LABELS_MAC[vk]) return VK_LABELS_MAC[vk];
+export function vkLabel(vk: number, _platform: Platform = 'win'): string {
   if ((vk >= 0x41 && vk <= 0x5a) || (vk >= 0x30 && vk <= 0x39)) return String.fromCharCode(vk);
   if (vk >= 0x60 && vk <= 0x69) return `Num ${vk - 0x60}`;
   if (vk >= 0x70 && vk <= 0x87) return `F${vk - 0x6f}`;
   return VK_LABELS[vk] ?? `Key 0x${vk.toString(16).toUpperCase().padStart(2, '0')}`;
 }
 
-export function modLabels(mods: number, platform: Platform = 'win'): string[] {
+export function modLabels(mods: number, _platform: Platform = 'win'): string[] {
   const out: string[] = [];
-  if (platform === 'mac') {
-    // Apple's order: Control, Option, Shift, Command
-    if (mods & MOD.ctrl) out.push('⌃');
-    if (mods & MOD.alt) out.push('⌥');
-    if (mods & MOD.shift) out.push('⇧');
-    if (mods & MOD.win) out.push('⌘');
-    return out;
-  }
   if (mods & MOD.ctrl) out.push('Ctrl');
   if (mods & MOD.alt) out.push('Alt');
   if (mods & MOD.shift) out.push('Shift');
@@ -92,11 +78,11 @@ export function modLabels(mods: number, platform: Platform = 'win'): string[] {
   return out;
 }
 
-export const hotkeyParts = (h: Hotkey, platform: Platform = 'win'): string[] =>
-  [...modLabels(h.mods, platform), vkLabel(h.vk, platform)];
-/** "Ctrl + Alt + P" on Windows, "⌃⌥P" on macOS. */
-export const hotkeyLabel = (h: Hotkey, platform: Platform = 'win'): string =>
-  hotkeyParts(h, platform).join(platform === 'mac' ? '' : ' + ');
+export const hotkeyParts = (h: Hotkey, _platform: Platform = 'win'): string[] =>
+  [...modLabels(h.mods), vkLabel(h.vk)];
+/** "Ctrl + Alt + P". */
+export const hotkeyLabel = (h: Hotkey, _platform: Platform = 'win'): string =>
+  hotkeyParts(h).join(' + ');
 
 const ACCEL_NAMES: Record<number, string> = {
   0x20: 'Space', 0x0d: 'Enter', 0x09: 'Tab', 0x08: 'Backspace', 0x2d: 'Insert', 0x2e: 'Delete',

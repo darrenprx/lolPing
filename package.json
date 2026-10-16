@@ -3,7 +3,7 @@
   "productName": "lolPing",
   "version": "0.2.1",
   "private": true,
-  "description": "League of Legends style ping wheel for your Windows and macOS desktop",
+  "description": "League of Legends style ping wheel for your Windows desktop",
   "author": "Danrui Meng (https://github.com/darrenprx)",
   "license": "MIT",
   "homepage": "https://github.com/darrenprx/lolPing#readme",
@@ -20,7 +20,6 @@
     "build:helper:rust": "cargo build --release --features hooks --manifest-path native/rust-helper/Cargo.toml",
     "test:helper": "node native/hook-helper/run.mjs test",
     "dist": "npm run build:helper && npm run build:helper:rust && electron-vite build && electron-builder --win --publish never",
-    "dist:mac": "npm run build:helper && electron-vite build && electron-builder --mac --arm64 --publish never",
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "vite build --config site/vite.config.ts",
     "media": "npm run build:site && electron tools/capture-media/capture.mjs"
@@ -60,21 +59,6 @@
       "allowToChangeInstallationDirectory": true,
       "artifactName": "lolPing-Setup-${version}.exe",
       "include": "build/installer.nsh"
-    },
-    "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
-      "icon": "build/icon.png",
-      "category": "public.app-category.utilities",
-      "identity": "-",
-      "hardenedRuntime": false,
-      "extraResources": [
-        { "from": "native/hook-helper/build/hook-helper", "to": "hook-helper" },
-        { "from": "build", "to": ".", "filter": ["tray*Template*.png"] }
-      ],
-      "extendInfo": {
-        "NSAccessibilityUsageDescription": "lolPing reads the mouse and keyboard to open the ping wheel when you hold the trigger key and drag."
-      }
-    },
-    "dmg": { "artifactName": "lolPing-${version}-arm64.dmg" }
+    }
   }
 }

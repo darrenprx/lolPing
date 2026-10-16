@@ -1,4 +1,4 @@
-/** The desktop platforms lolPing runs on. Shared code takes this instead of reading process.platform. */
-export type Platform = 'win' | 'mac';
+/** lolPing runs on Windows. Shared code takes this instead of reading process.platform. */
+export type Platform = 'win';
 
-export const platformOf = (nodePlatform: string): Platform => (nodePlatform === 'darwin' ? 'mac' : 'win');
+export const platformOf = (_nodePlatform: string): Platform => 'win';

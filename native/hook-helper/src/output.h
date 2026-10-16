@@ -25,7 +25,7 @@ class Output {
   void emit(const Emit& e);
   void ready();
   void error(const std::string& message);
-  void error(const std::string& code, const std::string& message);  // machine-readable code, e.g. "noAccess"
+  void error(const std::string& code, const std::string& message);  // machine-readable code, e.g. "conflict"
   void stop();  // drains the queue, then joins the writer thread
   size_t dropped() const;
 

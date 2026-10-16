@@ -17,7 +17,6 @@ export interface SettingsIpcDeps {
   about(): About;
   retryHelper(): void;
   setCapturing(on: boolean): void;
-  openAccessibility(): void;
   /** Strings in the app's current language. */
   text(): Strings;
   platform: Platform;
@@ -61,5 +60,4 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   });
   ipcMain.handle(SETTINGS_CH.retryHelper, () => d.retryHelper());
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));
-  ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
 }
