@@ -38,6 +38,14 @@ export type SoundResult = { ok: true } | { ok: false; error: SoundError };
 
 export const MAX_CUSTOM_EMOTES = 24;
 export const EMOTE_DURATION_S = 3;
+/** The shortest time a custom animation plays: the plain envelope's entrance and goodbye, back to back. */
+export const EMOTE_ANIM_MIN_S = 0.6;
+/**
+ * How long an emote whose animation loops in `loopMs` stays up: one loop of it, but never shorter than an effect needs to
+ * be readable and never past the default. Nothing measurable (a still, damaged data) keeps the default.
+ */
+export const emoteDurationS = (loopMs: number | null): number =>
+  loopMs === null ? EMOTE_DURATION_S : Math.min(Math.max(loopMs / 1000, EMOTE_ANIM_MIN_S), EMOTE_DURATION_S);
 export const CUSTOM_NAME_MAX = 24;
 export const STILL_MAX_BYTES = 12_288;
 export const STILL_SIDE = 160;

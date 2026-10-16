@@ -12,6 +12,8 @@ const GIF89 = ascii('GIF89a');
 
 const u16 = (b: Uint8Array, at: number): number => b[at] | (b[at + 1] << 8);
 const u24 = (b: Uint8Array, at: number): number => b[at] | (b[at + 1] << 8) | (b[at + 2] << 16);
+const u32 = (b: Uint8Array, at: number): number =>
+  (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0;
 
 /** Names an image by its magic bytes, never by its extension or a claimed type. */
 export function sniffImage(bytes: Uint8Array): ImageType | null {
@@ -94,10 +96,75 @@ export function gifExtent(bytes: Uint8Array): { width: number; height: number } 
 const sized = (width: number, height: number): { width: number; height: number } | null =>
   width > 0 && height > 0 ? { width, height } : null;
 
+/**
+ * The time one loop of an animated GIF takes, in milliseconds: the frame delay of every Graphic Control Extension, summed the
+ * way browsers play them (a delay under 2 centiseconds, or a frame with no extension of its own, plays as 10). Null when there
+ * is no animation to time — fewer than two frames, or a walk cut short by damaged data.
+ */
+export function gifLoopMs(bytes: Uint8Array): number | null {
+  if (sniffImage(bytes) !== 'gif' || bytes.length < 10) return null;
+  let totalCs = 0;
+  let frames = 0;
+  let pending: number | null = null; // the last extension's delay, for the one frame that follows it
+  let at = 13; // after the header and the logical screen descriptor
+  if (bytes.length > 10 && (bytes[10] & 0x80) !== 0) at += 3 << ((bytes[10] & 7) + 1); // global colour table
+  while (at < bytes.length) {
+    const block = bytes[at];
+    if (block === 0x21) {
+      // A Graphic Control Extension: its data is packed, the delay (u16, centiseconds), then the transparent index.
+      if (bytes[at + 1] === 0xf9 && bytes[at + 2] >= 4) pending = u16(bytes, at + 4);
+      at = skipSubBlocks(bytes, at + 2); // its label, then data sub-blocks
+    } else if (block === 0x2c) {
+      if (at + 10 > bytes.length) break;
+      frames += 1;
+      totalCs += pending !== null && pending >= 2 ? pending : 10;
+      pending = null;
+      const packed = bytes[at + 9];
+      at += 10;
+      if ((packed & 0x80) !== 0) at += 3 << ((packed & 7) + 1); // local colour table
+      at = skipSubBlocks(bytes, at + 1); // the LZW code size, then the compressed data
+    } else {
+      break; // the trailer, or something that isn't a block
+    }
+  }
+  return frames > 1 ? totalCs * 10 : null;
+}
+
 /** True for a WebP whose VP8X header says it is an animation (a still must not be one, whatever else it contains). */
 export function isAnimatedWebp(bytes: Uint8Array): boolean {
   // The flags byte follows the VP8X chunk header: ICC profile, alpha, EXIF and XMP are bits 5 to 2, animation is bit 1.
   return sniffImage(bytes) === 'webp' && startsWith(bytes, 12, ascii('VP8X')) && bytes.length > 20 && (bytes[20] & 0x02) !== 0;
+}
+
+/**
+ * The time one loop of an animated WebP takes, in milliseconds: the Frame Duration of every ANMF chunk, which are siblings at
+ * the top level of the file (each chunk's size is padded so the next lands on an even address). Null when there is no
+ * animation to time — fewer than two frames, or a walk cut short before the first one's duration.
+ */
+export function webpAnimLoopMs(bytes: Uint8Array): number | null {
+  if (sniffImage(bytes) !== 'webp') return null;
+  let total = 0;
+  let frames = 0;
+  let at = 12; // after the RIFF header
+  while (at + 8 <= bytes.length) {
+    const size = u32(bytes, at + 4);
+    if (startsWith(bytes, at, ascii('ANMF'))) {
+      if (at + 23 > bytes.length) break; // its duration (payload offset 12, u24 ms) is cut off
+      total += u24(bytes, at + 20);
+      frames += 1;
+    }
+    at += 8 + size + (size & 1);
+  }
+  return frames > 1 ? total : null;
+}
+
+/** The time one loop of an animated GIF or WebP takes, in milliseconds. Null for anything that has no measurable animation. */
+export function animationLoopMs(bytes: Uint8Array): number | null {
+  switch (sniffImage(bytes)) {
+    case 'gif': return gifLoopMs(bytes);
+    case 'webp': return webpAnimLoopMs(bytes);
+    default: return null;
+  }
 }
 
 const be16 = (b: Uint8Array, at: number): number => (b[at] << 8) | b[at + 1];

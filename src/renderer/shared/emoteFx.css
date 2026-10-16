@@ -1,5 +1,6 @@
-/* The emote box and the 13 signature effects a custom image plays in it, shared by the overlay stage and the effect
-   picker, which build the same nodes (see shared/emoteFx.ts). --size is the art's width, --dur the 3 s it stays. */
+/* The emote box and the six signature effects a custom image plays in it, shared by the overlay stage and the effect
+   picker, which build the same nodes (see shared/emoteFx.ts). --size is the art's width, --dur the time it stays: the
+   3 s default, or one loop of a custom animation when that is shorter (emoteStage retimes those). */
 .emote { position: absolute; width: 0; height: 0; pointer-events: none; --size: 150px; --dur: 3s; }
 /* A custom emote (or the placeholder) gets this envelope: pop in, bob, then shrink and fade over the last 0.35 s. */
 .emote .fx {

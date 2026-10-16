@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl,
-  EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote,
-  normalizeEmoteWheel, type CustomEmote,
+  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl,
+  EMOTE_ANIM_MIN_S, emoteDurationS, EMOTE_DURATION_S, emoteIconUrl, EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl,
+  isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
 } from '../../src/shared/emotes';
 
 const HASH = 'a'.repeat(32);
@@ -171,6 +171,20 @@ describe('announcedEmoteHashes', () => {
   it('announces at most 9 hashes', () => {
     const many = Array.from({ length: 12 }, (_, i) => `c:${i.toString(16).padStart(32, '0')}`);
     expect(announcedEmoteHashes(many.slice(1), many[0])).toHaveLength(9);
+  });
+});
+
+describe('emoteDurationS', () => {
+  it('is one loop of the animation, within what an effect needs and the default', () => {
+    expect(emoteDurationS(null)).toBe(EMOTE_DURATION_S); // nothing measurable keeps the default
+    expect(emoteDurationS(750)).toBe(0.75);
+    expect(emoteDurationS(1500)).toBe(1.5);
+  });
+
+  it('never goes under what an effect needs to be readable, or past the default', () => {
+    expect(emoteDurationS(0)).toBe(EMOTE_ANIM_MIN_S);
+    expect(emoteDurationS(200)).toBe(EMOTE_ANIM_MIN_S);
+    expect(emoteDurationS(5000)).toBe(EMOTE_DURATION_S);
   });
 });
 
