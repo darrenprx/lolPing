@@ -5,19 +5,31 @@ import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 type Rect = { x: number; y: number; width: number; height: number };
 
-const h = vi.hoisted(() => ({
-  windows: [] as Array<{
-    x: number;
-    bounds: Rect;
-    emit: (event: string) => boolean;
-    webContents: { send: ReturnType<typeof vi.fn> };
-    onTop: string[];
-    hiddenInMissionControl: boolean;
-  }>,
-  handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
-  isMac: false,
-  isLinux: false,
-}));
+const h = vi.hoisted(() => {
+  const displays = [
+    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { id: 2, bounds: { x: 1920, y: 0, width: 1280, height: 1024 }, scaleFactor: 1 },
+  ];
+  return {
+    windows: [] as Array<{
+      x: number;
+      bounds: Rect;
+      emit: (event: string) => boolean;
+      webContents: { send: ReturnType<typeof vi.fn> };
+      onTop: string[];
+      hiddenInMissionControl: boolean;
+    }>,
+    handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
+    isMac: false,
+    isLinux: false,
+    displays,
+    /** Swaps a fake display's bounds for a new object, the way Electron hands out fresh ones on every query. */
+    setDisplayBounds(id: number, b: { width?: number; height?: number }): void {
+      const d = displays.find((d) => d.id === id);
+      if (d) d.bounds = { ...d.bounds, ...b };
+    },
+  };
+});
 
 vi.mock('electron', async () => {
   const { EventEmitter: Emitter } = await import('node:events');
@@ -54,13 +66,9 @@ vi.mock('electron', async () => {
     }
     destroy(): void {}
   }
-  const displays = [
-    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
-    { id: 2, bounds: { x: 1920, y: 0, width: 1280, height: 1024 }, scaleFactor: 1 },
-  ];
   const screen = Object.assign(new Emitter(), {
-    getAllDisplays: () => displays,
-    getPrimaryDisplay: () => displays[0],
+    getAllDisplays: () => h.displays,
+    getPrimaryDisplay: () => h.displays[0],
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
   screen.setMaxListeners(0); // every test starts a manager on this one fake screen
@@ -298,6 +306,41 @@ describe('OverlayManager window bounds', () => {
     const { OverlayManager } = await import('../../src/main/overlayManager');
     new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
     expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([true, true]);
+  });
+});
+
+describe('OverlayManager stale display bounds', () => {
+  it('rebuilds before a wheel when a game switched the display mode without a metrics-changed event', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    h.setDisplayBounds(1, { height: 1440 }); // the display got taller; Electron never told the manager
+    mgr.handle({ type: 'wheelOpen', x: 900, y: 1400, wheel: 'emote' });
+    expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1439 });
+    expect(sent(0)).toEqual([['wheel:open', { x: 900, y: 1400, wheel: 'emote' }]]);
+  });
+
+  it('rebuilds before a click ping placed from screen coordinates, too', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    h.setDisplayBounds(2, { width: 1280, height: 800 });
+    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
+    expect(h.windows[1].bounds).toEqual({ x: 1920, y: 0, width: 1280, height: 799 });
+    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400 }]]);
+  });
+
+  it('re-checks when something appears with no gesture ahead of it, like a room member\'s ping', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    h.setDisplayBounds(2, { height: 900 });
+    mgr.spawnRemote({ displayId: 2, x: 10, y: 10, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    expect(h.windows[1].bounds).toEqual({ x: 1920, y: 0, width: 1280, height: 899 });
+    expect(sent(1)).toEqual([['ping:spawn', { id: 'danger', x: 10, y: 10, tag: { name: 'Bot', color: 0 } }]]);
+  });
+
+  it('leaves the overlays alone while every display is as the last rebuild saw it', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    const bounds = h.windows[0].bounds;
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.toast('t', 'b');
+    expect(h.windows[0].bounds).toBe(bounds); // untouched: no rebuild happened
+    expect(sent(0)).toEqual([['wheel:open', { x: 100, y: 200, wheel: 'ping' }], ['toast:show', { title: 't', body: 'b' }]]);
   });
 });
 

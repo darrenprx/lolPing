@@ -91,6 +91,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   handle(ev: HelperEvent): void {
+    // A wheel or a click is placed from screen coordinates, so stale display info would clip or misplace it.
+    if (ev.type === 'wheelOpen' || ev.type === 'click') this.refreshDisplays();
     switch (ev.type) {
       case 'wheelOpen': {
         const p = physicalToLocal(ev.x, ev.y, this.maps);
@@ -197,6 +199,23 @@ export class OverlayManager extends EventEmitter {
     return [...this.windows].find(([, w]) => w === win)?.[0];
   }
 
+  /**
+   * A game can switch the display mode without Electron noticing (electron/electron#3403), leaving the windows and
+   * the coordinate maps sized for the old mode: wheels then clip at the new screen edges, or land on the wrong
+   * display. Check before drawing something new, and rebuild everything at once when reality moved on.
+   */
+  private refreshDisplays(): void {
+    if (this.maps.length === 0) return;
+    const displays = screen.getAllDisplays();
+    const moved = displays.length !== this.maps.length
+      || displays.some((d) => {
+        const m = this.maps.find((map) => map.id === d.id);
+        return !m || m.dip.x !== d.bounds.x || m.dip.y !== d.bounds.y
+          || m.dip.width !== d.bounds.width || m.dip.height !== d.bounds.height;
+      });
+    if (moved) this.rebuild();
+  }
+
   /** We keep one ping on screen: drop it on every display but the one that just showed our new one. */
   private unkeepElsewhere(displayId: number): void {
     if (!this.settings.keepLastPing) return;
@@ -272,6 +291,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
+    // A room ping, a toast or a preview can appear with no gesture ahead of it, so the check lives here too.
+    if (RAISING_CHANNELS.has(channel)) this.refreshDisplays();
     const w = this.windows.get(displayId);
     if (!w || w.isDestroyed()) return;
     // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
