@@ -16,6 +16,8 @@ interface Live {
   timer: ReturnType<typeof setTimeout>;
   /** The object URL of a bundled emote's image, once its Blob has arrived. */
   url: string | null;
+  /** The moment an animation freezes on the still, when its loop ends before the emote's time is up. */
+  freeze: ReturnType<typeof setTimeout> | null;
   gone: boolean;
 }
 
@@ -50,14 +52,14 @@ export class EmoteStage {
     root.style.setProperty('--size', `${opts.sizePx}px`);
     root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
     const live: Live = {
-      root, url: null, gone: false,
+      root, url: null, freeze: null, gone: false,
       timer: setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
     };
     this.live.set(owner, live);
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
     else if (art.kind === 'custom') {
-      if (art.animated) this.showCustomAnim(owner, live, art.fx, art.url);
+      if (art.animated) this.showCustomAnim(owner, live, art.fx, art.url, art.still);
       else root.append(emoteFxContent(art.fx, art.url));
     } else root.append(envelope(bubble(), 0));
 
@@ -104,10 +106,12 @@ export class EmoteStage {
 
   /**
    * A custom animation: the image plays from its own object URL per spawn (Chromium gives images with the same URL one
-   * shared clock, as for a bundled emote), and the emote stays up for one loop of the file — capped at the default, never
-   * shorter than its effect needs. A file we can't fetch or time plays the shared URL for the default time instead.
+   * shared clock, as for a bundled emote), and the emote stays up for one loop of the file plus a hold — capped at the
+   * default, never shorter than its effect needs. The hold is frozen on the imported still, so the goodbye never
+   * interrupts the animation and the gif never replays its start. A file we can't fetch or time plays the shared URL
+   * for the default time instead.
    */
-  private showCustomAnim(owner: string, live: Live, variant: number, url: string): void {
+  private showCustomAnim(owner: string, live: Live, variant: number, url: string, still: string): void {
     const img = image();
     img.addEventListener('error', () => img.replaceWith(envelope(bubble(), 0)), { once: true });
     live.root.append(envelope(img, variant));
@@ -117,7 +121,16 @@ export class EmoteStage {
         live.url = URL.createObjectURL(new Blob([data], { type: sniffImage(data) === 'gif' ? 'image/gif' : 'image/webp' }));
         img.src = live.url;
         const loopMs = animationLoopMs(data);
-        if (loopMs !== null) this.retime(owner, live, emoteDurationS(loopMs));
+        if (loopMs === null) return;
+        const totalS = emoteDurationS(loopMs);
+        this.retime(owner, live, totalS);
+        // For a loop that closes well, the still (its first frame) is what the last frame looks like, so the swap reads as freezing.
+        const holdS = totalS - loopMs / 1000;
+        if (holdS > 0.05) {
+          live.freeze = setTimeout(() => {
+            if (!live.gone) img.src = still;
+          }, loopMs);
+        }
       },
       () => {
         if (!live.gone) img.src = url;
@@ -164,6 +177,7 @@ export class EmoteStage {
     if (live.gone) return;
     live.gone = true;
     clearTimeout(live.timer);
+    if (live.freeze) clearTimeout(live.freeze);
     live.root.remove();
     if (live.url) URL.revokeObjectURL(live.url);
     if (this.live.get(owner) === live) this.live.delete(owner);

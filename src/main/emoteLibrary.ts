@@ -64,10 +64,10 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
   if (emote) {
     const animated = emote.animated && !remote;
     const sound = emote.sound && !remote ? { sound: customSoundUrl(hash) } : {};
-    return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound, fx: emote.fx ?? 0 };
+    return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), still: customStillUrl(hash), animated, ...sound, fx: emote.fx ?? 0 };
   }
   // A friend's cached still has no entry here, so the plain pop is its default; the sender's message can still carry their fx.
-  return remote && cacheHas(hash) ? { kind: 'custom', url: customStillUrl(hash), animated: false, fx: 0 } : { kind: 'placeholder' };
+  return remote && cacheHas(hash) ? { kind: 'custom', url: customStillUrl(hash), still: customStillUrl(hash), animated: false, fx: 0 } : { kind: 'placeholder' };
 }
 
 /**

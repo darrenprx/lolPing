@@ -175,15 +175,17 @@ describe('announcedEmoteHashes', () => {
 });
 
 describe('emoteDurationS', () => {
-  it('is one loop of the animation, within what an effect needs and the default', () => {
+  it('is one loop plus a frozen hold, within what an effect needs and the default', () => {
     expect(emoteDurationS(null)).toBe(EMOTE_DURATION_S); // nothing measurable keeps the default
-    expect(emoteDurationS(750)).toBe(0.75);
-    expect(emoteDurationS(1500)).toBe(1.5);
+    expect(emoteDurationS(750)).toBe(1.15); // 0.75 s loop + the 0.4 s hold
+    expect(emoteDurationS(1470)).toBe(1.87);
+    expect(emoteDurationS(2000)).toBe(2.4); // 20 % of 2 s is 0.4 s, the same as the hold's floor
   });
 
   it('never goes under what an effect needs to be readable, or past the default', () => {
     expect(emoteDurationS(0)).toBe(EMOTE_ANIM_MIN_S);
     expect(emoteDurationS(200)).toBe(EMOTE_ANIM_MIN_S);
+    expect(emoteDurationS(2500)).toBe(EMOTE_DURATION_S); // 2.5 s + 20 % lands exactly on the default
     expect(emoteDurationS(5000)).toBe(EMOTE_DURATION_S);
   });
 });

@@ -238,8 +238,8 @@ describe('OverlayManager remote and preview emotes', () => {
 
   it('plays a room member’s custom emote with the effect on their message, over what we would have picked', () => {
     const url = `lolping://emotes/${'a'.repeat(32)}.webp`;
-    const cached: EmoteArt = { kind: 'custom', url, animated: false, fx: 0 };
-    const mine: EmoteArt = { kind: 'custom', url, animated: false, fx: 2 };
+    const cached: EmoteArt = { kind: 'custom', url, still: url, animated: false, fx: 0 };
+    const mine: EmoteArt = { kind: 'custom', url, still: url, animated: false, fx: 2 };
     resolveArt.mockReturnValueOnce(cached).mockReturnValueOnce(mine);
     mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, fx: 5, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
     mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });

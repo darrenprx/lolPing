@@ -155,7 +155,7 @@ describe('custom emote effects', () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement);
     const hash = '000a' + '0'.repeat(28);
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, still: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
     const [emote] = layer.find('emote');
     const [fx] = emote.find('fx');
     expect(fx.className.split(' ')).toEqual(['fx', 'v1']);
@@ -163,7 +163,7 @@ describe('custom emote effects', () => {
     stage.clear('self');
 
     const other = '000b' + '0'.repeat(28);
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, still: `lolping://emotes/${other}.webp`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
     expect(layer.find('emote')[0].find('fx')[0].className.split(' ')).toEqual(['fx', 'v2']);
     stage.clear('self');
   });
@@ -184,7 +184,7 @@ describe('plain effects', () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement);
     for (let n = 0; n < 6; n++) {
-      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
+      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, still: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
       const [fx] = layer.find('emote')[0].find('fx');
       expect(fx.children.filter((c) => c.tagName === 'i')).toHaveLength(0);
       stage.clear('self');
@@ -221,22 +221,27 @@ const GIF_TIMED = (...delays: number[]): Uint8Array<ArrayBuffer> =>
     0x3b]);
 
 const ANIM_URL = `lolping://emotes/${'a'.repeat(32)}.anim`;
-const animated = (fx = 0): Parameters<EmoteStage['spawn']>[1] => ({ kind: 'custom', url: ANIM_URL, animated: true, fx });
+const STILL_URL = `lolping://emotes/${'a'.repeat(32)}.webp`;
+const animated = (fx = 0): Parameters<EmoteStage['spawn']>[1] => ({
+  kind: 'custom', url: ANIM_URL, still: STILL_URL, animated: true, fx,
+});
 
-describe('a custom animation (stays for one loop of its file)', () => {
-  it('is retimed to the gif’s loop, and is gone after it', async () => {
+describe('a custom animation (one loop of its file, then a frozen hold)', () => {
+  it('plays one loop, freezes on the still for the hold, and is gone after', async () => {
     vi.useFakeTimers();
     try {
       const layer = new FakeElement('div');
       const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob([GIF_TIMED(50, 25)])));
       stage.spawn('self', animated(), 10, 20, { sizePx: 150 });
-      await vi.advanceTimersByTimeAsync(0); // the bytes arrive: the art restarts from its own object URL, the exit moves to .75 s
+      await vi.advanceTimersByTimeAsync(0); // the bytes arrive: one 0.75 s loop plus the 0.4 s hold
       const [emote] = layer.find('emote');
-      expect(emote.style['--dur']).toBe('0.75s');
-      expect(emote.find('fx')[0].children[0].src).toMatch(/^blob:/);
-      await vi.advanceTimersByTimeAsync(750);
-      expect(layer.find('emote')).toHaveLength(1); // the 150 ms grace after the fade is still running
-      await vi.advanceTimersByTimeAsync(150);
+      expect(emote.style['--dur']).toBe('1.15s');
+      const img = emote.find('fx')[0].children[0];
+      expect(img.src).toMatch(/^blob:/);
+      await vi.advanceTimersByTimeAsync(750); // the loop ends: the art freezes on the imported still
+      expect(img.src).toBe(STILL_URL);
+      expect(layer.find('emote')).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(550); // the hold runs out, 150 ms after the 0.35 s goodbye
       expect(layer.find('emote')).toHaveLength(0);
     } finally {
       vi.useRealTimers();

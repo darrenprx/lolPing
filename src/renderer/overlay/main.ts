@@ -53,7 +53,7 @@ function localArt(ref: EmoteRef): EmoteArt {
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
   const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound, fx: custom.fx ?? 0 };
+  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), still: customStillUrl(hash), animated: custom.animated, ...sound, fx: custom.fx ?? 0 };
 }
 
 /** Our newest ping on this display while "Keep my last ping on screen" is on. */
