@@ -17,10 +17,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Install Rust (GNU toolchain, matches the helper build)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu
       - run: npm ci
       - run: npm run typecheck
-      # Builds hook-helper.exe and runs the C++ tests. The TypeScript tests need the built helper.
+      # Builds hook-helper.exe and runs the C++ tests. The TypeScript tests need a built helper.
       - run: npm run test:helper
+      # Builds the Rust helper (release). The TypeScript integration test prefers it over C++.
+      - run: npm run build:helper:rust
       - run: npm test
       - run: npm run build
       - run: npm run build:site

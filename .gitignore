@@ -4,5 +4,6 @@ dist/
 release/
 site-dist/
 native/hook-helper/build/
+native/rust-helper/target/
 *.log
 .DS_Store

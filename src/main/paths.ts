@@ -1,4 +1,5 @@
 import { app, type BrowserWindow } from 'electron';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
@@ -8,12 +9,36 @@ export type Page = 'overlay' | 'settings';
 export const PLATFORM: Platform = platformOf(process.platform);
 export const IS_MAC = PLATFORM === 'mac';
 
-const HELPER_FILE = IS_MAC ? 'hook-helper' : 'hook-helper.exe';
+const CPP_HELPER_FILE = IS_MAC ? 'hook-helper' : 'hook-helper.exe';
+const RUST_HELPER_FILE = IS_MAC ? 'lolping-helper' : 'lolping-helper.exe';
 
-export const helperExePath = (): string =>
+/** Rust-port binary locations, most-preferred first (release, then debug for local dev). */
+const rustHelperCandidates = (): string[] =>
   app.isPackaged
-    ? join(process.resourcesPath, HELPER_FILE)
-    : join(app.getAppPath(), 'native', 'hook-helper', 'build', HELPER_FILE);
+    ? [join(process.resourcesPath, RUST_HELPER_FILE)]
+    : [
+        join(app.getAppPath(), 'native', 'rust-helper', 'target', 'release', RUST_HELPER_FILE),
+        join(app.getAppPath(), 'native', 'rust-helper', 'target', 'debug', RUST_HELPER_FILE),
+      ];
+
+const cppHelperPath = (): string =>
+  app.isPackaged
+    ? join(process.resourcesPath, CPP_HELPER_FILE)
+    : join(app.getAppPath(), 'native', 'hook-helper', 'build', CPP_HELPER_FILE);
+
+/**
+ * Resolve the input-helper binary. Prefers the Rust port when it is present (packaged, or
+ * built locally) and falls back to the C++ helper. Both speak the same JSON-lines protocol,
+ * so InputBridge needs no other change. Set LOLPING_HELPER=cpp to force the C++ helper.
+ */
+export const helperExePath = (): string => {
+  if ((process.env.LOLPING_HELPER ?? '').toLowerCase() !== 'cpp') {
+    for (const p of rustHelperCandidates()) {
+      if (existsSync(p)) return p;
+    }
+  }
+  return cppHelperPath();
+};
 
 /** Files from build/ that ship as extraResources (the macOS menu bar icon). */
 export const buildResourcePath = (file: string): string =>

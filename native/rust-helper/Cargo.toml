@@ -1,0 +1,21 @@
+[package]
+name = "lolping-helper"
+version = "0.2.1-rust"
+edition = "2021"
+description = "Rust port of the lolPing native input helper (pure decision core + protocol + --simulate)"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Enables the OS hook backend. Without it, `cargo test` exercises the full brain offline,
+# and `--simulate` reproduces the C++ helper's test mode on any platform.
+# The Windows backend (src/platform/windows.rs) uses direct Win32 FFI + SendInput, so it needs
+# no external crate. A future macOS/Linux backend can add `rdev` here (hooks = ["rdev"]).
+hooks = []
+
+[[bin]]
+name = "lolping-helper"
+path = "src/main.rs"

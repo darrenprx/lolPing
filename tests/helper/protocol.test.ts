@@ -6,12 +6,18 @@ import { createInterface } from 'node:readline';
 import { describe, expect, it } from 'vitest';
 import { parseHelperLine, type HelperEvent } from '../../src/shared/protocol';
 
-const exe = resolve(__dirname, '../../native/hook-helper/build', process.platform === 'win32' ? 'hook-helper.exe' : 'hook-helper');
+const isWin = process.platform === 'win32';
+const rustHelper = (profile: 'release' | 'debug'): string =>
+  resolve(__dirname, '../../native/rust-helper/target', profile, isWin ? 'lolping-helper.exe' : 'lolping-helper');
+const cppExe = resolve(__dirname, '../../native/hook-helper/build', isWin ? 'hook-helper.exe' : 'hook-helper');
+// Prefer the Rust port for a continuous parity check; fall back to the C++ helper (e.g. the macOS
+// CI job, which has no Rust backend yet).
+const exe = [rustHelper('release'), rustHelper('debug'), cppExe].find((p) => existsSync(p)) ?? cppExe;
 const ALT = 164, CTRL = 162, KEY_P = 80;
 const config = { type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, enabled: true };
 
 async function simulate(lines: object[]): Promise<HelperEvent[]> {
-  expect(existsSync(exe), 'run `npm run build:helper` first').toBe(true);
+  expect(existsSync(exe), 'run `npm run build:helper:rust` (or `npm run build:helper`) first').toBe(true);
   const child = spawn(exe, ['--simulate'], { stdio: ['pipe', 'pipe', 'inherit'] });
   const events: HelperEvent[] = [];
   const rl = createInterface({ input: child.stdout });

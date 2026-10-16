@@ -31,8 +31,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Install Rust (GNU toolchain, matches the helper build)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu
       - run: npm ci
       - run: npm run test:helper
+      # Builds the Rust helper (release). `npm test` prefers it; `dist` rebuilds it for packaging.
+      - run: npm run build:helper:rust
       - run: npm test
       - run: npm run dist
       - name: Upload the installer
