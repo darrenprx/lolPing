@@ -49,7 +49,11 @@ describe('ping table', () => {
   });
 
   it('never uses colourblind textures', () => {
-    for (const name of allTextureNames()) expect(name).not.toMatch(/_cb/);
+    const knownCb = ['push_cb_128x128', 'genericping_cb_128x128', 'retreat_cb_128x128', 'pingwheel_omw_cb'];
+    for (const name of allTextureNames()) {
+      expect(name).not.toMatch(/_cb/);
+      expect(knownCb).not.toContain(name);
+    }
   });
 
   it('gives All In two clashing halves and every other ping one art image', () => {

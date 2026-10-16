@@ -41,16 +41,16 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 | id | Slot | Wheel icon (`assets/textures/`) | On-screen art | Sound (`assets/sounds/`) | Ring colour |
 |---|---|---|---|---|---|
 | `danger` | N | `pingwheel_retreatrender.png` | `pingwheel_retreatrender.png` | `SRP_12.wav` | `#ff3b55` |
-| `push` | NE | `push.png` | `pingwheel_pushrender.png` | `SRP_9.wav` | `#35d27a` |
-| `omw` | E | `omw.png` | `omw.png` (upright icon; the flat `omw` ground render looks wrong) | `OnMyWay.wav` | `#2e8bff` |
+| `push` | NE | `pingwheel_pushrender.png` | `pingwheel_pushrender.png` | `SRP_9.wav` | `#35d27a` |
+| `omw` | E | `omw.png` | `omw.png` (upright icon in standard cyan; flat ground render `pingwheel_omw.png` also extracted) | `OnMyWay.wav` | `#2e8bff` |
 | `allin` | SE | `all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.wav` | `#f2b320` |
-| `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.wav` | `#56d43c` |
-| `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.wav` | `#56d43c` |
+| `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.wav` | `#2fe098` |
+| `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.wav` | `#2fe098` |
 | `missing` | W | `enemy_missing.png` | `enemy_missing.png` | `MIA.wav` | `#f2c518` |
 | `enemyvision` | NW | `pingwheel_enemyvisionrender.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.wav` | `#ff3b55` |
-| `generic` | (trigger+click) | `generic_ping.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
+| `generic` | (trigger+click) | `pingwheel_basicpingrender.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
 | `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.wav` | `#efbc12` |
-| `visioncleared` | — | `vision_cleared.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
+| `visioncleared` | — | `pingwheel_visionclearedrender.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
 | `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
 | wheel tick | — | — | — | `button.wav` | — |
 
