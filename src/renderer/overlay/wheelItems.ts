@@ -1,9 +1,9 @@
 import { catalogEmote, customHash, customStillUrl, emoteIconUrl, type EmoteRef } from '../../shared/emotes';
-import { pingById, textureUrl, type PingDef, type PingId } from '../../shared/pings';
+import { FALLBACK_TEXTURE, pingById, textureUrl, type PingDef, type PingId } from '../../shared/pings';
 import type { OverlaySettings } from '../../shared/settings';
 import type { WheelItem } from './wheel';
 
-const UNKNOWN_ICON = textureUrl('generic_ping');
+const UNKNOWN_ICON = textureUrl(FALLBACK_TEXTURE);
 
 export const pingItem = (p: PingDef): WheelItem => ({ key: p.id, icon: textureUrl(p.icon) });
 

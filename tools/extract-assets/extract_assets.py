@@ -114,8 +114,13 @@ NAME_OVERRIDES: dict[str, tuple[str, str]] = {
 # output png name -> League .tex in Global.wad.client (the other textures came from Obsidian DDS exports, see README)
 WAD_TEXTURES = {
     'pingwheel_baitrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_Bait.tex',
-    'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
+    'pingwheel_omw': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_OMW.tex',
+    'pingwheel_retreatrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_RetreatRender.tex',
+    'pingwheel_enemyvisionrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_EnemyVisionRender.tex',
+    'pingwheel_pushrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_PushRender.tex',
+    'pingwheel_basicpingrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_BasicPingRender.tex',
     'pingwheel_visionclearedrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_VisionClearedRender.tex',
+    'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
 }
 
 # The room panel, vote widgets and text box are drawn with these. Output file in assets/ui -> (WAD under the install
@@ -370,6 +375,9 @@ def convert_textures(dds_dir: Path) -> None:
 
     TEXTURE_OUT.mkdir(parents=True, exist_ok=True)
     for dds in sorted(dds_dir.glob('*.dds')):
+        if '_cb' in dds.stem.lower():
+            print(f'skipping colourblind texture: {dds.name}')
+            continue
         Image.open(dds).convert('RGBA').save(TEXTURE_OUT / f'{dds.stem}.png')
         print('texture', dds.stem)
 

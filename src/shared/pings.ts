@@ -18,16 +18,16 @@ export interface PingDef {
 /** Every ping, in the order the settings window lists them: the default wheel, then the extras. */
 export const ALL_PINGS: readonly PingDef[] = [
   { id: 'danger', name: 'Danger', icon: 'pingwheel_retreatrender', art: ['pingwheel_retreatrender'], sound: 'SRP_12', color: '#ff3b55' },
-  { id: 'push', name: 'Push', icon: 'push', art: ['pingwheel_pushrender'], sound: 'SRP_9', color: '#35d27a' },
+  { id: 'push', name: 'Push', icon: 'pingwheel_pushrender', art: ['pingwheel_pushrender'], sound: 'SRP_9', color: '#35d27a' },
   { id: 'omw', name: 'On My Way', icon: 'omw', art: ['omw'], sound: 'OnMyWay', color: '#2e8bff' },
   { id: 'allin', name: 'All In', icon: 'all_in', art: ['pingwheel_allin_render_01', 'pingwheel_allin_render_02'], sound: 'SRP_4', color: '#f2b320' },
-  { id: 'assist', name: 'Assist Me', icon: 'assist_me', art: ['assist_me'], sound: 'ComeHere', color: '#56d43c' },
-  { id: 'needvision', name: 'Need Vision', icon: 'need_vision', art: ['need_vision'], sound: 'SRP_7', color: '#56d43c' },
+  { id: 'assist', name: 'Assist Me', icon: 'assist_me', art: ['assist_me'], sound: 'ComeHere', color: '#2fe098' },
+  { id: 'needvision', name: 'Need Vision', icon: 'need_vision', art: ['need_vision'], sound: 'SRP_7', color: '#2fe098' },
   { id: 'missing', name: 'Enemy Missing', icon: 'enemy_missing', art: ['enemy_missing'], sound: 'MIA', color: '#f2c518' },
   { id: 'enemyvision', name: 'Enemy Vision', icon: 'pingwheel_enemyvisionrender', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
-  { id: 'generic', name: 'Generic', icon: 'generic_ping', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
+  { id: 'generic', name: 'Generic', icon: 'pingwheel_basicpingrender', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
-  { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
+  { id: 'visioncleared', name: 'Vision Cleared', icon: 'pingwheel_visionclearedrender', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
   // Not a League ping: Enemy Missing turned upside down ("¿"), asked for in #24. Older room peers drop it.
   { id: 'missingflip', name: 'Upside-down Missing', icon: 'enemy_missing_flipped', art: ['enemy_missing_flipped'], sound: 'MIA', color: '#f2c518' },
 ];
@@ -38,7 +38,7 @@ export const DEFAULT_CLICK_PING: PingId = 'generic';
 export const WHEEL_SLOTS = 8;
 
 export const TICK_SOUND = 'button';
-export const FALLBACK_TEXTURE = 'generic_ping';
+export const FALLBACK_TEXTURE = 'pingwheel_basicpingrender';
 
 export function pingById(id: string): PingDef | undefined {
   return ALL_PINGS.find((p) => p.id === id);
