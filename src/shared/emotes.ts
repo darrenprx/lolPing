@@ -22,7 +22,7 @@ export const isEmoteFx = (v: unknown): v is number =>
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
-  | { kind: 'custom'; url: string; animated: boolean; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
+  | { kind: 'custom'; url: string; still: string; animated: boolean; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';
@@ -38,6 +38,23 @@ export type SoundResult = { ok: true } | { ok: false; error: SoundError };
 
 export const MAX_CUSTOM_EMOTES = 24;
 export const EMOTE_DURATION_S = 3;
+/** The shortest total time a custom animation plays: less, and its effect's entrance and goodbye would overlap. */
+export const EMOTE_ANIM_MIN_S = 0.6;
+/** The hold after one loop, frozen on the still: 20 % of the loop, but never less than the goodbye's 0.35 s plus a beat — less, and the exit would interrupt the animation's tail. */
+export const EMOTE_ANIM_HOLD = 0.2;
+export const EMOTE_ANIM_HOLD_MIN_S = 0.4;
+/**
+ * How long an emote whose animation loops in `loopMs` stays up: one loop, then a frozen hold, capped at the default and
+ * never shorter than an effect needs to be readable. Nothing measurable (a still, damaged data) keeps the default.
+ */
+export const emoteDurationS = (loopMs: number | null): number => {
+  if (loopMs === null) return EMOTE_DURATION_S;
+  const loopS = loopMs / 1000;
+  const holdS = Math.max(loopS * EMOTE_ANIM_HOLD, EMOTE_ANIM_HOLD_MIN_S);
+  // Rounded to centiseconds, so 0.2 + 0.4 doesn't leave the CSS with 0.6000000000000001 s.
+  const totalS = Math.round((loopS + holdS) * 100) / 100;
+  return Math.min(Math.max(totalS, EMOTE_ANIM_MIN_S), EMOTE_DURATION_S);
+};
 export const CUSTOM_NAME_MAX = 24;
 export const STILL_MAX_BYTES = 12_288;
 export const STILL_SIDE = 160;

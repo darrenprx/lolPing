@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl,
-  EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote,
-  normalizeEmoteWheel, type CustomEmote,
+  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl,
+  EMOTE_ANIM_MIN_S, emoteDurationS, EMOTE_DURATION_S, emoteIconUrl, EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl,
+  isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
 } from '../../src/shared/emotes';
 
 const HASH = 'a'.repeat(32);
@@ -171,6 +171,22 @@ describe('announcedEmoteHashes', () => {
   it('announces at most 9 hashes', () => {
     const many = Array.from({ length: 12 }, (_, i) => `c:${i.toString(16).padStart(32, '0')}`);
     expect(announcedEmoteHashes(many.slice(1), many[0])).toHaveLength(9);
+  });
+});
+
+describe('emoteDurationS', () => {
+  it('is one loop plus a frozen hold, within what an effect needs and the default', () => {
+    expect(emoteDurationS(null)).toBe(EMOTE_DURATION_S); // nothing measurable keeps the default
+    expect(emoteDurationS(750)).toBe(1.15); // 0.75 s loop + the 0.4 s hold
+    expect(emoteDurationS(1470)).toBe(1.87);
+    expect(emoteDurationS(2000)).toBe(2.4); // 20 % of 2 s is 0.4 s, the same as the hold's floor
+  });
+
+  it('never goes under what an effect needs to be readable, or past the default', () => {
+    expect(emoteDurationS(0)).toBe(EMOTE_ANIM_MIN_S);
+    expect(emoteDurationS(200)).toBe(EMOTE_ANIM_MIN_S);
+    expect(emoteDurationS(2500)).toBe(EMOTE_DURATION_S); // 2.5 s + 20 % lands exactly on the default
+    expect(emoteDurationS(5000)).toBe(EMOTE_DURATION_S);
   });
 });
 

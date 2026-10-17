@@ -13,7 +13,11 @@ if not defined VSDIR (
 call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
 cd /d "%~dp0"
 if not exist build\obj mkdir build\obj
-set FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /MT /DUNICODE /D_UNICODE /Fobuild\obj\
+rem /utf-8: the sources are UTF-8, and cl would otherwise read them in the system code page — a
+rem CJK-locale machine (code page 936) turns some characters into warning C4819, fatal under /WX.
+rem /Zc:preprocessor: the traditional one mis-lexes a raw string holding \" inside a macro argument
+rem (CHECK(R"( ... "a\"b\\c" ... )) breaks into stray literals on line helper_tests.cpp:1182).
+set FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /MT /utf-8 /Zc:preprocessor /DUNICODE /D_UNICODE /Fobuild\obj\
 cl %FLAGS% /O2 src\main_win.cpp src\hooks_win.cpp src\simulate.cpp src\commands.cpp src\output.cpp src\json.cpp src\decision.cpp /Fe:build\hook-helper.exe /link user32.lib || exit /b 1
 cl %FLAGS% /Od tests\helper_tests.cpp src\decision.cpp src\commands.cpp src\macinput.cpp src\json.cpp src\output.cpp /Fe:build\helper_tests.exe || exit /b 1
 echo Built build\hook-helper.exe and build\helper_tests.exe

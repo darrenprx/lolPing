@@ -16,7 +16,9 @@ export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|sound)$/;
 /** Must run before app 'ready'. */
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    // corsEnabled: a page fetches an animation's bytes to time one loop of it (emoteStage). Without this the browser
+    // drops a cross-origin fetch to the scheme before it ever reaches the handler, whatever the response headers say.
+    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
 }
 
@@ -29,7 +31,7 @@ export function resolveEmoteFile(dirs: readonly string[], urlPath: string): stri
   if (!m) return null;
   const [, hash, kind] = m;
   const names = kind === 'webp' ? [`${hash}.webp`]
-    : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`]
+    : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.anim.png`, `${hash}.webp`]
       : AUDIO_TYPES.map((t) => `${hash}.sound.${t}`);
   for (const name of names) {
     for (const dir of dirs) {

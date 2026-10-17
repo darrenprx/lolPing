@@ -3,7 +3,7 @@ import {
   ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, SOUND_MAX_BYTES, SOUND_MAX_S, STILL_FALLBACK_SIDE, STILL_MAX_BYTES,
   STILL_SIDE, type EmoteFile, type ImportError, type SoundError,
 } from '../../shared/emotes';
-import { imageSize, sniffImage, type ImageType } from '../../shared/imageSniff';
+import { imageSize, isAnimatedPng, sniffImage, type ImageType } from '../../shared/imageSniff';
 
 export type Prepared = { ok: true; file: EmoteFile } | { ok: false; error: ImportError };
 export type PreparedSound = { ok: true; bytes: Uint8Array } | { ok: false; error: SoundError };
@@ -88,7 +88,8 @@ export async function prepareEmote(file: File): Promise<Prepared> {
     await Promise.all([decoder.tracks.ready, decoder.completed]); // all the data is in, so the frame count is final
     const frames = decoder.tracks.selectedTrack?.frameCount ?? 1;
     frame = (await decoder.decode({ frameIndex: 0 })).image;
-    const animated = (type === 'gif' || type === 'webp') && frames > 1;
+    // An APNG's frames come from the acTL chunk rather than the decoder's count, which need not know about them.
+    const animated = type === 'png' ? isAnimatedPng(bytes) : frames > 1;
     if (animated) {
       const tooBig = checkAnimation(bytes, frame.displayWidth, frame.displayHeight);
       if (tooBig) return fail(tooBig);

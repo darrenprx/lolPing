@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { gifExtent, gifSize, imageSize, isAnimatedWebp, sniffImage, webpSize } from '../../src/shared/imageSniff';
+import {
+  animationLoopMs, apngLoopMs, gifExtent, gifLoopMs, gifSize, imageSize, isAnimatedPng, isAnimatedWebp, sniffImage,
+  webpAnimLoopMs, webpSize,
+} from '../../src/shared/imageSniff';
 
 const ascii = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
 const le16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff];
@@ -291,5 +294,119 @@ describe('gifExtent', () => {
     expect(imageSize(GIF_BLOCKS(1, 1, [{ w: 9000, h: 9000 }]))).toEqual({ width: 9000, height: 9000 });
     expect(imageSize(GIF_BLOCKS(0, 0, [{ w: 64, h: 48 }]))).toEqual({ width: 64, height: 48 });
     expect(imageSize(GIF('GIF89a', 320, 240))).toEqual({ width: 320, height: 240 });
+  });
+});
+
+/** A GIF for the loop-time walk: one frame per delay, that many centiseconds long; null makes a frame with no extension. */
+const GIF_TIMED = (delays: readonly (number | null)[]): Uint8Array =>
+  bytes(ascii('GIF89a'), le16(4), le16(4), [0, 0, 0],
+    ...delays.flatMap((cs) => [
+      ...(cs === null ? [] : [[0x21, 0xf9, 4, 0, ...le16(cs), 0, 0]]),
+      [0x2c, ...le16(0), ...le16(0), ...le16(1), ...le16(1), 0, 2, 1, 0x2c, 0],
+    ]),
+    [0x3b]);
+
+describe('gifLoopMs', () => {
+  it('sums the frame delays of the graphic control extensions', () => {
+    expect(gifLoopMs(GIF_TIMED([50, 25]))).toBe(750);
+    expect(gifLoopMs(GIF_TIMED([100, 100, 100, 100]))).toBe(4000);
+  });
+
+  it('plays a delay under 2 centiseconds, or a frame with no extension, as 10', () => {
+    expect(gifLoopMs(GIF_TIMED([0, 1, null]))).toBe(300);
+    expect(gifLoopMs(GIF_TIMED([50, null]))).toBe(600);
+  });
+
+  it('an extension belongs to one frame only, the next one after it', () => {
+    expect(gifLoopMs(GIF_TIMED([50, 50, null]))).toBe(1100);
+  });
+
+  it('needs at least two frames, and something that sniffs as a GIF', () => {
+    expect(gifLoopMs(GIF_TIMED([50]))).toBeNull();
+    expect(gifLoopMs(GIF('GIF89a', 4, 4))).toBeNull(); // a header alone
+    expect(gifLoopMs(PNG)).toBeNull();
+  });
+});
+
+/** A RIFF chunk: header, payload, and the pad byte that keeps the next chunk on an even address. */
+const CHUNK = (fourcc: string, payload: number[]): number[][] =>
+  [ascii(fourcc), le32(payload.length), payload, ...(payload.length % 2 ? [[0]] : [])];
+
+/** An animated WebP with one ANMF chunk per duration, each of the minimal 16 payload bytes the walk reads. */
+const WEBP_TIMED = (durations: readonly number[]): Uint8Array => {
+  const chunks = [
+    ...CHUNK('VP8X', [0x02, 0, 0, 0, ...le24(9), ...le24(9)]),
+    ...CHUNK('ANIM', [0, 0, 0, 0, ...le16(0)]),
+    ...durations.flatMap((ms) => CHUNK('ANMF', [...le24(0), ...le24(0), ...le24(9), ...le24(9), ...le24(ms), 0])),
+  ];
+  const body = chunks.flat(2);
+  return bytes(ascii('RIFF'), le32(4 + body.length), ascii('WEBP'), body);
+};
+
+describe('webpAnimLoopMs', () => {
+  it('sums the frame durations of the ANMF chunks', () => {
+    expect(webpAnimLoopMs(WEBP_TIMED([90, 160]))).toBe(250);
+    expect(webpAnimLoopMs(WEBP_TIMED([1000, 1000, 500]))).toBe(2500);
+  });
+
+  it('needs at least two frames, and something that sniffs as a WebP', () => {
+    expect(webpAnimLoopMs(WEBP_TIMED([90]))).toBeNull();
+    expect(webpAnimLoopMs(WEBP_LOSSY(10, 10))).toBeNull();
+    expect(webpAnimLoopMs(GIF('GIF89a', 4, 4))).toBeNull();
+  });
+
+  it('stops at a chunk whose duration is cut off, keeping what it had read', () => {
+    const cut = WEBP_TIMED([90, 90, 90]).slice(0, -3); // inside the last frame's duration
+    expect(webpAnimLoopMs(cut)).toBe(180);
+  });
+});
+
+describe('animationLoopMs', () => {
+  it('routes by the sniffed type, and gives stills nothing', () => {
+    expect(animationLoopMs(GIF_TIMED([50, 25]))).toBe(750);
+    expect(animationLoopMs(WEBP_TIMED([90, 160]))).toBe(250);
+    expect(animationLoopMs(PNG_TIMED([[50, 100], [250, 100]]))).toBe(3000);
+    expect(animationLoopMs(PNG)).toBeNull();
+    expect(animationLoopMs(WEBP_LOSSLESS(10, 10))).toBeNull();
+    expect(animationLoopMs(new Uint8Array())).toBeNull();
+  });
+});
+
+/** A PNG chunk: big-endian length, the type, the data, and a CRC the walk never reads. */
+const pngChunk = (type: string, data: number[]): number[] => [...be32(data.length), ...ascii(type), ...data, 0, 0, 0, 0];
+const IHDR = pngChunk('IHDR', [...be32(9), ...be32(9), 8, 6, 0, 0, 0]);
+/** An APNG with one fcTL per [num, den] delay and an IDAT behind each frame header. */
+const PNG_TIMED = (delays: readonly [number, number][]): Uint8Array =>
+  bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], IHDR,
+    pngChunk('acTL', [...be32(delays.length), ...be32(0)]),
+    ...delays.flatMap(([num, den]) => [
+      pngChunk('fcTL', [...be32(0), ...be32(9), ...be32(9), ...be32(0), ...be32(0), ...be16(num), ...be16(den), 0, 0]),
+      pngChunk('IDAT', [1, 2, 3]),
+    ]),
+    pngChunk('IEND', []));
+
+describe('isAnimatedPng', () => {
+  it('is true for a PNG whose acTL announces several frames', () => {
+    expect(isAnimatedPng(PNG_TIMED([[50, 100], [250, 100]]))).toBe(true);
+  });
+
+  it('is false for a plain PNG, a one-frame acTL, or anything else', () => {
+    expect(isAnimatedPng(PNG)).toBe(false);
+    expect(isAnimatedPng(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], IHDR,
+      pngChunk('acTL', [...be32(1), ...be32(0)]), pngChunk('IDAT', [1]), pngChunk('IEND', [])))).toBe(false);
+    expect(isAnimatedPng(GIF('GIF89a', 4, 4))).toBe(false);
+  });
+});
+
+describe('apngLoopMs', () => {
+  it('sums the fcTL delays, a zero denominator meaning the spec default of 100', () => {
+    expect(apngLoopMs(PNG_TIMED([[50, 100], [250, 100]]))).toBe(3000);
+    expect(apngLoopMs(PNG_TIMED([[100, 1000], [5, 0]]))).toBe(150); // 100 ms + 50 ms
+  });
+
+  it('needs at least two frames, and something that sniffs as a PNG', () => {
+    expect(apngLoopMs(PNG_TIMED([[50, 100]]))).toBeNull();
+    expect(apngLoopMs(PNG)).toBeNull();
+    expect(apngLoopMs(GIF('GIF89a', 4, 4))).toBeNull();
   });
 });

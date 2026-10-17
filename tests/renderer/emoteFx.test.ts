@@ -11,7 +11,9 @@ class FakeElement {
   draggable = true;
   parent: FakeElement | null = null;
   children: FakeElement[] = [];
-  readonly style: Record<string, unknown> & { setProperty(k: string, v: string): void } = { setProperty: () => undefined };
+  readonly style: Record<string, unknown> & { setProperty(k: string, v: string): void } = {
+    setProperty(k: string, v: string): void { this[k] = v; },
+  };
   constructor(readonly tagName: string) {}
   append(...els: FakeElement[]): void {
     for (const el of els) {
@@ -153,7 +155,7 @@ describe('custom emote effects', () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement);
     const hash = '000a' + '0'.repeat(28);
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, still: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
     const [emote] = layer.find('emote');
     const [fx] = emote.find('fx');
     expect(fx.className.split(' ')).toEqual(['fx', 'v1']);
@@ -161,7 +163,7 @@ describe('custom emote effects', () => {
     stage.clear('self');
 
     const other = '000b' + '0'.repeat(28);
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, still: `lolping://emotes/${other}.webp`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
     expect(layer.find('emote')[0].find('fx')[0].className.split(' ')).toEqual(['fx', 'v2']);
     stage.clear('self');
   });
@@ -182,7 +184,7 @@ describe('plain effects', () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement);
     for (let n = 0; n < 6; n++) {
-      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
+      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, still: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
       const [fx] = layer.find('emote')[0].find('fx');
       expect(fx.children.filter((c) => c.tagName === 'i')).toHaveLength(0);
       stage.clear('self');
@@ -209,5 +211,82 @@ describe('emoteFxContent (the effect picker builds the same nodes)', () => {
     const fx = emoteFxContent(5, url) as unknown as FakeElement;
     fx.children[0].dispatch('error');
     expect(fx.find('bubble')).toHaveLength(1);
+  });
+});
+
+/** A tiny animated GIF with one frame per delay, that many centiseconds long. */
+const GIF_TIMED = (...delays: number[]): Uint8Array<ArrayBuffer> =>
+  Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 4, 0, 4, 0, 0, 0, 0,
+    ...delays.flatMap((cs) => [0x21, 0xf9, 4, 0, cs & 0xff, (cs >> 8) & 0xff, 0, 0, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 1, 0x2c, 0]),
+    0x3b]);
+
+const ANIM_URL = `lolping://emotes/${'a'.repeat(32)}.anim`;
+const STILL_URL = `lolping://emotes/${'a'.repeat(32)}.webp`;
+const animated = (fx = 0): Parameters<EmoteStage['spawn']>[1] => ({
+  kind: 'custom', url: ANIM_URL, still: STILL_URL, animated: true, fx,
+});
+
+describe('a custom animation (one loop of its file, then a frozen hold)', () => {
+  it('plays one loop, freezes on the still for the hold, and is gone after', async () => {
+    vi.useFakeTimers();
+    try {
+      const layer = new FakeElement('div');
+      const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob([GIF_TIMED(50, 25)])));
+      stage.spawn('self', animated(), 10, 20, { sizePx: 150 });
+      await vi.advanceTimersByTimeAsync(0); // the bytes arrive: one 0.75 s loop plus the 0.4 s hold
+      const [emote] = layer.find('emote');
+      expect(emote.style['--dur']).toBe('1.15s');
+      const img = emote.find('fx')[0].children[0];
+      expect(img.src).toMatch(/^blob:/);
+      await vi.advanceTimersByTimeAsync(750); // the loop ends: the art freezes on the imported still
+      expect(img.src).toBe(STILL_URL);
+      expect(layer.find('emote')).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(550); // the hold runs out, 150 ms after the 0.35 s goodbye
+      expect(layer.find('emote')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a loop longer than the default keeps the default', async () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob([GIF_TIMED(250, 250)])));
+    stage.spawn('self', animated(2), 10, 20, { sizePx: 150 });
+    await flush();
+    expect(layer.find('emote')[0].style['--dur']).toBe('3s');
+    expect(layer.find('emote')[0].find('fx')[0].className.split(' ')).toEqual(['fx', 'v2']); // its effect still plays
+    stage.clear('self');
+  });
+
+  it('a loop shorter than an effect needs keeps the shortest time', async () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob([GIF_TIMED(10, 10)])));
+    stage.spawn('self', animated(), 10, 20, { sizePx: 150 });
+    await flush();
+    expect(layer.find('emote')[0].style['--dur']).toBe('0.6s');
+    stage.clear('self');
+  });
+
+  it('a file with no measurable loop keeps the default time, from its own object URL all the same', async () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob(['not an animation'])));
+    stage.spawn('self', animated(), 10, 20, { sizePx: 150 });
+    await flush();
+    const [emote] = layer.find('emote');
+    expect(emote.style['--dur']).toBe('3s');
+    expect(emote.find('fx')[0].children[0].src).toMatch(/^blob:/);
+    stage.clear('self');
+  });
+
+  it('a file we cannot fetch plays the shared URL for the default time', async () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.reject(new Error('404')));
+    stage.spawn('self', animated(4), 10, 20, { sizePx: 150 });
+    await flush();
+    const [emote] = layer.find('emote');
+    expect(emote.style['--dur']).toBe('3s');
+    expect(emote.find('fx')[0].children[0].src).toBe(ANIM_URL);
+    stage.clear('self');
+    expect(layer.find('emote')).toHaveLength(0);
   });
 });
