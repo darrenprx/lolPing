@@ -219,18 +219,17 @@ export function panelKeyClashes(current: Settings, patch: Partial<Settings>, pla
   return panelKeyTaken(current, patch, platform) && !panelKeyTaken(current, {}, platform);
 }
 
-/** Whether applying `patch` to `current` leaves those keys clashing, judged as normalizeSettings will read them. */
+/**
+ * Whether applying `patch` to `current` leaves those keys clashing, judged as normalizeSettings will read them. The text
+ * shortcut may share a custom trigger's key: the helper matches its chord exactly — modifiers included — before the
+ * trigger branch sees the key, and outside a live room it is not given the key at all (issue #100).
+ */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey' | 'textHotkey'>(k: K): unknown => pickKey(current, patch, k);
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey'>(k: K): unknown => pickKey(current, patch, k);
   const ping = trigger(pick('trigger'), platform);
   const emote = emoteKey(pick('emoteTrigger'), platform);
   if (triggersClash(ping, emote, hotkey(pick('toggleHotkey')))) return true;
-  if (panelKeyClashes(current, patch, platform)) return true;
-  // A custom ping or emote key is swallowed by the helper, so the text key can't share it. Judged only when the patch
-  // touches one of the three, so a setup that already clashes can still save unrelated settings.
-  if (!('trigger' in patch || 'emoteTrigger' in patch || 'textHotkey' in patch)) return false;
-  const textVk = hotkey(pick('textHotkey'), DEFAULT_SETTINGS.textHotkey).vk;
-  return triggerVk(ping) === textVk || triggerVk(emote) === textVk;
+  return panelKeyClashes(current, patch, platform);
 }
 
 function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey): Hotkey {

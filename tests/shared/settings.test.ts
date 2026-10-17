@@ -410,12 +410,11 @@ describe('emote key clashes', () => {
     expect(patchClashes({ ...current, emoteTrigger: { vk: 86 } }, { toggleHotkey: { mods: 3, vk: 87 } })).toBe(false);
   });
 
-  it('patchClashes rejects a text shortcut on a custom ping or emote key', () => {
-    expect(patchClashes({ ...current, trigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(true);
-    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(true);
-    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x57 } })).toBe(false);
+  it('patchClashes lets a text chord share a custom trigger key: the helper tells them apart by mods (issue #100)', () => {
+    expect(patchClashes({ ...current, trigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(false);
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(false);
     expect(patchClashes({ ...current, trigger: { vk: 0x56 } }, { trigger: 'alt' })).toBe(false);
-    expect(patchClashes({ ...current, textHotkey: { mods: MOD.alt, vk: 0x56 } }, { emoteTrigger: { vk: 0x56 } })).toBe(true);
+    expect(patchClashes({ ...current, textHotkey: { mods: MOD.alt, vk: 0x56 } }, { emoteTrigger: { vk: 0x56 } })).toBe(false);
     // A setup that already clashes can still save a setting that touches none of the keys.
     expect(patchClashes({ ...current, emoteTrigger: { vk: 0x54 } }, { volume: 3 })).toBe(false);
   });
