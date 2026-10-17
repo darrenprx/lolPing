@@ -7,7 +7,7 @@ import {
   customHash, customSoundUrl, customStillUrl, isBundledEmote, isCustomRef, type CustomEmote, type EmoteArt, type EmoteFile,
   type EmoteRef, type ImportError, type SoundError,
 } from '../shared/emotes';
-import { gifExtent, isAnimatedWebp, sniffImage, webpSize } from '../shared/imageSniff';
+import { gifExtent, imageSize, isAnimatedPng, isAnimatedWebp, sniffImage, webpSize } from '../shared/imageSniff';
 import { sanitizeName } from '../shared/roomProtocol';
 import { isFile } from './fileState';
 import { renameWithRetry } from './settingsStore';
@@ -36,12 +36,12 @@ export function checkStill(b: Uint8Array): ImportError | null {
   return size && longest(size) <= STILL_SIDE ? null : 'type';
 }
 
-/** The original animation: a GIF or WebP, small enough to decode on every emote. */
+/** The original animation: a GIF, WebP or APNG, small enough to decode on every emote. */
 function checkAnim(b: Uint8Array): ImportError | null {
   const type = sniffImage(b);
-  if (type !== 'gif' && type !== 'webp') return 'type';
+  if (type !== 'gif' && type !== 'webp' && !(type === 'png' && isAnimatedPng(b))) return 'type';
   if (b.length > ANIM_MAX_BYTES) return 'animSize';
-  const size = type === 'gif' ? gifExtent(b) : webpSize(b);
+  const size = type === 'gif' ? gifExtent(b) : imageSize(b);
   if (!size) return 'type';
   return longest(size) > ANIM_MAX_SIDE ? 'animSize' : null;
 }
@@ -92,7 +92,7 @@ export class EmoteLibrary {
     const animName = f.anim ? `${hash}.anim.${sniffImage(f.anim)}` : null;
     const files = [{ name: `${hash}.webp`, data: f.still }, ...(f.anim && animName ? [{ name: animName, data: f.anim }] : [])];
     // Files left by an earlier copy of this image: an animation in the other format would be served instead of this one.
-    const stale = [`${hash}.anim.gif`, `${hash}.anim.webp`].filter((n) => n !== animName);
+    const stale = [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.anim.png`].filter((n) => n !== animName);
     try {
       await this.write(files, stale);
     } catch (err) {

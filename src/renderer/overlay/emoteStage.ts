@@ -114,7 +114,8 @@ export class EmoteStage {
     this.file(art.url).then(
       (data) => {
         if (live.gone) return;
-        live.url = URL.createObjectURL(new Blob([data], { type: sniffImage(data) === 'gif' ? 'image/gif' : 'image/webp' }));
+        // An animation arrives as a GIF, WebP or PNG; the sniff names the blob's type, which the decoder sniffs anyway.
+        live.url = URL.createObjectURL(new Blob([data], { type: `image/${sniffImage(data) ?? 'webp'}` }));
         img.src = live.url;
         const loopMs = animationLoopMs(data);
         if (loopMs === null) return;

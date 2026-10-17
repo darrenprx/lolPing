@@ -163,6 +163,7 @@ export function animationLoopMs(bytes: Uint8Array): number | null {
   switch (sniffImage(bytes)) {
     case 'gif': return gifLoopMs(bytes);
     case 'webp': return webpAnimLoopMs(bytes);
+    case 'png': return apngLoopMs(bytes);
     default: return null;
   }
 }
@@ -221,4 +222,39 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number } 
     case 'webp': return webpSize(bytes);
     default: return null;
   }
+}
+
+/** True for a PNG carrying an `acTL` chunk that announces more than one frame — an APNG. Chunks are (length, type, data, crc). */
+export function isAnimatedPng(bytes: Uint8Array): boolean {
+  if (sniffImage(bytes) !== 'png') return false;
+  let at = 8; // after the signature
+  while (at + 8 <= bytes.length) {
+    if (startsWith(bytes, at + 4, ascii('acTL'))) return at + 16 <= bytes.length && be32(bytes, at + 8) > 1;
+    if (startsWith(bytes, at + 4, ascii('IEND'))) return false; // the animation chunk has to come before the data
+    at += 12 + be32(bytes, at);
+  }
+  return false;
+}
+
+/**
+ * The time one loop of an APNG takes, in milliseconds: the delay of every `fcTL` chunk, each naming a fraction
+ * `delay_num / delay_den` seconds (a zero denominator means 100, the spec's default). Null when there is no animation
+ * to time — fewer than two frames, or a walk cut short before the first delay.
+ */
+export function apngLoopMs(bytes: Uint8Array): number | null {
+  if (!isAnimatedPng(bytes)) return null;
+  let total = 0;
+  let frames = 0;
+  let at = 8; // after the signature
+  while (at + 8 <= bytes.length) {
+    if (startsWith(bytes, at + 4, ascii('IEND'))) break;
+    if (startsWith(bytes, at + 4, ascii('fcTL'))) {
+      // The data is the sequence number and the frame's geometry as u32s, then the delay as a u16 pair.
+      if (at + 32 > bytes.length) break; // the delay (data offset 20) is cut off
+      total += Math.round((be16(bytes, at + 28) / (be16(bytes, at + 30) || 100)) * 1000);
+      frames += 1;
+    }
+    at += 12 + be32(bytes, at);
+  }
+  return frames > 1 ? total : null;
 }

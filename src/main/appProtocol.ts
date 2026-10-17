@@ -31,7 +31,7 @@ export function resolveEmoteFile(dirs: readonly string[], urlPath: string): stri
   if (!m) return null;
   const [, hash, kind] = m;
   const names = kind === 'webp' ? [`${hash}.webp`]
-    : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`]
+    : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.anim.png`, `${hash}.webp`]
       : AUDIO_TYPES.map((t) => `${hash}.sound.${t}`);
   for (const name of names) {
     for (const dir of dirs) {

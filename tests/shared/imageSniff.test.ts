@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  animationLoopMs, gifExtent, gifLoopMs, gifSize, imageSize, isAnimatedWebp, sniffImage, webpAnimLoopMs, webpSize,
+  animationLoopMs, apngLoopMs, gifExtent, gifLoopMs, gifSize, imageSize, isAnimatedPng, isAnimatedWebp, sniffImage,
+  webpAnimLoopMs, webpSize,
 } from '../../src/shared/imageSniff';
 
 const ascii = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
@@ -364,8 +365,48 @@ describe('animationLoopMs', () => {
   it('routes by the sniffed type, and gives stills nothing', () => {
     expect(animationLoopMs(GIF_TIMED([50, 25]))).toBe(750);
     expect(animationLoopMs(WEBP_TIMED([90, 160]))).toBe(250);
+    expect(animationLoopMs(PNG_TIMED([[50, 100], [250, 100]]))).toBe(3000);
     expect(animationLoopMs(PNG)).toBeNull();
     expect(animationLoopMs(WEBP_LOSSLESS(10, 10))).toBeNull();
     expect(animationLoopMs(new Uint8Array())).toBeNull();
+  });
+});
+
+/** A PNG chunk: big-endian length, the type, the data, and a CRC the walk never reads. */
+const pngChunk = (type: string, data: number[]): number[] => [...be32(data.length), ...ascii(type), ...data, 0, 0, 0, 0];
+const IHDR = pngChunk('IHDR', [...be32(9), ...be32(9), 8, 6, 0, 0, 0]);
+/** An APNG with one fcTL per [num, den] delay and an IDAT behind each frame header. */
+const PNG_TIMED = (delays: readonly [number, number][]): Uint8Array =>
+  bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], IHDR,
+    pngChunk('acTL', [...be32(delays.length), ...be32(0)]),
+    ...delays.flatMap(([num, den]) => [
+      pngChunk('fcTL', [...be32(0), ...be32(9), ...be32(9), ...be32(0), ...be32(0), ...be16(num), ...be16(den), 0, 0]),
+      pngChunk('IDAT', [1, 2, 3]),
+    ]),
+    pngChunk('IEND', []));
+
+describe('isAnimatedPng', () => {
+  it('is true for a PNG whose acTL announces several frames', () => {
+    expect(isAnimatedPng(PNG_TIMED([[50, 100], [250, 100]]))).toBe(true);
+  });
+
+  it('is false for a plain PNG, a one-frame acTL, or anything else', () => {
+    expect(isAnimatedPng(PNG)).toBe(false);
+    expect(isAnimatedPng(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], IHDR,
+      pngChunk('acTL', [...be32(1), ...be32(0)]), pngChunk('IDAT', [1]), pngChunk('IEND', [])))).toBe(false);
+    expect(isAnimatedPng(GIF('GIF89a', 4, 4))).toBe(false);
+  });
+});
+
+describe('apngLoopMs', () => {
+  it('sums the fcTL delays, a zero denominator meaning the spec default of 100', () => {
+    expect(apngLoopMs(PNG_TIMED([[50, 100], [250, 100]]))).toBe(3000);
+    expect(apngLoopMs(PNG_TIMED([[100, 1000], [5, 0]]))).toBe(150); // 100 ms + 50 ms
+  });
+
+  it('needs at least two frames, and something that sniffs as a PNG', () => {
+    expect(apngLoopMs(PNG_TIMED([[50, 100]]))).toBeNull();
+    expect(apngLoopMs(PNG)).toBeNull();
+    expect(apngLoopMs(GIF('GIF89a', 4, 4))).toBeNull();
   });
 });

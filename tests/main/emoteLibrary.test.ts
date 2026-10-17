@@ -49,6 +49,17 @@ const webpAnim =(w = 200, h = 200, total = 2000): Uint8Array =>
 const stillExtended = (flags: number, w = 160, h = 120, total = 600): Uint8Array =>
   padded([...ascii('RIFF'), ...le32(total - 8), ...ascii('WEBPVP8X'), ...le32(10), flags, 0, 0, 0, ...le24(w - 1), ...le24(h - 1)], total);
 const png = (): Uint8Array => padded([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 300);
+const be16 = (n: number): number[] => [(n >> 8) & 0xff, n & 0xff];
+const be32 = (n: number): number[] => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+/** An APNG whose IHDR says 200 x 200: only the chunk layout is real, which is all the library reads. */
+const apng = (): Uint8Array => {
+  const chunk = (type: string, data: number[]): number[] => [...be32(data.length), ...ascii(type), ...data, 0, 0, 0, 0];
+  return Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ...chunk('IHDR', [...be32(200), ...be32(200), 8, 6, 0, 0, 0]),
+    ...chunk('acTL', [...be32(2), ...be32(0)]),
+    ...chunk('fcTL', [...be32(0), ...be32(200), ...be32(200), ...be32(0), ...be32(0), ...be16(5), ...be16(100), 0, 0]),
+    ...chunk('IDAT', [1, 2, 3]), ...chunk('IEND', [])]);
+};
 const ogg = (total = 500): Uint8Array => padded(ascii('OggS'), total);
 const mp3 = (total = 500): Uint8Array => padded([...ascii('ID3'), 4, 0], total);
 
@@ -81,6 +92,14 @@ describe('EmoteLibrary', () => {
     expect(files(lib.dir)).toEqual([`${h1}.webp`, `${h2}.anim.webp`, `${h2}.webp`].sort());
   });
 
+  it('saves an APNG animation as .anim.png', async () => {
+    const lib = new EmoteLibrary(tempDir());
+    const result = await lib.save({ name: 'apng', still: still(160, 160, 600, 3), anim: apng() }, []);
+    expect(result).toMatchObject({ ok: true, emote: { animated: true } });
+    const hash = hashOf(still(160, 160, 600, 3));
+    expect(files(lib.dir)).toEqual([`${hash}.anim.png`, `${hash}.webp`]);
+  });
+
   it('accepts a static extended WebP as the still, such as one with transparency', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     for (const flags of [0x00, 0x10, 0x2c]) {
@@ -103,7 +122,7 @@ describe('EmoteLibrary', () => {
       ['a still taller than 160 px', { name: 'x', still: still(100, 400) }, [], 'type'],
       ['an animated WebP as the still', { name: 'x', still: stillExtended(0x02) }, [], 'type'],
       ['an animated WebP with alpha as the still', { name: 'x', still: stillExtended(0x12) }, [], 'type'],
-      ['an animation that is neither GIF nor WebP', { name: 'x', still: still(), anim: png() }, [], 'type'],
+      ['an animation that is neither GIF, WebP nor an APNG', { name: 'x', still: still(), anim: png() }, [], 'type'],
       ['an animation over 5,242,880 bytes', { name: 'x', still: still(), anim: gif(200, 200, 5_242_881) }, [], 'animSize'],
       ['an empty animation', { name: 'x', still: still(), anim: new Uint8Array() }, [], 'type'],
       ['a payload that is not bytes', { name: 'x', still: [1, 2, 3] as unknown as Uint8Array }, [], 'type'],
@@ -287,11 +306,13 @@ describe('resolveEmoteFile', () => {
     expect(resolveEmoteFile([a], `/${hash}.webp`)).toBeNull();
   });
 
-  it('serves the animation as .anim.gif, then .anim.webp, then the still', () => {
-    const [a] = setup([`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`], []);
+  it('serves the animation as .anim.gif, then .anim.webp, then .anim.png, then the still', () => {
+    const [a] = setup([`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.anim.png`, `${hash}.webp`], []);
     expect(resolveEmoteFile([a], `/${hash}.anim`)).toBe(join(a, `${hash}.anim.gif`));
-    const [b] = setup([`${hash}.anim.webp`, `${hash}.webp`], []);
+    const [b] = setup([`${hash}.anim.webp`, `${hash}.anim.png`, `${hash}.webp`], []);
     expect(resolveEmoteFile([b], `/${hash}.anim`)).toBe(join(b, `${hash}.anim.webp`));
+    const [e] = setup([`${hash}.anim.png`, `${hash}.webp`], []);
+    expect(resolveEmoteFile([e], `/${hash}.anim`)).toBe(join(e, `${hash}.anim.png`));
     const [c] = setup([`${hash}.webp`], []);
     expect(resolveEmoteFile([c], `/${hash}.anim`)).toBe(join(c, `${hash}.webp`)); // a missing animation shows as its still
     const [d] = setup([], []);
