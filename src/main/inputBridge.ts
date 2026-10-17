@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createInterface } from 'node:readline';
+import { isDeepStrictEqual } from 'node:util';
 import {
   HELPER_EXIT_NO_ACCESS, parseHelperLine, serializeCommand, type HelperCommand, type HelperStatus,
 } from '../shared/protocol';
@@ -22,7 +23,8 @@ export interface BridgeOptions {
 export class InputBridge extends EventEmitter {
   private child: ChildProcess | null = null;
   private stopping = false;
-  private lastConfig: HelperCommand | null = null;
+  private lastConfig: Extract<HelperCommand, { type: 'config' }> | null = null;
+  private configStale = false;
   private restartTimer: NodeJS.Timeout | null = null;
   private current: HelperStatus = 'starting';
   private readonly policy: RestartPolicy;
@@ -56,13 +58,19 @@ export class InputBridge extends EventEmitter {
     child.on('error', (err) => onGone(err.message));
     child.on('exit', (code) => onGone(`exit code ${code}`, code));
     child.stdin?.on('error', () => undefined); // EPIPE after a crash; 'exit' handles it
-    if (child.stdout) createInterface({ input: child.stdout }).on('line', (line) => this.onLine(line));
+    if (child.stdout) createInterface({ input: child.stdout }).on('line', (line) => this.onLine(line, child));
     if (child.stderr) createInterface({ input: child.stderr }).on('line', (line) => this.emit('log', line));
   }
 
   /** Sends a command. A config command is remembered and re-sent after every restart. */
   send(cmd: HelperCommand): void {
-    if (cmd.type === 'config') this.lastConfig = cmd;
+    if (cmd.type === 'config') {
+      if (!this.configStale && isDeepStrictEqual(cmd, this.lastConfig)) return;
+      this.lastConfig = { ...cmd };
+      this.configStale = false;
+    } else if (cmd.type === 'setEnabled' && this.lastConfig) {
+      this.lastConfig.enabled = cmd.enabled;
+    }
     this.write(cmd);
   }
 
@@ -101,16 +109,21 @@ export class InputBridge extends EventEmitter {
     });
   }
 
-  private onLine(line: string): void {
+  private onLine(line: string, child: ChildProcess): void {
     const ev = parseHelperLine(line);
     if (!ev) {
       this.emit('log', `unparsed helper output: ${line}`);
       return;
     }
+    // Exit can precede the last stdout data: keep diagnostics, never revive an old helper's state or gestures.
+    if (this.child !== child && ev.type !== 'error') return;
     if (ev.type === 'ready') {
       this.setStatus('running');
       if (this.lastConfig) this.write(this.lastConfig);
+      this.configStale = false;
     }
+    // A toggle may precede a config already in the pipe; the next config must reach the helper.
+    if (ev.type === 'toggled') this.configStale = true;
     this.emit('event', ev);
   }
 

@@ -473,6 +473,9 @@ export class RoomManager extends EventEmitter {
     this.code = this.keys = null;
     for (const m of this.members.keys()) this.emit('memberGone', m);
     this.members.clear();
+    this.limiter.clear();
+    this.transferLimiter.clear();
+    this.ballotLimiter.clear();
     this.answered.clear();
     this.staleStrikes.clear();
     this.lastPresence = {};

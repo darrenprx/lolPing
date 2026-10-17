@@ -151,7 +151,8 @@ npm run dev
 | Command | What it does |
 | --- | --- |
 | `npm test` | TypeScript tests, including a protocol test that runs the real helper in `--simulate` mode |
-| `npm run test:helper` | Builds the helper and runs its C++ tests |
+| `npm run test:helper` | Builds the helper and runs its C++ tests, output backpressure and modifier lifecycle scenarios |
+| `npm run test:performance` | Checks settings, helper and room lifecycles, asset requests and two production overlays; run `npm run build:helper` and `npm run build` first (see [`tools/performance`](tools/performance)) |
 | `npm run typecheck` | Type-checks everything |
 | `npm run dist` | Builds the Windows installer into `release/` |
 | `npm run dist:mac` | Builds the Mac disk image into `release/` (on a Mac) |

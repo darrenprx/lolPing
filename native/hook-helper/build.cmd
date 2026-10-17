@@ -16,4 +16,6 @@ if not exist build\obj mkdir build\obj
 set FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /MT /DUNICODE /D_UNICODE /Fobuild\obj\
 cl %FLAGS% /O2 src\main_win.cpp src\hooks_win.cpp src\simulate.cpp src\commands.cpp src\output.cpp src\json.cpp src\decision.cpp /Fe:build\hook-helper.exe /link user32.lib || exit /b 1
 cl %FLAGS% /Od tests\helper_tests.cpp src\decision.cpp src\commands.cpp src\macinput.cpp src\json.cpp src\output.cpp /Fe:build\helper_tests.exe || exit /b 1
-echo Built build\hook-helper.exe and build\helper_tests.exe
+cl %FLAGS% /O2 ..\..\tools\performance\output-scenario.cpp src\json.cpp src\output.cpp /Fe:build\output-scenario.exe || exit /b 1
+cl %FLAGS% /O2 ..\..\tools\performance\decision-scenario.cpp src\decision.cpp /Fe:build\decision-scenario.exe || exit /b 1
+echo Built hook-helper.exe, helper_tests.exe, output-scenario.exe and decision-scenario.exe

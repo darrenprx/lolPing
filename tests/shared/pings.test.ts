@@ -44,7 +44,7 @@ describe('ping table', () => {
 
   it('references only sounds that exist', () => {
     for (const name of allSoundNames()) {
-      expect(existsSync(resolve(assets, 'sounds', `${name}.wav`)), name).toBe(true);
+      expect(existsSync(resolve(assets, 'sounds', `${name}.flac`)), name).toBe(true);
     }
   });
 
@@ -63,6 +63,6 @@ describe('ping table', () => {
 
   it('builds page-relative asset URLs', () => {
     expect(textureUrl('omw')).toBe('../textures/omw.png');
-    expect(soundUrl('MIA')).toBe('../sounds/MIA.wav');
+    expect(soundUrl('MIA')).toBe('../sounds/MIA.flac');
   });
 });

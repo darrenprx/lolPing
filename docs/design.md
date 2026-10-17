@@ -40,19 +40,19 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 
 | id | Slot | Wheel icon (`assets/textures/`) | On-screen art | Sound (`assets/sounds/`) | Ring colour |
 |---|---|---|---|---|---|
-| `danger` | N | `pingwheel_retreatrender.png` | `pingwheel_retreatrender.png` | `SRP_12.wav` | `#ff3b55` |
-| `push` | NE | `push.png` | `pingwheel_pushrender.png` | `SRP_9.wav` | `#35d27a` |
-| `omw` | E | `omw.png` | `omw.png` (upright icon; the flat `omw` ground render looks wrong) | `OnMyWay.wav` | `#2e8bff` |
-| `allin` | SE | `all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.wav` | `#f2b320` |
-| `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.wav` | `#56d43c` |
-| `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.wav` | `#56d43c` |
-| `missing` | W | `enemy_missing.png` | `enemy_missing.png` | `MIA.wav` | `#f2c518` |
-| `enemyvision` | NW | `pingwheel_enemyvisionrender.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.wav` | `#ff3b55` |
-| `generic` | (trigger+click) | `generic_ping.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
-| `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.wav` | `#efbc12` |
-| `visioncleared` | — | `vision_cleared.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
-| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
-| wheel tick | — | — | — | `button.wav` | — |
+| `danger` | N | `pingwheel_retreatrender.png` | `pingwheel_retreatrender.png` | `SRP_12.flac` | `#ff3b55` |
+| `push` | NE | `push.png` | `pingwheel_pushrender.png` | `SRP_9.flac` | `#35d27a` |
+| `omw` | E | `omw.png` | `omw.png` (upright icon; the flat `omw` ground render looks wrong) | `OnMyWay.flac` | `#2e8bff` |
+| `allin` | SE | `all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.flac` | `#f2b320` |
+| `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.flac` | `#56d43c` |
+| `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.flac` | `#56d43c` |
+| `missing` | W | `enemy_missing.png` | `enemy_missing.png` | `MIA.flac` | `#f2c518` |
+| `enemyvision` | NW | `pingwheel_enemyvisionrender.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.flac` | `#ff3b55` |
+| `generic` | (trigger+click) | `generic_ping.png` | `pingwheel_basicpingrender.png` | `Base.flac` | `#2e8bff` |
+| `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.flac` | `#efbc12` |
+| `visioncleared` | — | `vision_cleared.png` | `pingwheel_visionclearedrender.png` | `SRP_6.flac` | `#2b80ff` |
+| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.flac` | `#f2c518` |
+| wheel tick | — | — | — | `button.flac` | — |
 
 Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures, `enemy_vision` (magenta, like the colourblind set; the wheel uses the red render), `caution`, `hold`, `target`, the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
 
@@ -70,7 +70,7 @@ The extraction scripts live in `tools/extract-assets/`, together with a README. 
    - The bank's HIRC section is walked from event → action → layer container → sound → embedded WEM id.
    - The event id is the FNV-1 32-bit hash of the lower-cased event name.
 4. **Decoding:** the clips are Wwise Vorbis (`0xFFFF`), decoded with `vgmstream-cli` (r2117).
-5. **Mixing:** layer containers play their children at the same time. They are mixed with ffmpeg `amix` plus `alimiter` (limit −1 dB) to avoid clipping. Each file has at most 35 ms of silence at the start.
+5. **Mixing:** layer containers play their children at the same time. They are mixed with ffmpeg `amix` plus `alimiter` (limit −1 dB) to avoid clipping. The resulting 16-bit PCM is stored losslessly as FLAC. Each file has at most 35 ms of silence at the start.
 
 ## 4. Architecture
 
@@ -204,7 +204,7 @@ All coordinates are **physical screen pixels**.
 - **Selection:**
   - The slice is picked from the angle between the press point and the cursor, in 45° sectors centered on N, NE, …
   - A distance under 86 px means nothing is selected; releasing there cancels.
-  - Moving onto a new slice plays `button.wav` at low volume, if the tick sound is enabled.
+  - Moving onto a new slice plays `button.flac` at low volume, if the tick sound is enabled.
 - **Animation:** opens with fade + scale 0.85 → 1 over 120 ms, closes with a fade.
 
 ### 7.2 Ping animation (as in the prototype)

@@ -18,6 +18,7 @@
     "test": "vitest run",
     "build:helper": "node native/hook-helper/run.mjs build",
     "test:helper": "node native/hook-helper/run.mjs test",
+    "test:performance": "node tools/performance/run.mjs",
     "dist": "npm run build:helper && electron-vite build && electron-builder --win --publish never",
     "dist:mac": "npm run build:helper && electron-vite build && electron-builder --mac --arm64 --publish never",
     "dev:site": "vite --config site/vite.config.ts",
@@ -52,6 +53,7 @@
     "productName": "lolPing",
     "directories": { "output": "release", "buildResources": "build" },
     "files": ["out/**/*", "package.json"],
+    "electronLanguages": ["en", "en-US", "zh-CN", "zh-TW", "zh_CN", "zh_TW"],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "build/icon.ico",
@@ -81,7 +83,7 @@
         "NSLocalNetworkUsageDescription": "lolPing finds the other people in your room on the local network and sends them your pings."
       }
     },
-    "dmg": { "artifactName": "lolPing-${version}-arm64.dmg" },
+    "dmg": { "artifactName": "lolPing-${version}-arm64.dmg", "format": "UDBZ" },
     "publish": [{ "provider": "github", "owner": "darrenprx", "repo": "lolPing" }],
     "linux": {
       "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
