@@ -44,9 +44,11 @@ jobs:
       - name: Cache the Electron downloads
         uses: actions/cache@v6
         with:
+          # Explicit %LOCALAPPDATA% instead of `~`: the tilde spelling silently
+          # produced an empty save (1s post step, no cache entry) on the runner.
           path: |
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
+            ${{ env.LOCALAPPDATA }}\electron\Cache
+            ${{ env.LOCALAPPDATA }}\electron-builder\Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: ${{ runner.os }}-electron-
       - name: Cache the Rust build
@@ -82,9 +84,11 @@ jobs:
       - name: Cache the Electron downloads
         uses: actions/cache@v6
         with:
+          # Explicit %LOCALAPPDATA% instead of `~`: the tilde spelling silently
+          # produced an empty save (1s post step, no cache entry) on the runner.
           path: |
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
+            ${{ env.LOCALAPPDATA }}\electron\Cache
+            ${{ env.LOCALAPPDATA }}\electron-builder\Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: ${{ runner.os }}-electron-
       - name: Cache the Rust build
