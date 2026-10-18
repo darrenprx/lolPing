@@ -1,12 +1,18 @@
 name: Release
 
-# Push a tag that matches package.json's version (for example v0.2.0) to build both installers and publish them.
+# Push a tag that matches package.json's version (for example v0.2.1) to build the installer and publish it.
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
+
+env:
+  # Keep the locally built helper and the shipped one on the same toolchain.
+  # GNU links the C runtime statically, so users need no VC++ redistributable
+  # (the C++ helper is compiled with /MT for the same reason).
+  RUST_TOOLCHAIN: stable-x86_64-pc-windows-gnu
 
 jobs:
   release:
@@ -31,10 +37,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install Rust (GNU toolchain, matches the helper build)
+      - name: Install Rust (${{ env.RUST_TOOLCHAIN }})
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Cache the Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/rust-helper
       - run: npm ci
       - run: npm run test:helper
       # Builds the Rust helper (release). `npm test` prefers it; `dist` rebuilds it for packaging.

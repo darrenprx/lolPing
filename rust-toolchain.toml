@@ -1,0 +1,8 @@
+# Pin the Rust toolchain so a local build and the CI build produce the same
+# helper binary (see .github/workflows/ci.yml, which installs the same name).
+#
+# GNU links the C runtime statically, so the shipped lolping-helper.exe needs no
+# VC++ redistributable on the user's machine — the C++ helper is compiled with
+# /MT for the same reason. This project is Windows-only.
+[toolchain]
+channel = "stable-x86_64-pc-windows-gnu"

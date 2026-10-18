@@ -2,11 +2,29 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Also build the Windows installer (adds ~10 minutes)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+# A branch push and its pull request share a group, so the superseded run is
+# cancelled instead of building the same commit twice.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  # Pinned in rust-toolchain.toml too, so a local build and this one produce the
+  # same helper binary. GNU links the C runtime statically, so the shipped helper
+  # needs no VC++ redistributable (the C++ helper is built with /MT for the same reason).
+  RUST_TOOLCHAIN: stable-x86_64-pc-windows-gnu
 
 jobs:
   test:
@@ -17,10 +35,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install Rust (GNU toolchain, matches the helper build)
+      - name: Install Rust (${{ env.RUST_TOOLCHAIN }})
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      # `npm ci` downloads the Electron binary and `npm run dist` downloads NSIS
+      # plus the Windows signing tools; both land in these caches.
+      - name: Cache the Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/rust-helper
       - run: npm ci
       - run: npm run typecheck
       # Builds hook-helper.exe and runs the C++ tests. The TypeScript tests need a built helper.
@@ -30,3 +62,40 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:site
+
+  package:
+    # Installers stay out of the per-push path. Run this workflow manually from
+    # the Actions tab, with `package` checked, when you want a downloadable setup.
+    if: github.event_name == 'workflow_dispatch' && inputs.package
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust (${{ env.RUST_TOOLCHAIN }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Cache the Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/rust-helper
+      - run: npm ci
+      - run: npm run dist
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: lolping-setup
+          path: release/*.exe
+          if-no-files-found: error
