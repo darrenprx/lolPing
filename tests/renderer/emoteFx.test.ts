@@ -55,9 +55,86 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('EmoteStage', () => {
+  it('reloads an evicted animation without revoking another owner’s live image', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const large = new Blob([new Uint8Array(9 * 1024 * 1024)]);
+    const reads: string[] = [];
+    const stage = new EmoteStage(layer as unknown as HTMLElement, async (url) => {
+      reads.push(url);
+      return large;
+    });
+    stage.spawn('friend', { kind: 'bundled', slug: 'facepalm' }, 10, 20, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    const friend = layer.find('emote')[0];
+    const friendUrl = friend.find('sheet')[0].src;
+    stage.spawn('self', { kind: 'bundled', slug: 'unworthy' }, 30, 40, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    stage.spawn('preview', { kind: 'bundled', slug: 'facepalm' }, 50, 60, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toEqual(['../emotes/facepalm.webp', '../emotes/unworthy.webp', '../emotes/facepalm.webp']);
+    expect(layer.find('emote')).toContain(friend);
+    expect(friend.find('sheet')[0].src).toBe(friendUrl);
+    expect((await (await fetch(friendUrl)).blob()).size).toBe(large.size);
+    stage.clear('friend');
+    await expect(fetch(friendUrl)).rejects.toThrow();
+    expect(layer.find('emote')).toHaveLength(2);
+    stage.clear('self');
+    stage.clear('preview');
+  });
+
+  it('gives cached images separate URLs and revokes only the owner that ends', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const bytes = new Blob(['animation']);
+    const reads: string[] = [];
+    const stage = new EmoteStage(layer as unknown as HTMLElement, async (url) => {
+      reads.push(url);
+      return bytes;
+    });
+    stage.spawn('self', { kind: 'bundled', slug: 'facepalm' }, 10, 20, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    const firstUrl = layer.find('sheet')[0].src;
+    stage.spawn('friend', { kind: 'bundled', slug: 'facepalm' }, 30, 40, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    const secondUrl = layer.find('sheet')[1].src;
+    expect(secondUrl).not.toBe(firstUrl);
+    expect(reads).toEqual(['../emotes/facepalm.webp']);
+    stage.clear('self');
+    await expect(fetch(firstUrl)).rejects.toThrow();
+    expect(await (await fetch(secondUrl)).text()).toBe('animation');
+    stage.clear('friend');
+    await expect(fetch(secondUrl)).rejects.toThrow();
+  });
+
+  it('does not create an object URL when a cleared owner’s fetch finishes late', async () => {
+    vi.useFakeTimers();
+    const createUrl = vi.spyOn(URL, 'createObjectURL');
+    let finish: (blob: Blob) => void = () => { throw new Error('Uninitialized fetch'); };
+    const pending = new Promise<Blob>((resolve) => { finish = resolve; });
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => pending);
+    stage.spawn('self', { kind: 'bundled', slug: 'facepalm' }, 10, 20, { sizePx: 150 });
+    stage.clear('self');
+    finish(new Blob(['animation']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(layer.find('emote')).toHaveLength(0);
+    expect(createUrl.mock.results).toHaveLength(0);
+    stage.spawn('self', { kind: 'bundled', slug: 'facepalm' }, 30, 40, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(0);
+    const url = layer.find('sheet')[0].src;
+    expect(await (await fetch(url)).text()).toBe('animation');
+    expect(createUrl.mock.results).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(3150);
+    expect(layer.find('emote')).toHaveLength(0);
+    await expect(fetch(url)).rejects.toThrow();
+  });
+
   it('shows the placeholder when a bundled emote’s animation arrives but cannot be decoded', async () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob(['not a webp'])));
