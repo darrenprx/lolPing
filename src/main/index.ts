@@ -541,6 +541,8 @@ function start(): void {
     else if (ev.type === 'textRequested') openText();
     else if (ev.type === 'foregroundApp') {
       for (const w of foregroundAppWaiters.splice(0)) w(ev.name);
+    } else if (ev.type === 'appList') {
+      for (const w of appListWaiters.splice(0)) w(ev.names);
     } else if (ev.type === 'panel') {
       if (!ev.show) panels.hideRoster();
       else if (live.panel) panels.showRoster(screen.getCursorScreenPoint(), panelState('roster', null));
@@ -582,6 +584,25 @@ function start(): void {
     timer = setTimeout(() => settle(null), 1500);
     foregroundAppWaiters.push(settle);
     bridge.send({ type: 'getForegroundApp' });
+  });
+
+  // The exception list's dropdown: the same round trip for every app the user can switch to.
+  const appListWaiters: ((names: string[]) => void)[] = [];
+  const queryAppList = (): Promise<string[]> => new Promise((resolve) => {
+    if (bridge.status !== 'running') {
+      resolve([]);
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const settle = (names: string[]): void => {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = undefined;
+      resolve(names);
+    };
+    timer = setTimeout(() => settle([]), 1500);
+    appListWaiters.push(settle);
+    bridge.send({ type: 'getAppList' });
   });
 
   store.on('change', (s: Settings) => {
@@ -639,6 +660,7 @@ function start(): void {
       syncSuspended();
     },
     foregroundApp: () => queryForegroundApp(),
+    appList: () => queryAppList(),
     openAccessibility: () => {
       if (!IS_MAC) return;
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt

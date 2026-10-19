@@ -25,6 +25,7 @@ class Output {
   void emit(const Emit& e);
   void ready();
   void foregroundApp(const std::string& name);
+  void appList(const std::vector<std::string>& names);
   void error(const std::string& message);
   void error(const std::string& code, const std::string& message);  // machine-readable code, e.g. "noAccess"
   void stop();  // drains the queue, then joins the writer thread

@@ -97,6 +97,8 @@ Command parseCommand(const std::string& line, const Config& current) {
     c.flag = getBool(m, "on", false);
   } else if (type == "getForegroundApp") {
     c.kind = Command::Kind::ForegroundApp;
+  } else if (type == "getAppList") {
+    c.kind = Command::Kind::AppList;
   } else if (type == "shutdown") {
     c.kind = Command::Kind::Shutdown;
   } else if (type == "sim") {

@@ -185,6 +185,8 @@ export interface SettingsApi {
   setCapturing(on: boolean): Promise<void>;
   /** The frontmost app's process name (e.g. 'Photoshop.exe'), or null when the helper can't tell. Feeds the app-exception list's capture button. */
   getForegroundApp(): Promise<string | null>;
+  /** Process names of the apps the user can switch to right now, [] when the helper can't tell. Feeds the exception list's dropdown. */
+  getAppList(): Promise<string[]>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
   getRoom(): Promise<RoomState>;

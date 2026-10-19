@@ -16,6 +16,7 @@ export type HelperEvent =
   | { type: 'textRequested' }
   | { type: 'panel'; show: boolean }
   | { type: 'foregroundApp'; name: string }
+  | { type: 'appList'; names: string[] }
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
@@ -51,6 +52,10 @@ export function parseHelperLine(line: string): HelperEvent | null {
       return typeof o.show === 'boolean' ? { type: 'panel', show: o.show } : null;
     case 'foregroundApp':
       return typeof o.name === 'string' ? { type: 'foregroundApp', name: o.name } : null;
+    case 'appList': {
+      if (!Array.isArray(o.names)) return null;
+      return { type: 'appList', names: o.names.filter((n): n is string => typeof n === 'string').slice(0, 64) };
+    }
     case 'error':
       if (typeof o.message !== 'string') return null;
       return typeof o.code === 'string' ? { type: 'error', message: o.message, code: o.code } : { type: 'error', message: o.message };
@@ -95,6 +100,7 @@ export type HelperCommand =
   | { type: 'setEnabled'; enabled: boolean }
   | { type: 'suspend'; on: boolean }
   | { type: 'getForegroundApp' }
+  | { type: 'getAppList' }
   | { type: 'shutdown' };
 
 /**

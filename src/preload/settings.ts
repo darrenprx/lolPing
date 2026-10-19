@@ -29,6 +29,7 @@ const api: SettingsApi = {
   retryHelper: () => ipcRenderer.invoke(SETTINGS_CH.retryHelper),
   setCapturing: (on) => ipcRenderer.invoke(SETTINGS_CH.capture, on),
   getForegroundApp: () => ipcRenderer.invoke(SETTINGS_CH.foregroundApp),
+  getAppList: () => ipcRenderer.invoke(SETTINGS_CH.appList),
   openAccessibility: () => ipcRenderer.invoke(SETTINGS_CH.openAccessibility),
   getRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomGet),
   onRoom: (cb) => subscribe(SETTINGS_CH.roomChanged, cb),

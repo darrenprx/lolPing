@@ -1309,6 +1309,10 @@ static void test_parse_config_panel_key() {
   CHECK(c.kind == Command::Kind::Config && c.config.panelVk == 9);
   const Command keep = parseCommand(R"({"type":"config"})", c.config);
   CHECK(keep.config.panelVk == 9);
+  const Command front = parseCommand(R"({"type":"getForegroundApp"})", c.config);
+  CHECK(front.kind == Command::Kind::ForegroundApp);
+  const Command list = parseCommand(R"({"type":"getAppList"})", c.config);
+  CHECK(list.kind == Command::Kind::AppList);
 }
 
 static void test_json_parses_flat_objects() {

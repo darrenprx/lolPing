@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -38,6 +39,29 @@ bool isExtendedVk(uint32_t vk) {
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
 
+// Refines one process image path to its file name in UTF-8 ("Photoshop.exe").
+std::string imageNameOf(HWND window) {
+  DWORD pid = 0;
+  if (GetWindowThreadProcessId(window, &pid) == 0 || pid == 0) return {};
+  const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (process == nullptr) return {};
+  wchar_t path[MAX_PATH];
+  DWORD size = MAX_PATH;
+  std::string name;
+  if (QueryFullProcessImageNameW(process, 0, path, &size) && size > 0) {
+    const std::wstring wide(path, size);
+    const size_t slash = wide.find_last_of(L"\\/");
+    const std::wstring base = slash == std::wstring::npos ? wide : wide.substr(slash + 1);
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), nullptr, 0, nullptr, nullptr);
+    if (bytes > 0) {
+      name.resize(static_cast<size_t>(bytes));
+      WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), name.data(), bytes, nullptr, nullptr);
+    }
+  }
+  CloseHandle(process);
+  return name;
+}
+
 // The foreground window's process image name as the file names it ("Photoshop.exe"), or '' when it can't be read.
 // OpenProcess and QueryFullProcessImageName cross process boundaries but send no messages, and they only run when
 // the foreground window changed since the last call, so the per-event cost is one GetForegroundWindow.
@@ -52,27 +76,31 @@ std::string foregroundAppName() {
   }
   if (fg == last) return name;
   last = fg;
-  name.clear();
-  DWORD pid = 0;
-  if (GetWindowThreadProcessId(fg, &pid) != 0 && pid != 0) {
-    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (process != nullptr) {
-      wchar_t path[MAX_PATH];
-      DWORD size = MAX_PATH;
-      if (QueryFullProcessImageNameW(process, 0, path, &size) && size > 0) {
-        const std::wstring wide(path, size);
-        const size_t slash = wide.find_last_of(L"\\/");
-        const std::wstring base = slash == std::wstring::npos ? wide : wide.substr(slash + 1);
-        const int bytes = WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), nullptr, 0, nullptr, nullptr);
-        if (bytes > 0) {
-          name.resize(static_cast<size_t>(bytes));
-          WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), name.data(), bytes, nullptr, nullptr);
-        }
-      }
-      CloseHandle(process);
-    }
-  }
+  name = imageNameOf(fg);
   return name;
+}
+
+// The process names behind the windows the user can switch to: visible, titled, not a tool window or a shell
+// surface, deduplicated by name, at most 64. Run only when the settings page asks, never in the hooks.
+BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
+  auto& names = *reinterpret_cast<std::vector<std::string>*>(lp);
+  if (!IsWindowVisible(window)) return TRUE;
+  if (GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
+  if (GetWindowTextLengthW(window) <= 0) return TRUE;
+  wchar_t cls[64];
+  if (GetClassNameW(window, cls, 64) != 0 &&
+      (lstrcmpiW(cls, L"Progman") == 0 || lstrcmpiW(cls, L"WorkerW") == 0 || lstrcmpiW(cls, L"Shell_TrayWnd") == 0))
+    return TRUE;
+  const std::string name = imageNameOf(window);
+  if (!name.empty() && names.size() < 64 && std::find(names.begin(), names.end(), name) == names.end())
+    names.push_back(name);
+  return TRUE;
+}
+
+std::vector<std::string> visibleAppNames() {
+  std::vector<std::string> names;
+  EnumWindows(collectAppWindow, reinterpret_cast<LPARAM>(&names));
+  return names;
 }
 
 // True when the click at (x, y) lands on a monitor that the foreground window covers whole: a game, or any
@@ -310,6 +338,7 @@ int runHooks(Output& out) {
         case Command::Kind::SetEnabled: apply(decision.setEnabled(c.flag)); break;
         case Command::Kind::Suspend: apply(decision.setSuspended(c.flag)); break;
         case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
+        case Command::Kind::AppList: g_out->appList(visibleAppNames()); break;
         case Command::Kind::Shutdown: PostQuitMessage(0); break;
         default: out.error("invalid command: " + *text); break;
       }

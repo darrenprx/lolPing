@@ -16,6 +16,7 @@ describe('parseHelperLine', () => {
     expect(parseHelperLine('{"type":"panel","show":true}')).toEqual({ type: 'panel', show: true });
     expect(parseHelperLine('{"type":"panel","show":false}')).toEqual({ type: 'panel', show: false });
     expect(parseHelperLine('{"type":"foregroundApp","name":"Photoshop.exe"}')).toEqual({ type: 'foregroundApp', name: 'Photoshop.exe' });
+    expect(parseHelperLine('{"type":"appList","names":["Photoshop.exe","chrome"]}')).toEqual({ type: 'appList', names: ['Photoshop.exe', 'chrome'] });
     expect(parseHelperLine('{"type":"error","message":"boom"}')).toEqual({ type: 'error', message: 'boom' });
     expect(parseHelperLine('{"type":"error","code":"noAccess","message":"x"}')).toEqual({ type: 'error', code: 'noAccess', message: 'x' });
     expect(parseHelperLine('{"type":"sim","swallow":true,"inject":"down:left"}')).toEqual({ type: 'sim', swallow: true, inject: 'down:left' });
@@ -33,7 +34,8 @@ describe('parseHelperLine', () => {
 
   it('rejects malformed lines', () => {
     for (const line of ['', 'nope', '42', 'null', '{"type":"wheelOpen","x":1}', '{"type":"click","x":1.5,"y":2}',
-      '{"type":"toggled"}', '{"type":"panel"}', '{"type":"panel","show":"yes"}', '{"type":"foregroundApp"}', '{"type":"mystery"}', '{"x":1,"y":2}']) {
+      '{"type":"toggled"}', '{"type":"panel"}', '{"type":"panel","show":"yes"}', '{"type":"foregroundApp"}', '{"type":"appList"}',
+      '{"type":"appList","names":"x"}', '{"type":"mystery"}', '{"x":1,"y":2}']) {
       expect(parseHelperLine(line), line).toBeNull();
     }
   });

@@ -48,6 +48,15 @@ void Output::foregroundApp(const std::string& name) {
   line("{\"type\":\"foregroundApp\",\"name\":\"" + jsonEscape(name) + "\"}");
 }
 
+void Output::appList(const std::vector<std::string>& names) {
+  std::string out = "{\"type\":\"appList\",\"names\":[";
+  for (size_t i = 0; i < names.size(); ++i) {
+    if (i != 0) out += ",";
+    out += "\"" + jsonEscape(names[i]) + "\"";
+  }
+  line(out + "]}");
+}
+
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 
 void Output::error(const std::string& code, const std::string& message) {
