@@ -113,6 +113,19 @@ std::string fileDescription(const std::string& pathUtf8) {
   return utf8;
 }
 
+// Windows' own window hosts and brokers have visible, titled windows but are not apps: nobody works inside them,
+// and an exception entry for one would silently do nothing. Same idea as the shell surfaces the fullscreen probe skips.
+bool isSystemHost(const std::string& name) {
+  static const char* const hosts[] = {
+      "ApplicationFrameHost.exe", "TextInputHost.exe", "ShellExperienceHost.exe", "SearchHost.exe",
+      "StartMenuExperienceHost.exe", "RuntimeBroker.exe", "dllhost.exe", "taskhostw.exe",
+  };
+  for (const char* host : hosts) {
+    if (_stricmp(name.c_str(), host) == 0) return true;
+  }
+  return false;
+}
+
 // The app behind the windows the user can switch to: visible, titled, not a tool window or a shell surface,
 // deduplicated by name, at most 64. Run only when the settings page asks, never in the hooks.
 BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
@@ -126,7 +139,8 @@ BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
       (lstrcmpiW(cls, L"Progman") == 0 || lstrcmpiW(cls, L"WorkerW") == 0 || lstrcmpiW(cls, L"Shell_TrayWnd") == 0))
     return TRUE;
   const AppEntry app = processOf(window);
-  if (!app.name.empty() && std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == app.name; }))
+  if (app.name.empty() || isSystemHost(app.name)) return TRUE;
+  if (std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == app.name; }))
     apps.push_back(app);
   return TRUE;
 }
