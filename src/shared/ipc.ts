@@ -166,7 +166,7 @@ export interface RunningApp {
   desc: string;
   /** The image's full path; only to fetch the icon. */
   path: string;
-  /** The icon as a PNG data URL, null where the platform has none. */
+  /** The icon as a PNG data URL, null where there is none worth showing. */
   icon: string | null;
 }
 

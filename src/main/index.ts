@@ -125,12 +125,13 @@ function start(): void {
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
-  // An image file's own icon where the platform can read one (Windows); anywhere else this settles null.
-  // The small size is native 16px: what the dropdown shows, without a blurry downscale from 32.
+  // An image file's own icon where the platform can read one (Windows); anywhere else this settles null. The small
+  // size is native 16px: what the dropdown shows, without a blurry downscale from 32. ApplicationFrameHost.exe has
+  // no icon of its own, so its icon is the system's default program icon - the copy an icon-less exe embeds.
   const appIcons = new AppIcons(async (path) => {
     const image = await app.getFileIcon(path, { size: 'small' });
     return image.isEmpty() ? null : image.toDataURL();
-  });
+  }, 'C:\\Windows\\System32\\ApplicationFrameHost.exe');
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;

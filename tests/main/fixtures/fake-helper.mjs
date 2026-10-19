@@ -26,7 +26,7 @@ if (mode === 'noaccess') {
 function reply(cmd) {
   if (mode === 'answer' && cmd.type === 'getForegroundApp') return { type: 'foregroundApp', name: 'Photoshop.exe' };
   if (mode === 'answer' && cmd.type === 'getAppList') {
-    return { type: 'appList', apps: [{ name: 'GameViewer.exe', desc: '网易UU远程', path: 'C:\\NetEase\\GameViewer.exe' }] };
+    return { type: 'appList', apps: [{ name: 'GameViewer.exe', desc: '网易UU远程', path: 'C:\\NetEase\\GameViewer.exe', hasIcon: true }] };
   }
   return { type: 'error', message: `got:${cmd.type}` };
 }
