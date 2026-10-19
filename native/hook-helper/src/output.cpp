@@ -52,7 +52,8 @@ void Output::appList(const std::vector<AppEntry>& apps) {
   std::string out = "{\"type\":\"appList\",\"apps\":[";
   for (size_t i = 0; i < apps.size(); ++i) {
     if (i != 0) out += ",";
-    out += "{\"name\":\"" + jsonEscape(apps[i].name) + "\",\"path\":\"" + jsonEscape(apps[i].path) + "\"}";
+    out += "{\"name\":\"" + jsonEscape(apps[i].name) + "\",\"desc\":\"" + jsonEscape(apps[i].desc) + "\",\"path\":\"" +
+           jsonEscape(apps[i].path) + "\"}";
   }
   line(out + "]}");
 }

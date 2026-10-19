@@ -167,6 +167,16 @@ export const appNameStem = (name: string): string => {
   return trimmed.toLowerCase().endsWith('.exe') ? trimmed.slice(0, -4) : trimmed;
 };
 
+/**
+ * What an exception entry should store for `input`: a running app's process name when the user typed the words the
+ * system shows for it (an IME offers "网易UU远程", the process is GameViewer.exe), else the typed name as a stem.
+ */
+export const resolveSkipApp = (input: string, running: readonly { name: string; desc?: string }[]): string => {
+  const typed = input.trim().toLowerCase();
+  const match = running.find((a) => typeof a.desc === 'string' && a.desc.trim().toLowerCase() === typed);
+  return match ? appNameStem(match.name) : appNameStem(input);
+};
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
 

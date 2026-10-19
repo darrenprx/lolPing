@@ -3,8 +3,8 @@ import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emote
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
-  DEFAULT_SETTINGS, MAX_SKIP_APPS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings, patchClashes, rendererPatch, sameTrigger,
-  soundLevel, triggerLabel, triggersClash,
+  DEFAULT_SETTINGS, MAX_SKIP_APPS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings,
+  patchClashes, rendererPatch, resolveSkipApp, sameTrigger, soundLevel, triggerLabel, triggersClash,
 } from '../../src/shared/settings';
 
 describe('normalizeSettings', () => {
@@ -312,6 +312,13 @@ describe('emote settings', () => {
       .toEqual(['Photoshop', 'IDEA64', 'nope']);
     expect(normalizeSettings({ skipApps: 'nope' }).skipApps).toEqual([]);
     expect(DEFAULT_SETTINGS.skipApps).toEqual([]);
+  });
+
+  it('a typed display name becomes the running app it names', () => {
+    const running = [{ name: 'GameViewer.exe', desc: '网易UU远程' }, { name: 'ZCode.exe', desc: 'ZCode' }];
+    expect(resolveSkipApp(' 网易UU远程 ', running)).toBe('GameViewer');
+    expect(resolveSkipApp('zcode.exe', running)).toBe('zcode');
+    expect(resolveSkipApp('Notepad', running)).toBe('Notepad');
   });
 
   it('skip apps keep the first 32', () => {

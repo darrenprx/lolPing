@@ -11,9 +11,11 @@
 
 namespace lp {
 
-/** One app the user can switch to: its process image's file name and the path of that image. */
+/** One app the user can switch to: its process image's file name, the words the system shows for it (the file's
+ * description on Windows, the localised name on macOS; empty when neither is there), and the image's path. */
 struct AppEntry {
   std::string name;
+  std::string desc;
   std::string path;
 };
 

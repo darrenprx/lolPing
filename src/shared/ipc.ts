@@ -162,6 +162,8 @@ export { SETTINGS_CH } from './settingsChannels';
 export interface RunningApp {
   /** The process image's file name, "Photoshop.exe"; what the exception list stores. */
   name: string;
+  /** The words the system shows for it (the file's description); what a user types, so adding can match it. */
+  desc: string;
   /** The image's full path; only to fetch the icon. */
   path: string;
   /** The icon as a PNG data URL, null where the platform has none. */

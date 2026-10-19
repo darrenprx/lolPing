@@ -16,10 +16,16 @@ describe('parseHelperLine', () => {
     expect(parseHelperLine('{"type":"panel","show":true}')).toEqual({ type: 'panel', show: true });
     expect(parseHelperLine('{"type":"panel","show":false}')).toEqual({ type: 'panel', show: false });
     expect(parseHelperLine('{"type":"foregroundApp","name":"Photoshop.exe"}')).toEqual({ type: 'foregroundApp', name: 'Photoshop.exe' });
-    expect(parseHelperLine('{"type":"appList","apps":[{"name":"Photoshop.exe","path":"C:\\\\Adobe\\\\Photoshop.exe"},{"name":"chrome","path":"/opt/chrome"}]}'))
-      .toEqual({ type: 'appList', apps: [{ name: 'Photoshop.exe', path: 'C:\\Adobe\\Photoshop.exe' }, { name: 'chrome', path: '/opt/chrome' }] });
-    expect(parseHelperLine('{"type":"appList","apps":[{"name":"no path"},{"path":"C:\\\\b.exe"},"text",{"name":"","path":""}]}'))
-      .toEqual({ type: 'appList', apps: [{ name: '', path: '' }] });
+    expect(parseHelperLine('{"type":"appList","apps":[{"name":"Photoshop.exe","desc":"Adobe Photoshop","path":"C:\\\\Adobe\\\\Photoshop.exe"},{"name":"chrome","path":"/opt/chrome"}]}'))
+      .toEqual({
+        type: 'appList',
+        apps: [
+          { name: 'Photoshop.exe', desc: 'Adobe Photoshop', path: 'C:\\Adobe\\Photoshop.exe' },
+          { name: 'chrome', desc: '', path: '/opt/chrome' },
+        ],
+      });
+    expect(parseHelperLine('{"type":"appList","apps":[{"name":"no path"},{"path":"C:\\\\b.exe"},"text",{"name":"","path":"","desc":7}]}'))
+      .toEqual({ type: 'appList', apps: [{ name: '', path: '', desc: '' }] });
     expect(parseHelperLine('{"type":"error","message":"boom"}')).toEqual({ type: 'error', message: 'boom' });
     expect(parseHelperLine('{"type":"error","code":"noAccess","message":"x"}')).toEqual({ type: 'error', code: 'noAccess', message: 'x' });
     expect(parseHelperLine('{"type":"sim","swallow":true,"inject":"down:left"}')).toEqual({ type: 'sim', swallow: true, inject: 'down:left' });

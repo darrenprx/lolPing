@@ -2,7 +2,7 @@ import { Button, Combobox, Option } from '@fluentui/react-components';
 import { Add24Regular, Camera24Regular, Dismiss24Regular, FilterDismiss24Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import type { RunningApp } from '../../../shared/ipc';
-import { appNameStem, MAX_SKIP_APPS } from '../../../shared/settings';
+import { appNameStem, MAX_SKIP_APPS, resolveSkipApp } from '../../../shared/settings';
 import { api } from '../api';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
@@ -32,7 +32,8 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
   const add = (raw: string): void => {
     setNote(null);
     setName('');
-    const stem = appNameStem(raw);
+    // A typed name may be the words the system shows for an app (an IME offers those); store the process name then.
+    const stem = resolveSkipApp(raw, running);
     if (stem === '' || props.apps.includes(stem) || props.apps.length >= MAX_SKIP_APPS) return;
     void props.update({ skipApps: [...props.apps, stem] });
   };
