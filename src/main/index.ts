@@ -539,11 +539,7 @@ function start(): void {
   bridge.on('event', (ev) => {
     if (ev.type === 'toggled') setEnabled(ev.enabled);
     else if (ev.type === 'textRequested') openText();
-    else if (ev.type === 'foregroundApp') {
-      for (const w of foregroundAppWaiters.splice(0)) w(ev.name);
-    } else if (ev.type === 'appList') {
-      for (const w of appListWaiters.splice(0)) w(ev.names);
-    } else if (ev.type === 'panel') {
+    else if (ev.type === 'panel') {
       if (!ev.show) panels.hideRoster();
       else if (live.panel) panels.showRoster(screen.getCursorScreenPoint(), panelState('roster', null));
     } else if (ev.type === 'ready') {
@@ -566,44 +562,6 @@ function start(): void {
     if (s === 'failed') overlays.toast(text().toastHelperStopped, text().toastHelperStoppedBody);
   });
   bridge.on('log', (line: string) => console.log('[helper]', line));
-
-  // The settings page's app-exception capture button: ask the helper what is in front, settle within 1.5 s.
-  const foregroundAppWaiters: ((name: string | null) => void)[] = [];
-  const queryForegroundApp = (): Promise<string | null> => new Promise((resolve) => {
-    if (bridge.status !== 'running') {
-      resolve(null);
-      return;
-    }
-    let timer: NodeJS.Timeout | undefined;
-    const settle = (name: string | null): void => {
-      if (!timer) return;
-      clearTimeout(timer);
-      timer = undefined;
-      resolve(name);
-    };
-    timer = setTimeout(() => settle(null), 1500);
-    foregroundAppWaiters.push(settle);
-    bridge.send({ type: 'getForegroundApp' });
-  });
-
-  // The exception list's dropdown: the same round trip for every app the user can switch to.
-  const appListWaiters: ((names: string[]) => void)[] = [];
-  const queryAppList = (): Promise<string[]> => new Promise((resolve) => {
-    if (bridge.status !== 'running') {
-      resolve([]);
-      return;
-    }
-    let timer: NodeJS.Timeout | undefined;
-    const settle = (names: string[]): void => {
-      if (!timer) return;
-      clearTimeout(timer);
-      timer = undefined;
-      resolve(names);
-    };
-    timer = setTimeout(() => settle([]), 1500);
-    appListWaiters.push(settle);
-    bridge.send({ type: 'getAppList' });
-  });
 
   store.on('change', (s: Settings) => {
     const previous = settings;
@@ -659,8 +617,17 @@ function start(): void {
       capturing = on;
       syncSuspended();
     },
-    foregroundApp: () => queryForegroundApp(),
-    appList: () => queryAppList(),
+    // The app-exception list: what is in front (the capture button) and everything the user can switch to (the dropdown).
+    foregroundApp: () => bridge.ask(
+      { type: 'getForegroundApp' },
+      (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
+      null,
+    ),
+    appList: () => bridge.ask(
+      { type: 'getAppList' },
+      (ev) => (ev.type === 'appList' ? ev.names : null),
+      [],
+    ),
     openAccessibility: () => {
       if (!IS_MAC) return;
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt

@@ -1,18 +1,18 @@
 import { Button, Combobox, Option } from '@fluentui/react-components';
 import { Add24Regular, Apps24Regular, Camera24Regular, Dismiss24Regular } from '@fluentui/react-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { appNameStem, MAX_SKIP_APPS } from '../../../shared/settings';
 import { api } from '../api';
 import { useText } from '../text';
 import type { Update } from '../useAppState';
 
-/** Process names that are lolPing itself, so neither the dropdown nor a capture offers or adds it. */
+/** Process names that are lolPing itself: never offered, and a capture that never left the app adds nothing. */
 const OWN_APPS = new Set(['lolping', 'electron']);
 
 /**
- * The app-exception list: in these apps lolPing stands down entirely, so their own shortcuts
- * (Photoshop's Option + click colour picker, a Tab that toggles panels) reach them untouched.
- * The box both picks from the apps running right now and accepts a name by hand.
+ * The app-exception list: in these apps lolPing stands down entirely, so their own shortcuts (Photoshop's
+ * Option + click, a Tab that toggles panels) reach them untouched. The box picks from the apps running right
+ * now and still takes a typed name.
  */
 export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }) {
   const t = useText();
@@ -20,15 +20,10 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
   const [running, setRunning] = useState<string[]>([]);
   const [countdown, setCountdown] = useState(0);
   const [note, setNote] = useState<string | null>(null);
-  const live = useRef(true);
-  useEffect(() => () => { live.current = false; }, []);
 
   const refresh = (): void => {
-    void api.getAppList().then((names) => {
-      if (live.current) setRunning(names.filter((n) => !OWN_APPS.has(appNameStem(n))));
-    });
+    void api.getAppList().then((names) => setRunning(names.filter((n) => !OWN_APPS.has(appNameStem(n)))));
   };
-  useEffect(refresh, []);
 
   const add = (raw: string): void => {
     setNote(null);
@@ -49,14 +44,11 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
     for (const s of [3, 2, 1]) {
       setCountdown(s);
       await new Promise((r) => setTimeout(r, 1000));
-      if (!live.current) return;
     }
     setCountdown(0);
-    const got = await api.getForegroundApp();
-    if (!live.current) return;
-    if (got === null) setNote(t.skipAppsCaptureNone);
-    else if (OWN_APPS.has(appNameStem(got))) setNote(t.skipAppsCaptureSelf);
-    else add(got);
+    const front = await api.getForegroundApp();
+    if (front !== null && !OWN_APPS.has(appNameStem(front))) add(front);
+    else setNote(front === null ? t.skipAppsCaptureNone : t.skipAppsCaptureSelf);
   };
 
   return (
@@ -68,7 +60,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
             {t.skipApps}
             <span className="desc">{t.skipAppsDesc}</span>
           </div>
-          <div className="skipControls">
+          <div className="ctl">
             <Combobox freeform placeholder={t.skipAppsPlaceholder} value={name} style={{ minWidth: 200 }}
               onChange={(e) => setName(e.target.value)}
               onOpenChange={(_, d) => { if (d.open) refresh(); }}

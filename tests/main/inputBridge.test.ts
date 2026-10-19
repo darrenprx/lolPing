@@ -53,6 +53,26 @@ describe('InputBridge', () => {
     await echoed;
   });
 
+  it('asks the helper and resolves its answer', async () => {
+    const b = bridge('answer');
+    const read = (e: HelperEvent) => (e.type === 'foregroundApp' ? e.name : null);
+    expect(await b.ask({ type: 'getForegroundApp' }, read, 'none')).toBe('none'); // not running yet
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    expect(await b.ask({ type: 'getForegroundApp' }, read, 'none')).toBe('Photoshop.exe');
+  });
+
+  it('settles the fallback when nothing answers in time', async () => {
+    const b = bridge('answer');
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    // setEnabled is echoed as an error event, which the question does not read: it runs out of time instead.
+    const read = (e: HelperEvent) => (e.type === 'appList' ? e.names.join(',') : null);
+    expect(await b.ask({ type: 'setEnabled', enabled: true }, read, 'none', 30)).toBe('none');
+  });
+
   it('restarts a crashing helper and gives up after three crashes', async () => {
     const b = bridge('crash');
     const failed = waitFor<string>(b, 'status', (s) => s === 'failed');
