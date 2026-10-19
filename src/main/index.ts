@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, clipboard, dialog, Menu, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
@@ -128,8 +128,12 @@ function start(): void {
   // An image file's own icon where the platform can read one (Windows); anywhere else this settles null. The small
   // size is native 16px: what the dropdown shows, without a blurry downscale from 32. ApplicationFrameHost.exe has
   // no icon of its own, so its icon is the system's default program icon - the copy an icon-less exe embeds.
+  // macOS: app.getFileIcon hands back the same generic tile for every bundle (observed on macOS 26), so the icon
+  // comes from the thumbnail generator instead, which draws the app's real one.
   const appIcons = new AppIcons(async (path) => {
-    const image = await app.getFileIcon(path, { size: 'small' });
+    const image = IS_MAC
+      ? await nativeImage.createThumbnailFromPath(path, { width: 32, height: 32 })
+      : await app.getFileIcon(path, { size: 'small' });
     return image.isEmpty() ? null : image.toDataURL();
   }, 'C:\\Windows\\System32\\ApplicationFrameHost.exe');
 
