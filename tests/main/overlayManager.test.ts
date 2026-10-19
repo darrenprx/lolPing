@@ -237,7 +237,7 @@ describe('OverlayManager kept ping', () => {
 describe('OverlayManager remote and preview emotes', () => {
   it('shows a room member\'s emote on the target display with their tag, and clears theirs on the others', () => {
     mgr.spawnRemoteEmote({ displayId: 2, x: 5, y: 6, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
-    expect(resolveArt).toHaveBeenCalledWith('gg_heart', true);
+    expect(resolveArt).toHaveBeenCalledWith('gg_heart', true, 'peer-1');
     expect(sent(1)).toEqual([['emote:spawn', { owner: 'peer-1', art: art('gg_heart', true), x: 5, y: 6, tag: { name: 'Bob', color: 2 } }]]);
     expect(sent(0)).toEqual([['emote:clear', { owner: 'peer-1' }]]);
   });
