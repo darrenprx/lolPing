@@ -68,8 +68,6 @@ std::vector<AppEntry> runningApps() {
       if (name == nil) continue;
       AppEntry entry;
       entry.name = name.UTF8String;
-      NSString* local = app.localizedName;
-      if (local != nil) entry.desc = local.UTF8String;
       NSString* path = app.bundleURL.path;
       if (path != nil) entry.path = path.UTF8String;
       if (std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == entry.name; }))
