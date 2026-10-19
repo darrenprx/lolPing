@@ -66,16 +66,19 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
             onOpenChange={(_, d) => { if (d.open) refresh(); }}
             onKeyDown={(e) => { if (e.key === 'Enter') add(name); }}
             onOptionSelect={(_, d) => { if (typeof d.optionValue === 'string') add(d.optionValue); }}>
-            {running.map((a) => (
-              <Option key={a.name} value={a.name} text={a.name}>
-                <span className="skipOpt">
-                  <span className="skipOptIco">
-                    {a.icon ? <img src={a.icon} alt="" /> : <span className="skipDot">{a.name.slice(0, 1).toUpperCase()}</span>}
+            {running.map((a) => {
+              const shown = a.desc && a.desc !== a.name ? a.desc : a.name;
+              return (
+                <Option key={a.name} value={a.name} text={shown}>
+                  <span className="skipOpt">
+                    <span className="skipOptIco">
+                      {a.icon ? <img src={a.icon} alt="" /> : <span className="skipDot">{a.name.slice(0, 1).toUpperCase()}</span>}
+                    </span>
+                    {shown}
                   </span>
-                  {a.desc && a.desc !== a.name ? `${a.name} · ${a.desc}` : a.name}
-                </span>
-              </Option>
-            ))}
+                </Option>
+              );
+            })}
           </Combobox>
           <Button icon={<Add24Regular />} onClick={() => add(name)}>{t.skipAppsAdd}</Button>
           <Button icon={<Camera24Regular />} onClick={() => void capture()}>{t.skipAppsCapture}</Button>

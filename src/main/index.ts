@@ -126,8 +126,9 @@ function start(): void {
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
   // An image file's own icon where the platform can read one (Windows); anywhere else this settles null.
+  // The small size is native 16px: what the dropdown shows, without a blurry downscale from 32.
   const appIcons = new AppIcons(async (path) => {
-    const image = await app.getFileIcon(path, { size: 'normal' });
+    const image = await app.getFileIcon(path, { size: 'small' });
     return image.isEmpty() ? null : image.toDataURL();
   });
 
@@ -632,15 +633,19 @@ function start(): void {
     },
     captureForegroundApp: async () => {
       const win = settingsWindow();
-      win?.hide();
+      // Minimizing hands focus to the next top-level window, so the app the user wants is simply in front;
+      // when the answer is in, the window comes back on top.
+      win?.minimize();
       await new Promise((resolve) => setTimeout(resolve, 3000));
       const name = await bridge.ask(
         { type: 'getForegroundApp' },
         (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
         null,
       );
-      if (win && !win.isDestroyed()) win.show();
-      win?.focus();
+      if (win && !win.isDestroyed()) {
+        win.restore();
+        win.focus();
+      }
       return name;
     },
     openAccessibility: () => {
