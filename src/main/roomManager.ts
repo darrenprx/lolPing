@@ -106,6 +106,8 @@ export interface RoomDeps {
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   /** The 32-hex hashes our presence announces: the custom emotes on our wheel and centre. Read on every presence. */
   announceEmotes(): readonly string[];
+  /** Optional LAN animation extension; omitted by apps and tools that only transfer stills. */
+  animationSync?(): boolean;
 }
 
 interface Member {
@@ -122,6 +124,7 @@ interface Member {
   muted: boolean;
   /** The custom emote hashes their last presence announced. */
   em: string[];
+  animationSync: boolean;
   firstSeen: number;
   /** Ever heard over the internet: dropped after the longer silence. */
   viaInternet: boolean;
@@ -164,6 +167,7 @@ export class RoomManager extends EventEmitter {
   private readonly limiter: RateLimiter;
   /** Emote stills (want/chunk) per member: their own, wider bucket, so a flood of wants still meets a wall. */
   private readonly transferLimiter: RateLimiter;
+  private readonly animationLimiter: RateLimiter;
   /** Ballots per member, apart from `limiter`: a vote needs every answer, but not a flood of them. */
   private readonly ballotLimiter: RateLimiter;
   private paused = false;
@@ -194,6 +198,7 @@ export class RoomManager extends EventEmitter {
     this.unsignedGuard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.transferLimiter = new RateLimiter(deps.now);
+    this.animationLimiter = new RateLimiter(deps.now);
     this.ballotLimiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
     for (const t of deps.transports) {
@@ -286,6 +291,12 @@ export class RoomManager extends EventEmitter {
     const route = m && this.route(m);
     if (!route) return null;
     return route.transport.shared ? 'shared' : 'lan';
+  }
+
+  canSyncAnimation(peer: string): boolean {
+    const m = this.members.get(peer);
+    return Boolean(this.deps.animationSync?.() && m?.pk && m.animationSync && m.status === 'on' &&
+      !m.muted && !m.needsUpdate && !this.paused && !this.roomMuted && this.routeKind(peer) === 'lan');
   }
 
   /** Seals and sends `body` straight to one member over its LAN path. Nothing goes when LAN isn't what reaches them. */
@@ -519,6 +530,18 @@ export class RoomManager extends EventEmitter {
     } else if (this.boundIds.has(msg.peer)) {
       return;
     }
+    const animation = msg.t === 'anim-want' || msg.t === 'anim-info' || msg.t === 'anim-chunk';
+    if (animation) {
+      if (!sig || t.shared || t.kind !== 'lan' || msg.to !== this.self || !this.canSyncAnimation(msg.peer)) return;
+      const chunk = msg.t === 'anim-chunk';
+      if (!this.animationLimiter.allow(`${msg.peer}:${chunk ? 'chunk' : 'control'}`, chunk ? 100 : 10)) return;
+      // Bulk traffic must not advance the replay window or keep a vanished member's route alive.
+      // The transfer only accepts requested indexes for the signed, content-addressed original.
+      if (chunk) {
+        this.emit('anim-chunk', msg);
+        return;
+      }
+    }
     const guard = sig ? this.signedGuard : this.unsignedGuard;
     const verdict = guard.accept(msg.peer, msg.seq, msg.ts);
     if (verdict === 'stale') return this.onStale(msg);
@@ -534,6 +557,10 @@ export class RoomManager extends EventEmitter {
     }
     if (!m) return;
     this.heard(m, t, key);
+    if (msg.t === 'anim-want' || msg.t === 'anim-info') {
+      this.emit(msg.t, msg);
+      return;
+    }
     // Emote still requests travel in their own bucket: a flood of wants still meets a wall. A paused lolPing neither
     // fetches nor serves stills. An app on another protocol generation can't have sent these (its validator drops
     // unknown types), so that check is defence in depth.
@@ -594,7 +621,7 @@ export class RoomManager extends EventEmitter {
       if (!t.shared && this.membersAt(t.kind, key) >= 2) return;
       m = {
         peer: msg.peer, name: msg.name, color: msg.color, rgb: msg.rgb ?? null, status: msg.status,
-        needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [],
+        needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [], animationSync: false,
         firstSeen: this.deps.now(), viaInternet: false, paths: {}, pk: null,
       };
       this.members.set(m.peer, m);
@@ -614,10 +641,12 @@ export class RoomManager extends EventEmitter {
     m.textOff = msg.nf.includes('text');
     m.votesOff = msg.nf.includes('votes');
     m.em = msg.em;
+    m.animationSync = msg.ea === 1 && pk !== null;
     // Every presence, so a hash whose assembly gave up is asked for again: EmoteTransfer skips what is already here.
     // A paused lolPing neither fetches nor serves stills; the next presence after unpausing starts prefetch again.
     if (!this.paused) this.emit('emotes', m.peer, [...m.em]);
     this.heard(m, t, key);
+    this.emit('animationEmotes', m.peer, this.canSyncAnimation(m.peer) ? [...m.em] : []);
     if (!this.answered.has(key)) {
       this.answered.add(key);
       if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
@@ -656,6 +685,8 @@ export class RoomManager extends EventEmitter {
     this.limiter.forget(m.peer);
     this.ballotLimiter.forget(m.peer);
     this.transferLimiter.forget(m.peer);
+    this.animationLimiter.forget(`${m.peer}:chunk`);
+    this.animationLimiter.forget(`${m.peer}:control`);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
     // A laptop that sleeps and wakes now and then would toast every cycle: once is news, then the member list tells.
@@ -697,6 +728,7 @@ export class RoomManager extends EventEmitter {
     return this.seal({
       t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
       em: [...this.deps.announceEmotes()], pk: this.identity.pk.toString('base64'),
+      ...(this.deps.animationSync?.() ? { ea: 1 } : {}),
       // Left out when nothing is off, so a presence to an older peer carries nothing new.
       ...(p.nf.length ? { nf: [...p.nf] } : {}),
       // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.

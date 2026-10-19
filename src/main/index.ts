@@ -11,7 +11,7 @@ import { resolveLang, strings, type Strings } from '../shared/i18n';
 import {
   SETTINGS_CH, type About, type AppStatus, type PanelAction, type PanelState, type TeammateHistoryOp,
 } from '../shared/ipc';
-import { announcedEmoteHashes } from '../shared/emotes';
+import { announcedEmoteHashes, customHash, customStillUrl, isCustomRef } from '../shared/emotes';
 import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { LOGO_TEXTURE } from '../shared/pings';
@@ -32,6 +32,7 @@ import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
+import { EmoteAnimationTransfer } from './emoteAnimationTransfer';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { EmoteTransfer } from './emoteTransfer';
 import { isFile } from './fileState';
@@ -204,10 +205,12 @@ function setMacMenu(): void {
 function start(): void {
   const library = new EmoteLibrary(join(settingsDir(), 'emotes'));
   const cache = new EmoteCache(join(settingsDir(), 'emote-cache'), Date.now);
+  const animationCache = new EmoteCache(join(settingsDir(), 'emote-animation-cache'), Date.now, true);
   void cache.present();
+  void animationCache.present();
   serveAppScheme({
     rendererRoot: process.env.ELECTRON_RENDERER_URL ? null : join(__dirname, '../renderer'), // development pages come from Vite
-    emoteDirs: () => [library.dir, cache.dir], // the library wins; the cache only fills the gaps
+    emoteDirs: () => [library.dir, cache.dir, animationCache.dir], // animation originals have independent 64-hex names
   });
   if (IS_MAC) {
     app.dock?.hide(); // a menu bar app: the Dock icon only shows while settings are open
@@ -227,17 +230,24 @@ function start(): void {
   let wordsOpen = false; // the teammate's words box has the keyboard: the helper stays suspended, as for the text box
   let mate: Mate | null = null; // the teammate, while its feature is on
   let mateFailed = false; // it couldn't start: its ask key stays off for this session
+  let animationTransfer: EmoteAnimationTransfer | undefined;
   /** The settings as the helper and overlays use them: without the teammate once it failed to start. */
   const effective = (s: Settings): Settings => (mateFailed ? { ...s, features: { ...s.features, teammate: false } } : s);
 
   const overlays = new OverlayManager(
     overlaySettings(settings, resolveLang(settings.language, app.getLocale())),
-    (ref, remote) =>
-      resolveEmoteArt(ref, settings.customEmotes, remote, (hash) => {
+    (ref, remote, peer) => {
+      const art = resolveEmoteArt(ref, settings.customEmotes, remote, (hash) => {
         if (!settings.friendEmotes || !cache.has(hash)) return false; // off: friends' images show as the placeholder
         cache.touch(hash); // a shown still is the most recently used at the next cache sweep
         return true;
-      }),
+      });
+      if (remote && peer && isCustomRef(ref) && settings.friendEmotes) {
+        const url = animationTransfer?.url(peer, customHash(ref));
+        if (url) return { kind: 'custom', url, animated: true, stillUrl: customStillUrl(customHash(ref)), fx: 0 };
+      }
+      return art;
+    },
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
@@ -297,6 +307,7 @@ function start(): void {
     },
     // With emotes switched off we announce none, so friends don't send stills for emotes we won't use.
     announceEmotes: () => (featureOn(settings, 'emotes') ? announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId) : []),
+    animationSync: () => settings.friendEmotes && featureOn(settings, 'emotes'),
   });
   // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
   const transfer = new EmoteTransfer({
@@ -321,6 +332,23 @@ function start(): void {
   room.on('want', (w: Parameters<EmoteTransfer['onWant']>[0]) => transfer.onWant(w));
   room.on('chunk', (c: Parameters<EmoteTransfer['onChunk']>[0]) => transfer.onChunk(c));
   room.on('memberGone', (peer: string) => transfer.memberGone(peer));
+  const animations = new EmoteAnimationTransfer({
+    now: Date.now,
+    enabled: () => enabled && settings.friendEmotes && featureOn(settings, 'emotes') && !settings.roomMuted,
+    canPeer: (peer) => room.canSyncAnimation(peer),
+    announced: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
+    animation: (hash) => library.animation(hash),
+    have: (hash) => animationCache.has(hash),
+    put: (hash, bytes) => animationCache.put(hash, bytes),
+    touch: (hash) => animationCache.touch(hash),
+    send: (peer, body) => room.sendToLan(peer, body),
+  });
+  animationTransfer = animations;
+  room.on('animationEmotes', (peer: string, hashes: string[]) => animations.announced(peer, hashes));
+  room.on('anim-want', (w: Parameters<EmoteAnimationTransfer['onWant']>[0]) => { void animations.onWant(w); });
+  room.on('anim-info', (m: Parameters<EmoteAnimationTransfer['onInfo']>[0]) => animations.onInfo(m));
+  room.on('anim-chunk', (c: Parameters<EmoteAnimationTransfer['onChunk']>[0]) => animations.onChunk(c));
+  room.on('memberGone', (peer: string) => animations.memberGone(peer));
   const roomState = (): RoomState => {
     const all = screen.getAllDisplays();
     return {
@@ -1074,6 +1102,7 @@ function start(): void {
   store.on('change', (s: Settings) => {
     const previous = settings;
     settings = s;
+    if (JSON.stringify(s.customEmotes) !== JSON.stringify(previous.customEmotes)) animations.invalidateSources();
     sendConfig();
     syncRoomText();
     syncRoomVotes();
@@ -1091,6 +1120,9 @@ function start(): void {
       || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
       || featureOn(s, 'roomText') !== featureOn(previous, 'roomText')
       || featureOn(s, 'roomVotes') !== featureOn(previous, 'roomVotes')
+      || featureOn(s, 'emotes') !== featureOn(previous, 'emotes')
+      || s.friendEmotes !== previous.friendEmotes
+      || JSON.stringify(s.emoteWheel) !== JSON.stringify(previous.emoteWheel) || s.clickEmoteId !== previous.clickEmoteId
     ) room.profileChanged();
     if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
       if (!featureOn(s, 'rooms')) room.leave();
@@ -1246,6 +1278,7 @@ function start(): void {
     updater?.stop(); // aborts a download and drops a check in flight; an install that is quitting the app is left alone
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
     transfer.stop();
+    animations.stop();
     stopWaitingForAccess();
     const mateStopped = stopMate();
     tray.destroy();

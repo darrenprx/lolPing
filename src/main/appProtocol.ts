@@ -10,8 +10,8 @@ import { resolveInside } from './safePath';
  */
 export const APP_SCHEME = 'lolping';
 
-/** The only names lolping://emotes serves: a hash and `.webp` (the still), `.anim` (the animation) or `.sound`. */
-export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|sound)$/;
+/** Library hashes use 32 hex characters; 64-hex room originals are restricted to `.anim` by resolveEmoteFile. */
+export const EMOTE_URL_RE = /^\/([0-9a-f]{32}|[0-9a-f]{64})\.(webp|anim|sound)$/;
 
 /** Must run before app 'ready'. */
 export function registerAppScheme(): void {
@@ -30,6 +30,7 @@ export function resolveEmoteFile(dirs: readonly string[], urlPath: string): stri
   const m = EMOTE_URL_RE.exec(urlPath);
   if (!m) return null;
   const [, hash, kind] = m;
+  if (hash.length === 64 && kind !== 'anim') return null;
   const names = kind === 'webp' ? [`${hash}.webp`]
     : kind === 'anim' ? [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`]
       : AUDIO_TYPES.map((t) => `${hash}.sound.${t}`);
@@ -49,6 +50,8 @@ async function fetchUncached(file: string): Promise<Response> {
   const res = await net.fetch(pathToFileURL(file).toString());
   const headers = new Headers(res.headers);
   headers.set('Cache-Control', 'no-store');
+  // Development renderers use HTTP; emote images and blobs carry no credentials.
+  headers.set('Access-Control-Allow-Origin', '*');
   return new Response(res.body, { status: res.status, headers });
 }
 

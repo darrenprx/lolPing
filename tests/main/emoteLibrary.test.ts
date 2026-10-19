@@ -58,6 +58,22 @@ const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).sor
 const entry = (n: number): CustomEmote => ({ id: `c:${n.toString(16).padStart(32, '0')}`, name: `e${n}`, animated: false });
 
 describe('EmoteLibrary', () => {
+  it('reads only validated originals within the import limit for room animation transfer', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const s = still();
+    const hash = hashOf(s);
+    const bytes = gif(1024, 1024, 5_242_880);
+    await lib.save({ name: 'moving', still: s, anim: bytes }, []);
+    const read = await lib.animation(hash);
+    expect(read && Buffer.from(read).equals(Buffer.from(bytes))).toBe(true);
+    expect(await lib.animation('../escape')).toBeNull();
+    writeFileSync(join(lib.dir, `${hash}.anim.gif`), gif(200, 200, 5_242_881));
+    expect(await lib.animation(hash)).toBeNull();
+    writeFileSync(join(lib.dir, `${hash}.anim.gif`), gif(1025, 100));
+    expect(await lib.animation(hash)).toBeNull();
+    writeFileSync(join(lib.dir, `${hash}.anim.gif`), 'not an image');
+    expect(await lib.animation(hash)).toBeNull();
+  });
   it('saves a still and an animation', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     const s = still();
@@ -285,6 +301,15 @@ describe('resolveEmoteFile', () => {
     const [c, d] = setup([`${hash}.webp`], [`${hash}.webp`]);
     expect(resolveEmoteFile([c, d], `/${hash}.webp`)).toBe(join(c, `${hash}.webp`));
     expect(resolveEmoteFile([a], `/${hash}.webp`)).toBeNull();
+  });
+
+  it('serves independent animation hashes only through the animation route', () => {
+    const animation = 'd'.repeat(64);
+    const [a, b] = setup([], [`${animation}.anim.gif`, `${animation}.webp`, `${animation}.sound.ogg`]);
+    expect(resolveEmoteFile([a, b], `/${animation}.anim`)).toBe(join(b, `${animation}.anim.gif`));
+    expect(resolveEmoteFile([a, b], `/${animation}.webp`)).toBeNull();
+    expect(resolveEmoteFile([a, b], `/${animation}.sound`)).toBeNull();
+    expect(resolveEmoteFile([a, b], `/${animation}.anim.gif`)).toBeNull();
   });
 
   it('serves the animation as .anim.gif, then .anim.webp, then the still', () => {
