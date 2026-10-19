@@ -87,7 +87,9 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
           {props.apps.length === 0 ? <span className="desc">{t.skipAppsEmpty}</span> : props.apps.map((a) => (
             <span key={a} className="skipChip">
               {a}
-              <button onClick={() => remove(a)} aria-label={a}><Dismiss12Regular /></button>
+              <button type="button" onClick={() => remove(a)} aria-label={t.removeImage(a)} title={t.removeImage(a)}>
+                <Dismiss12Regular />
+              </button>
             </span>
           ))}
         </div>
