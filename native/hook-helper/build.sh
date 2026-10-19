@@ -23,8 +23,9 @@ esac
 "$CXX" $FLAGS ${CPPFLAGS:-} -O0 tests/helper_tests.cpp src/decision.cpp src/commands.cpp src/macinput.cpp src/json.cpp src/output.cpp \
   -o build/helper_tests
 if [ "$(uname -s)" = Darwin ]; then
-  "$CXX" $FLAGS -O0 tests/hooks_mac_tests.cpp src/decision.cpp src/commands.cpp src/macinput.cpp src/json.cpp src/output.cpp \
-    -framework ApplicationServices -framework CoreFoundation -o build/hooks_mac_tests
+  # hooks_mac_tests.cpp includes hooks_mac.cpp textually, so it needs the same Objective-C++ flag.
+  "$CXX" $FLAGS -O0 -x objective-c++ tests/hooks_mac_tests.cpp -x c++ src/decision.cpp src/commands.cpp src/macinput.cpp src/json.cpp src/output.cpp \
+    -framework ApplicationServices -framework CoreFoundation -framework Cocoa -o build/hooks_mac_tests
   echo "Built build/hook-helper, build/helper_tests and build/hooks_mac_tests"
 else
   echo "Built build/hook-helper and build/helper_tests"

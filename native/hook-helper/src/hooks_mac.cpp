@@ -52,7 +52,7 @@ bool isKeyDown(uint32_t vk) {
 std::string foregroundAppName() {
   @autoreleasepool {
     NSRunningApplication* app = [[NSWorkspace sharedWorkspace] frontmostApplication];
-    NSString* name = app.processName;
+    NSString* name = app.localizedName;
     return name != nil ? std::string(name.UTF8String) : std::string();
   }
 }
@@ -64,7 +64,7 @@ std::vector<AppEntry> runningApps() {
     for (NSRunningApplication* app in [[NSWorkspace sharedWorkspace] runningApplications]) {
       if (apps.size() >= 64) break;
       if (app.activationPolicy != NSApplicationActivationPolicyRegular) continue;
-      NSString* name = app.processName;
+      NSString* name = app.localizedName;
       if (name == nil) continue;
       AppEntry entry;
       entry.name = name.UTF8String;
