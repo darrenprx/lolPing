@@ -48,11 +48,11 @@ void Output::foregroundApp(const std::string& name) {
   line("{\"type\":\"foregroundApp\",\"name\":\"" + jsonEscape(name) + "\"}");
 }
 
-void Output::appList(const std::vector<std::string>& names) {
-  std::string out = "{\"type\":\"appList\",\"names\":[";
-  for (size_t i = 0; i < names.size(); ++i) {
+void Output::appList(const std::vector<AppEntry>& apps) {
+  std::string out = "{\"type\":\"appList\",\"apps\":[";
+  for (size_t i = 0; i < apps.size(); ++i) {
     if (i != 0) out += ",";
-    out += "\"" + jsonEscape(names[i]) + "\"";
+    out += "{\"name\":\"" + jsonEscape(apps[i].name) + "\",\"path\":\"" + jsonEscape(apps[i].path) + "\"}";
   }
   line(out + "]}");
 }

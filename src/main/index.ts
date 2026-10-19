@@ -18,6 +18,7 @@ import { overlaySettings, soundLevel, type Settings } from '../shared/settings';
 import { parseTextInput } from '../shared/textCommands';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { AppIcons } from './appIcons';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -124,6 +125,11 @@ function start(): void {
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
+  // An image file's own icon where the platform can read one (Windows); anywhere else this settles null.
+  const appIcons = new AppIcons(async (path) => {
+    const image = await app.getFileIcon(path, { size: 'normal' });
+    return image.isEmpty() ? null : image.toDataURL();
+  });
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
@@ -618,15 +624,15 @@ function start(): void {
       syncSuspended();
     },
     // The app-exception list: what is in front (the capture button) and everything the user can switch to (the dropdown).
+    // Icons come from the image file itself where the platform can read one; otherwise the dropdown shows the name only.
+    appList: async () => {
+      const apps = await bridge.ask({ type: 'getAppList' }, (ev) => (ev.type === 'appList' ? ev.apps : null), []);
+      return Promise.all(apps.map(async (a) => ({ ...a, icon: await appIcons.icon(a.path) })));
+    },
     foregroundApp: () => bridge.ask(
       { type: 'getForegroundApp' },
       (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
       null,
-    ),
-    appList: () => bridge.ask(
-      { type: 'getAppList' },
-      (ev) => (ev.type === 'appList' ? ev.names : null),
-      [],
     ),
     openAccessibility: () => {
       if (!IS_MAC) return;

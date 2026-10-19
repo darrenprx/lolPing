@@ -25,6 +25,8 @@ if (mode === 'noaccess') {
 // 'answer' fills in the helper's app queries; every other command is echoed back so the test can observe it.
 function reply(cmd) {
   if (mode === 'answer' && cmd.type === 'getForegroundApp') return { type: 'foregroundApp', name: 'Photoshop.exe' };
-  if (mode === 'answer' && cmd.type === 'getAppList') return { type: 'appList', names: ['Photoshop.exe', 'chrome'] };
+  if (mode === 'answer' && cmd.type === 'getAppList') {
+    return { type: 'appList', apps: [{ name: 'Photoshop.exe', path: 'C:\\Adobe\\Photoshop.exe' }] };
+  }
   return { type: 'error', message: `got:${cmd.type}` };
 }

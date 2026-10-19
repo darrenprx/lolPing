@@ -1,7 +1,7 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
 import { isCustomRef, isEmoteFx, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
-import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
+import { SETTINGS_CH, type About, type AppStatus, type RunningApp, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
@@ -28,8 +28,8 @@ export interface SettingsIpcDeps {
   setCapturing(on: boolean): void;
   /** The frontmost app's process name, or null when it can't be read; the app-exception list's capture button asks. */
   foregroundApp(): Promise<string | null>;
-  /** Process names of the apps the user can switch to, []; the app-exception list's dropdown asks. */
-  appList(): Promise<string[]>;
+  /** The apps the user can switch to, with icons; the app-exception list's dropdown asks. */
+  appList(): Promise<RunningApp[]>;
   openAccessibility(): void;
   /** Strings in the app's current language. */
   text(): Strings;

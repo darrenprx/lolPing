@@ -69,7 +69,7 @@ describe('InputBridge', () => {
     b.start();
     await running;
     // setEnabled is echoed as an error event, which the question does not read: it runs out of time instead.
-    const read = (e: HelperEvent) => (e.type === 'appList' ? e.names.join(',') : null);
+    const read = (e: HelperEvent) => (e.type === 'appList' ? e.apps[0]?.name ?? 'none' : null);
     expect(await b.ask({ type: 'setEnabled', enabled: true }, read, 'none', 30)).toBe('none');
   });
 

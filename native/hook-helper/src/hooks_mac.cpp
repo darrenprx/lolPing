@@ -57,20 +57,24 @@ std::string foregroundAppName() {
   }
 }
 
-// The regular apps the user can switch to, by process name, at most 64. Run only when the settings page asks.
-std::vector<std::string> runningAppNames() {
+// The regular apps the user can switch to, by process name and bundle path, at most 64. Asked only by the settings page.
+std::vector<AppEntry> runningApps() {
   @autoreleasepool {
-    std::vector<std::string> names;
+    std::vector<AppEntry> apps;
     for (NSRunningApplication* app in [[NSWorkspace sharedWorkspace] runningApplications]) {
-      if (names.size() >= 64) break;
+      if (apps.size() >= 64) break;
       if (app.activationPolicy != NSApplicationActivationPolicyRegular) continue;
       NSString* name = app.processName;
       if (name == nil) continue;
-      const std::string stem(name.UTF8String);
-      if (!stem.empty() && std::find(names.begin(), names.end(), stem) == names.end()) names.push_back(stem);
+      AppEntry entry;
+      entry.name = name.UTF8String;
+      NSString* path = app.bundleURL.path;
+      if (path != nil) entry.path = path.UTF8String;
+      if (std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == entry.name; }))
+        apps.push_back(entry);
     }
-    std::sort(names.begin(), names.end());
-    return names;
+    std::sort(apps.begin(), apps.end(), [](const AppEntry& a, const AppEntry& b) { return a.name < b.name; });
+    return apps;
   }
 }
 
@@ -229,7 +233,7 @@ void handleCommand(const std::string& text) {
     case Command::Kind::SetEnabled: apply(g_decision->setEnabled(c.flag)); break;
     case Command::Kind::Suspend: apply(g_decision->setSuspended(c.flag)); break;
     case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
-    case Command::Kind::AppList: g_out->appList(runningAppNames()); break;
+    case Command::Kind::AppList: g_out->appList(runningApps()); break;
     case Command::Kind::Shutdown: CFRunLoopStop(CFRunLoopGetCurrent()); break;
     default: g_out->error("invalid command: " + text); break;
   }

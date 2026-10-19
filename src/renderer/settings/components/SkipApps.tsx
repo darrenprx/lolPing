@@ -1,6 +1,7 @@
 import { Button, Combobox, Option } from '@fluentui/react-components';
 import { Add24Regular, Apps24Regular, Camera24Regular, Dismiss24Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
+import type { RunningApp } from '../../../shared/ipc';
 import { appNameStem, MAX_SKIP_APPS } from '../../../shared/settings';
 import { api } from '../api';
 import { useText } from '../text';
@@ -12,17 +13,17 @@ const OWN_APPS = new Set(['lolping', 'electron']);
 /**
  * The app-exception list: in these apps lolPing stands down entirely, so their own shortcuts (Photoshop's
  * Option + click, a Tab that toggles panels) reach them untouched. The box picks from the apps running right
- * now and still takes a typed name.
+ * now, with their icons where the platform has one, and still takes a typed name.
  */
 export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }) {
   const t = useText();
   const [name, setName] = useState('');
-  const [running, setRunning] = useState<string[]>([]);
+  const [running, setRunning] = useState<RunningApp[]>([]);
   const [countdown, setCountdown] = useState(0);
   const [note, setNote] = useState<string | null>(null);
 
   const refresh = (): void => {
-    void api.getAppList().then((names) => setRunning(names.filter((n) => !OWN_APPS.has(appNameStem(n)))));
+    void api.getAppList().then((apps) => setRunning(apps.filter((a) => !OWN_APPS.has(appNameStem(a.name)))));
   };
 
   const add = (raw: string): void => {
@@ -60,19 +61,26 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
             {t.skipApps}
             <span className="desc">{t.skipAppsDesc}</span>
           </div>
-          <div className="ctl">
-            <Combobox freeform placeholder={t.skipAppsPlaceholder} value={name} style={{ minWidth: 200 }}
-              onChange={(e) => setName(e.target.value)}
-              onOpenChange={(_, d) => { if (d.open) refresh(); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') add(name); }}
-              onOptionSelect={(_, d) => { if (typeof d.optionValue === 'string') add(d.optionValue); }}>
-              {running.map((a) => <Option key={a} value={a}>{a}</Option>)}
-            </Combobox>
-            <Button icon={<Add24Regular />} onClick={() => add(name)}>{t.skipAppsAdd}</Button>
-            <Button icon={<Camera24Regular />} disabled={countdown !== 0} onClick={() => void capture()}>
-              {countdown !== 0 ? t.skipAppsCaptureIn(countdown) : t.skipAppsCapture}
-            </Button>
-          </div>
+        </div>
+        <div className="skipPick">
+          <Combobox freeform placeholder={t.skipAppsPlaceholder} value={name} style={{ minWidth: 260 }}
+            onChange={(e) => setName(e.target.value)}
+            onOpenChange={(_, d) => { if (d.open) refresh(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(name); }}
+            onOptionSelect={(_, d) => { if (typeof d.optionValue === 'string') add(d.optionValue); }}>
+            {running.map((a) => (
+              <Option key={a.name} value={a.name} text={a.name}>
+                <span className="skipOpt">
+                  {a.icon ? <img src={a.icon} alt="" /> : null}
+                  {a.name}
+                </span>
+              </Option>
+            ))}
+          </Combobox>
+          <Button icon={<Add24Regular />} onClick={() => add(name)}>{t.skipAppsAdd}</Button>
+          <Button icon={<Camera24Regular />} disabled={countdown !== 0} onClick={() => void capture()}>
+            {countdown !== 0 ? t.skipAppsCaptureIn(countdown) : t.skipAppsCapture}
+          </Button>
         </div>
         <div className="skipList">
           {props.apps.length === 0 ? <span className="desc">{t.skipAppsEmpty}</span> : props.apps.map((a) => (

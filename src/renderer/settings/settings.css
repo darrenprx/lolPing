@@ -160,11 +160,15 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 [data-platform="linux"] .titlebar { display: none; }
 [data-platform="linux"] body { font-family: system-ui, sans-serif; }
 
-/* App exceptions: the chips row sits under the card's usual row, indented to its text. */
-.card.skipApps { display: block; }
+/* App exceptions: a block card like the wheel editor; the picker and the chips sit under the heading, at the text's indent. */
+.card.skipApps { display: block; padding: 16px 20px 14px; }
 .card.skipApps:hover { background: var(--card); }
-.skipHead { display: flex; align-items: center; gap: 16px; }
-.skipList { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 2px 40px; }
+.skipHead { display: flex; align-items: flex-start; gap: 16px; }
+.skipHead .lbl { flex: 1; }
+.skipPick { display: flex; align-items: center; gap: 8px; margin: 14px 0 0 40px; }
+.skipList { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 40px; min-height: 22px; }
+.skipOpt { display: flex; align-items: center; gap: 8px; }
+.skipOpt img { width: 16px; height: 16px; }
 .skipChip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: 4px; background: var(--colorNeutralBackground3); font-size: 12px; line-height: 16px; }
 .skipChip button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; opacity: .7; }
 .skipChip button:hover, .skipChip button:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }

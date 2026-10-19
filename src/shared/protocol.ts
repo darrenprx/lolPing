@@ -16,7 +16,7 @@ export type HelperEvent =
   | { type: 'textRequested' }
   | { type: 'panel'; show: boolean }
   | { type: 'foregroundApp'; name: string }
-  | { type: 'appList'; names: string[] }
+  | { type: 'appList'; apps: { name: string; path: string }[] }
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
@@ -53,8 +53,13 @@ export function parseHelperLine(line: string): HelperEvent | null {
     case 'foregroundApp':
       return typeof o.name === 'string' ? { type: 'foregroundApp', name: o.name } : null;
     case 'appList': {
-      if (!Array.isArray(o.names)) return null;
-      return { type: 'appList', names: o.names.filter((n): n is string => typeof n === 'string').slice(0, 64) };
+      if (!Array.isArray(o.apps)) return null;
+      const apps: { name: string; path: string }[] = [];
+      for (const a of o.apps.slice(0, 64)) {
+        const e = typeof a === 'object' && a !== null && !Array.isArray(a) ? a as Record<string, unknown> : null;
+        if (e && typeof e.name === 'string' && typeof e.path === 'string') apps.push({ name: e.name, path: e.path });
+      }
+      return { type: 'appList', apps };
     }
     case 'error':
       if (typeof o.message !== 'string') return null;
