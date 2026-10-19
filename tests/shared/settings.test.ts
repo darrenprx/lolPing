@@ -307,9 +307,9 @@ describe('emote settings', () => {
     expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
   });
 
-  it('skip apps are lower-case stems without .exe, deduplicated', () => {
-    expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.exe', 7, null] }).skipApps)
-      .toEqual(['photoshop', 'idea64', 'nope']);
+  it('skip apps keep their case but match stems without .exe, deduplicated', () => {
+    expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.EXE', 7, null] }).skipApps)
+      .toEqual(['Photoshop', 'IDEA64', 'nope']);
     expect(normalizeSettings({ skipApps: 'nope' }).skipApps).toEqual([]);
     expect(DEFAULT_SETTINGS.skipApps).toEqual([]);
   });

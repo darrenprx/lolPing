@@ -8,7 +8,10 @@ import { useText } from '../text';
 import type { Update } from '../useAppState';
 
 /** Process names that are lolPing itself: never offered, and a capture that never left the app adds nothing. */
-const OWN_APPS = new Set(['lolping', 'electron']);
+const isOwnApp = (name: string): boolean => {
+  const stem = appNameStem(name).toLowerCase();
+  return stem === 'lolping' || stem === 'electron';
+};
 
 /**
  * The app-exception list: in these apps lolPing stands down entirely, so their own shortcuts (Photoshop's
@@ -23,7 +26,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
   const [note, setNote] = useState<string | null>(null);
 
   const refresh = (): void => {
-    void api.getAppList().then((apps) => setRunning(apps.filter((a) => !OWN_APPS.has(appNameStem(a.name)))));
+    void api.getAppList().then((apps) => setRunning(apps.filter((a) => !isOwnApp(a.name))));
   };
 
   const add = (raw: string): void => {
@@ -48,7 +51,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
     }
     setCountdown(0);
     const front = await api.getForegroundApp();
-    if (front !== null && !OWN_APPS.has(appNameStem(front))) add(front);
+    if (front !== null && !isOwnApp(front)) add(front);
     else setNote(front === null ? t.skipAppsCaptureNone : t.skipAppsCaptureSelf);
   };
 
@@ -71,7 +74,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
             {running.map((a) => (
               <Option key={a.name} value={a.name} text={a.name}>
                 <span className="skipOpt">
-                  {a.icon ? <img src={a.icon} alt="" /> : null}
+                  <span className="skipOptIco">{a.icon ? <img src={a.icon} alt="" /> : null}</span>
                   {a.name}
                 </span>
               </Option>

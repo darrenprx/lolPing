@@ -37,7 +37,7 @@ export interface Settings {
   clickPingId: PingId;
   /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
   gameCheck: boolean;
-  /** Apps where lolPing stands down entirely, gestures and hotkeys alike: process names, lower-case, no .exe. */
+  /** Apps where lolPing stands down entirely, gestures and hotkeys alike: process names without .exe. */
   skipApps: string[];
   /** The displayed SVG size, shared by the ping and emote wheels. */
   wheelSizePx: number;
@@ -160,10 +160,11 @@ type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'keepLastPing' | '
 /** At most MAX_SKIP_APPS entries: the list exists for a handful of apps. */
 export const MAX_SKIP_APPS = 32;
 
-/** One process name as the exception list stores it: trimmed, lower-case, without a trailing ".exe". */
+/** One process name as the exception list stores it: trimmed, without a trailing ".exe". Case is kept for display;
+ * every match, here and in the helper, ignores it. */
 export const appNameStem = (name: string): string => {
-  const lower = name.trim().toLowerCase();
-  return lower.endsWith('.exe') ? lower.slice(0, -4) : lower;
+  const trimmed = name.trim();
+  return trimmed.toLowerCase().endsWith('.exe') ? trimmed.slice(0, -4) : trimmed;
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -276,7 +277,7 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
-/** Process names where lolPing stands down: trimmed, lower-case, no .exe, no duplicates; the first MAX_SKIP_APPS. */
+/** Process names where lolPing stands down: trimmed, no .exe, no duplicate stems; the first MAX_SKIP_APPS. */
 function skipApps(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
@@ -284,7 +285,7 @@ function skipApps(raw: unknown): string[] {
     if (out.length >= MAX_SKIP_APPS) break;
     if (typeof e !== 'string') continue;
     const stem = appNameStem(e);
-    if (stem === '' || out.includes(stem)) continue;
+    if (stem === '' || out.some((kept) => kept.toLowerCase() === stem.toLowerCase())) continue;
     out.push(stem);
   }
   return out;

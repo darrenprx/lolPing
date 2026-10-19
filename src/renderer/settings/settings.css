@@ -168,7 +168,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .skipPick { display: flex; align-items: center; gap: 8px; margin: 14px 0 0 40px; }
 .skipList { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 40px; min-height: 22px; }
 .skipOpt { display: flex; align-items: center; gap: 8px; }
-.skipOpt img { width: 16px; height: 16px; }
-.skipChip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: 4px; background: var(--colorNeutralBackground3); font-size: 12px; line-height: 16px; }
-.skipChip button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; opacity: .7; }
+.skipOptIco { display: inline-flex; width: 16px; height: 16px; }
+.skipOptIco img { width: 16px; height: 16px; }
+.skipChip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 9px; border-radius: 4px; background: var(--colorNeutralBackground3); font-size: 12px; line-height: 16px; }
+.skipChip button { display: grid; place-items: center; width: 15px; height: 15px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; opacity: .55; font-size: 9px; }
 .skipChip button:hover, .skipChip button:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }
