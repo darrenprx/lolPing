@@ -1,5 +1,5 @@
 import { Button, Combobox, Option } from '@fluentui/react-components';
-import { Add24Regular, Apps24Regular, Camera24Regular, Dismiss24Regular } from '@fluentui/react-icons';
+import { Add24Regular, Camera24Regular, Dismiss24Regular, FilterDismiss24Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import type { RunningApp } from '../../../shared/ipc';
 import { appNameStem, MAX_SKIP_APPS } from '../../../shared/settings';
@@ -56,7 +56,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
     <>
       <div className={`card skipApps${props.dim ? ' dim' : ''}`}>
         <div className="skipHead">
-          <span className="icon"><Apps24Regular /></span>
+          <span className="icon"><FilterDismiss24Regular /></span>
           <div className="lbl">
             {t.skipApps}
             <span className="desc">{t.skipAppsDesc}</span>
