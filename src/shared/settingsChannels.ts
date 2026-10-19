@@ -17,7 +17,7 @@ export const SETTINGS_CH = {
   openProject: 'app:openProjectPage',
   retryHelper: 'app:retryHelper',
   capture: 'app:capture',
-  foregroundApp: 'app:foregroundApp',
+  captureApp: 'app:captureApp',
   appList: 'app:appList',
   openAccessibility: 'app:openAccessibility',
   roomGet: 'room:get',

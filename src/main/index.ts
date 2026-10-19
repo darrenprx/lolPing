@@ -623,17 +623,26 @@ function start(): void {
       capturing = on;
       syncSuspended();
     },
-    // The app-exception list: what is in front (the capture button) and everything the user can switch to (the dropdown).
-    // Icons come from the image file itself where the platform can read one; otherwise the dropdown shows the name only.
+    // The app-exception list: the capture button (the settings window hides, so the app the user wants is the one
+    // left in front) and everything the user can switch to (the dropdown). Icons come from the image file itself
+    // where the platform can read one; otherwise the dropdown shows the name only.
     appList: async () => {
       const apps = await bridge.ask({ type: 'getAppList' }, (ev) => (ev.type === 'appList' ? ev.apps : null), []);
       return Promise.all(apps.map(async (a) => ({ ...a, icon: await appIcons.icon(a.path) })));
     },
-    foregroundApp: () => bridge.ask(
-      { type: 'getForegroundApp' },
-      (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
-      null,
-    ),
+    captureForegroundApp: async () => {
+      const win = settingsWindow();
+      win?.hide();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const name = await bridge.ask(
+        { type: 'getForegroundApp' },
+        (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
+        null,
+      );
+      if (win && !win.isDestroyed()) win.show();
+      win?.focus();
+      return name;
+    },
     openAccessibility: () => {
       if (!IS_MAC) return;
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt

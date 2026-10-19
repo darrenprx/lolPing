@@ -1,5 +1,5 @@
 import { Button, Combobox, Option } from '@fluentui/react-components';
-import { Add24Regular, Camera24Regular, Dismiss24Regular, FilterDismiss24Regular } from '@fluentui/react-icons';
+import { Add24Regular, Camera24Regular, Dismiss12Regular, FilterDismiss24Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import type { RunningApp } from '../../../shared/ipc';
 import { appNameStem, MAX_SKIP_APPS, resolveSkipApp } from '../../../shared/settings';
@@ -22,7 +22,6 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
   const t = useText();
   const [name, setName] = useState('');
   const [running, setRunning] = useState<RunningApp[]>([]);
-  const [countdown, setCountdown] = useState(0);
   const [note, setNote] = useState<string | null>(null);
 
   const refresh = (): void => {
@@ -43,15 +42,10 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
     void props.update({ skipApps: props.apps.filter((a) => a !== app) });
   };
 
-  // The click itself makes lolPing frontmost, so the capture counts down: switch to the app, then it is asked for.
+  // The window hides for the wait, so the app the user wants is simply the one left in front.
   const capture = async (): Promise<void> => {
     setNote(null);
-    for (const s of [3, 2, 1]) {
-      setCountdown(s);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    setCountdown(0);
-    const front = await api.getForegroundApp();
+    const front = await api.captureForegroundApp();
     if (front !== null && !isOwnApp(front)) add(front);
     else setNote(front === null ? t.skipAppsCaptureNone : t.skipAppsCaptureSelf);
   };
@@ -67,7 +61,7 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
           </div>
         </div>
         <div className="skipPick">
-          <Combobox freeform placeholder={t.skipAppsPlaceholder} value={name} style={{ minWidth: 260 }}
+          <Combobox freeform placeholder={t.skipAppsPlaceholder} value={name} selectedOptions={[]} style={{ minWidth: 260 }}
             onChange={(e) => setName(e.target.value)}
             onOpenChange={(_, d) => { if (d.open) refresh(); }}
             onKeyDown={(e) => { if (e.key === 'Enter') add(name); }}
@@ -75,22 +69,22 @@ export function SkipApps(props: { apps: string[]; dim: boolean; update: Update }
             {running.map((a) => (
               <Option key={a.name} value={a.name} text={a.name}>
                 <span className="skipOpt">
-                  <span className="skipOptIco">{a.icon ? <img src={a.icon} alt="" /> : null}</span>
-                  {a.name}
+                  <span className="skipOptIco">
+                    {a.icon ? <img src={a.icon} alt="" /> : <span className="skipDot">{a.name.slice(0, 1).toUpperCase()}</span>}
+                  </span>
+                  {a.desc && a.desc !== a.name ? `${a.name} · ${a.desc}` : a.name}
                 </span>
               </Option>
             ))}
           </Combobox>
           <Button icon={<Add24Regular />} onClick={() => add(name)}>{t.skipAppsAdd}</Button>
-          <Button icon={<Camera24Regular />} disabled={countdown !== 0} onClick={() => void capture()}>
-            {countdown !== 0 ? t.skipAppsCaptureIn(countdown) : t.skipAppsCapture}
-          </Button>
+          <Button icon={<Camera24Regular />} onClick={() => void capture()}>{t.skipAppsCapture}</Button>
         </div>
         <div className="skipList">
           {props.apps.length === 0 ? <span className="desc">{t.skipAppsEmpty}</span> : props.apps.map((a) => (
             <span key={a} className="skipChip">
               {a}
-              <button onClick={() => remove(a)} aria-label={a}><Dismiss24Regular /></button>
+              <button onClick={() => remove(a)} aria-label={a}><Dismiss12Regular /></button>
             </span>
           ))}
         </div>

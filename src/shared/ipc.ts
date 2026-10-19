@@ -195,9 +195,10 @@ export interface SettingsApi {
   openProjectPage(): Promise<void>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
-  /** The frontmost app's process name (e.g. 'Photoshop.exe'), or null when the helper can't tell. Feeds the app-exception list's capture button. */
-  getForegroundApp(): Promise<string | null>;
-  /** Process names of the apps the user can switch to right now, [] when the helper can't tell. Feeds the exception list's dropdown. */
+  /** Hides the settings window for three seconds, then names the app that stayed in front, or null when the helper
+   * can't tell. Feeds the app-exception list's capture button. */
+  captureForegroundApp(): Promise<string | null>;
+  /** The apps the user can switch to right now, with icons, [] when the helper can't tell. Feeds the exception list's dropdown. */
   getAppList(): Promise<RunningApp[]>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
