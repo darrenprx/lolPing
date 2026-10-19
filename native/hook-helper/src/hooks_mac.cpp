@@ -1,4 +1,5 @@
 // macOS input layer: a CGEventTap feeding the shared Decision logic. Needs Accessibility permission.
+#import <Cocoa/Cocoa.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -43,6 +44,16 @@ bool isKeyDown(uint32_t vk) {
   if (isModifierVk(vk)) return mac::modifierHeld(CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState), vk);
   const int code = mac::vkToKeyCode(vk);
   return code >= 0 && CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, static_cast<CGKeyCode>(code));
+}
+
+// The frontmost app's process name ("Photoshop"), or '' when there is none. The run loop serving the tap is this
+// process's main thread, which is where NSWorkspace answers from, so the query is safe in the tap callback.
+std::string foregroundAppName() {
+  @autoreleasepool {
+    NSRunningApplication* app = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    NSString* name = app.processName;
+    return name != nil ? std::string(name.UTF8String) : std::string();
+  }
 }
 
 CGPoint cursorLocation() {
@@ -199,6 +210,7 @@ void handleCommand(const std::string& text) {
     case Command::Kind::Config: apply(g_decision->setConfig(c.config)); break;
     case Command::Kind::SetEnabled: apply(g_decision->setEnabled(c.flag)); break;
     case Command::Kind::Suspend: apply(g_decision->setSuspended(c.flag)); break;
+    case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
     case Command::Kind::Shutdown: CFRunLoopStop(CFRunLoopGetCurrent()); break;
     default: g_out->error("invalid command: " + text); break;
   }
@@ -211,6 +223,7 @@ int runHooks(Output& out) {
   decision.setMaskMenuKeys(false);
   // The repeat watchdog only guards lost key-ups; macOS repeat delay and the repeat setting make repeats unreliable.
   decision.setPanelRepeatGap(0);
+  decision.setForegroundApp(foregroundAppName);
   g_decision = &decision;
   g_out = &out;
 

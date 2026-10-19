@@ -15,6 +15,7 @@ export type HelperEvent =
   | { type: 'toggled'; enabled: boolean }
   | { type: 'textRequested' }
   | { type: 'panel'; show: boolean }
+  | { type: 'foregroundApp'; name: string }
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
@@ -48,6 +49,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
       return { type: 'textRequested' };
     case 'panel':
       return typeof o.show === 'boolean' ? { type: 'panel', show: o.show } : null;
+    case 'foregroundApp':
+      return typeof o.name === 'string' ? { type: 'foregroundApp', name: o.name } : null;
     case 'error':
       if (typeof o.message !== 'string') return null;
       return typeof o.code === 'string' ? { type: 'error', message: o.message, code: o.code } : { type: 'error', message: o.message };
@@ -75,6 +78,8 @@ export type HelperCommand =
       clickPing: boolean;
       /** Fullscreen apps keep every click: no wheel gestures while one is in front. */
       gameCheck: boolean;
+      /** Comma-separated process names where lolPing stands down entirely. Empty: every app gets gestures. */
+      skipApps: string;
       /** 'off': no emote key, so no emote gestures. */
       emoteTrigger: HelperTrigger | 'off';
       emoteTriggerVk: number;
@@ -89,6 +94,7 @@ export type HelperCommand =
     }
   | { type: 'setEnabled'; enabled: boolean }
   | { type: 'suspend'; on: boolean }
+  | { type: 'getForegroundApp' }
   | { type: 'shutdown' };
 
 /**
@@ -109,6 +115,7 @@ export function configCommand(
     triggerVk: typeof t === 'object' ? t.vk : 0,
     clickPing: s.clickPing,
     gameCheck: s.gameCheck,
+    skipApps: s.skipApps.join(','),
     emoteTrigger: typeof e === 'object' ? 'vk' : e,
     emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
     emoteClick: s.emoteClick && e !== 'off',

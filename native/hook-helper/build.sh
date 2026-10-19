@@ -7,9 +7,10 @@ case "$(uname -s)" in
   Darwin)
     CXX=${CXX:-clang++}
     FLAGS="-std=c++20 -arch arm64 -mmacosx-version-min=13.0 -Wall -Wextra"
-    "$CXX" $FLAGS -O2 src/main_posix.cpp src/hooks_mac.cpp src/macinput.cpp src/simulate.cpp src/commands.cpp \
+    # hooks_mac.cpp uses AppKit's NSWorkspace, so it compiles as Objective-C++.
+    "$CXX" $FLAGS -O2 -x objective-c++ src/hooks_mac.cpp -x c++ src/main_posix.cpp src/macinput.cpp src/simulate.cpp src/commands.cpp \
       src/output.cpp src/json.cpp src/decision.cpp \
-      -framework ApplicationServices -framework CoreFoundation -o build/hook-helper
+      -framework ApplicationServices -framework CoreFoundation -framework Cocoa -o build/hook-helper
     ;;
   Linux)
     CXX=${CXX:-c++}

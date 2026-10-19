@@ -38,6 +38,43 @@ bool isExtendedVk(uint32_t vk) {
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
 
+// The foreground window's process image name as the file names it ("Photoshop.exe"), or '' when it can't be read.
+// OpenProcess and QueryFullProcessImageName cross process boundaries but send no messages, and they only run when
+// the foreground window changed since the last call, so the per-event cost is one GetForegroundWindow.
+std::string foregroundAppName() {
+  static HWND last = nullptr;
+  static std::string name;
+  const HWND fg = GetForegroundWindow();
+  if (fg == nullptr) {
+    last = nullptr;
+    name.clear();
+    return name;
+  }
+  if (fg == last) return name;
+  last = fg;
+  name.clear();
+  DWORD pid = 0;
+  if (GetWindowThreadProcessId(fg, &pid) != 0 && pid != 0) {
+    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process != nullptr) {
+      wchar_t path[MAX_PATH];
+      DWORD size = MAX_PATH;
+      if (QueryFullProcessImageNameW(process, 0, path, &size) && size > 0) {
+        const std::wstring wide(path, size);
+        const size_t slash = wide.find_last_of(L"\\/");
+        const std::wstring base = slash == std::wstring::npos ? wide : wide.substr(slash + 1);
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), nullptr, 0, nullptr, nullptr);
+        if (bytes > 0) {
+          name.resize(static_cast<size_t>(bytes));
+          WideCharToMultiByte(CP_UTF8, 0, base.data(), static_cast<int>(base.size()), name.data(), bytes, nullptr, nullptr);
+        }
+      }
+      CloseHandle(process);
+    }
+  }
+  return name;
+}
+
 // True when the click at (x, y) lands on a monitor that the foreground window covers whole: a game, or any
 // fullscreen app, owns that screen, so trigger+click belongs to it, not to a wheel. A click on another
 // monitor still gestures. "Covers" means the window rect contains the monitor rect: borderless fullscreen
@@ -226,6 +263,7 @@ int runHooks(Output& out) {
   g_decision = &decision;
   g_out = &out;
   decision.setFullscreenProbe(clickIsOnFullscreenApp);
+  decision.setForegroundApp(foregroundAppName);
   const DWORD threadId = GetCurrentThreadId();
   g_hookThreadId = threadId;
   MSG msg;
@@ -271,6 +309,7 @@ int runHooks(Output& out) {
         case Command::Kind::Config: apply(decision.setConfig(c.config)); break;
         case Command::Kind::SetEnabled: apply(decision.setEnabled(c.flag)); break;
         case Command::Kind::Suspend: apply(decision.setSuspended(c.flag)); break;
+        case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
         case Command::Kind::Shutdown: PostQuitMessage(0); break;
         default: out.error("invalid command: " + *text); break;
       }

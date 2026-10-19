@@ -26,6 +26,8 @@ export interface SettingsIpcDeps {
   about(): About;
   retryHelper(): void;
   setCapturing(on: boolean): void;
+  /** The frontmost app's process name, or null when it can't be read; the app-exception list's capture button asks. */
+  foregroundApp(): Promise<string | null>;
   openAccessibility(): void;
   /** Strings in the app's current language. */
   text(): Strings;
@@ -148,6 +150,7 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   });
   ipcMain.handle(SETTINGS_CH.retryHelper, () => d.retryHelper());
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));
+  ipcMain.handle(SETTINGS_CH.foregroundApp, () => d.foregroundApp());
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
   ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
   ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());

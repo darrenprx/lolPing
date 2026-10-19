@@ -3,7 +3,7 @@ import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emote
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
-  DEFAULT_SETTINGS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings, patchClashes, rendererPatch, sameTrigger,
+  DEFAULT_SETTINGS, MAX_SKIP_APPS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings, patchClashes, rendererPatch, sameTrigger,
   soundLevel, triggerLabel, triggersClash,
 } from '../../src/shared/settings';
 
@@ -305,6 +305,19 @@ describe('emote settings', () => {
   it('custom emotes keep a sound flag only when it is true', () => {
     const list = normalizeSettings({ customEmotes: [{ ...entry('a'), sound: true }, { ...entry('b'), sound: 'yes' }] }).customEmotes;
     expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
+  });
+
+  it('skip apps are lower-case stems without .exe, deduplicated', () => {
+    expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.exe', 7, null] }).skipApps)
+      .toEqual(['photoshop', 'idea64', 'nope']);
+    expect(normalizeSettings({ skipApps: 'nope' }).skipApps).toEqual([]);
+    expect(DEFAULT_SETTINGS.skipApps).toEqual([]);
+  });
+
+  it('skip apps keep the first 32', () => {
+    const kept = normalizeSettings({ skipApps: Array.from({ length: 40 }, (_, i) => `app${i}`) }).skipApps;
+    expect(kept).toHaveLength(MAX_SKIP_APPS);
+    expect(kept[0]).toBe('app0');
   });
 
   it('custom emotes keep the first 24', () => {

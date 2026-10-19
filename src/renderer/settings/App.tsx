@@ -20,6 +20,7 @@ import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
 import { RoomSection } from './components/RoomSection';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
+import { SkipApps } from './components/SkipApps';
 import { StatusCard } from './components/StatusCard';
 import { TriggerPicker } from './components/TriggerPicker';
 import { WheelEditor, type PoolItem } from './components/WheelEditor';
@@ -172,6 +173,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
         )}
+        <SkipApps apps={s.skipApps} dim={off} update={update} />
 
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>
