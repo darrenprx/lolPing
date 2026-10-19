@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <thread>
@@ -40,8 +41,20 @@ bool isExtendedVk(uint32_t vk) {
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
 
-// One window's process image: its file name and full path as the file system names them, UTF-8. Empty when it
-// can't be read. OpenProcess and QueryFullProcessImageName cross process boundaries but send no messages.
+// One process image's entry: its file name and full path as the file system names them, UTF-8. Empty when the
+// image can't be read. QueryFullProcessImageName crosses a process boundary but sends no messages.
+AppEntry entryFromPath(const std::wstring& path) {
+  const int bytes = WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0, nullptr, nullptr);
+  if (bytes <= 0) return {};
+  std::string utf8(static_cast<size_t>(bytes), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), utf8.data(), bytes, nullptr, nullptr);
+  const size_t slash = utf8.find_last_of("\\/");
+  AppEntry out;
+  out.path = utf8;
+  out.name = slash == std::string::npos ? utf8 : utf8.substr(slash + 1);
+  return out;
+}
+
 AppEntry processOf(HWND window) {
   DWORD pid = 0;
   if (GetWindowThreadProcessId(window, &pid) == 0 || pid == 0) return {};
@@ -50,17 +63,7 @@ AppEntry processOf(HWND window) {
   wchar_t wide[MAX_PATH];
   DWORD size = MAX_PATH;
   AppEntry out;
-  if (QueryFullProcessImageNameW(process, 0, wide, &size) && size > 0) {
-    const std::wstring path(wide, size);
-    const int bytes = WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0, nullptr, nullptr);
-    if (bytes > 0) {
-      std::string utf8(static_cast<size_t>(bytes), '\0');
-      WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), utf8.data(), bytes, nullptr, nullptr);
-      const size_t slash = utf8.find_last_of("\\/");
-      out.path = utf8;
-      out.name = slash == std::string::npos ? utf8 : utf8.substr(slash + 1);
-    }
-  }
+  if (QueryFullProcessImageNameW(process, 0, wide, &size) && size > 0) out = entryFromPath(std::wstring(wide, size));
   CloseHandle(process);
   return out;
 }
@@ -113,12 +116,17 @@ std::string fileDescription(const std::string& pathUtf8) {
   return utf8;
 }
 
-// Windows' own window hosts and brokers have visible, titled windows but are not apps: nobody works inside them,
-// and an exception entry for one would silently do nothing. Same idea as the shell surfaces the fullscreen probe skips.
+// Windows' own hosts and brokers: svchost farms hold no windows, the window hosts hold them for other apps -
+// nobody works inside one, and an exception entry would silently do nothing. Same idea as the shell surfaces
+// the fullscreen probe skips.
 bool isSystemHost(const std::string& name) {
   static const char* const hosts[] = {
       "ApplicationFrameHost.exe", "TextInputHost.exe", "ShellExperienceHost.exe", "SearchHost.exe",
-      "StartMenuExperienceHost.exe", "RuntimeBroker.exe", "dllhost.exe", "taskhostw.exe",
+      "StartMenuExperienceHost.exe", "RuntimeBroker.exe", "dllhost.exe", "taskhostw.exe", "Widgets.exe",
+      "WidgetService.exe", "svchost.exe", "csrss.exe", "smss.exe", "services.exe", "lsass.exe", "wininit.exe",
+      "winlogon.exe", "dwm.exe", "conhost.exe", "OpenConsole.exe", "fontdrvhost.exe", "audiodg.exe", "spoolsv.exe",
+      "WudfHost.exe", "MsMpEng.exe", "NisSrv.exe", "SecurityHealthService.exe", "SecurityHealthSystray.exe",
+      "SearchIndexer.exe", "msedgewebview2.exe", "steamwebhelper.exe", "hook-helper.exe",
   };
   for (const char* host : hosts) {
     if (_stricmp(name.c_str(), host) == 0) return true;
@@ -126,7 +134,7 @@ bool isSystemHost(const std::string& name) {
   return false;
 }
 
-// The app behind the windows the user can switch to: visible, titled, not a tool window or a shell surface,
+// The apps behind the windows the user can switch to: visible, titled, not a tool window or a shell surface,
 // deduplicated by name, at most 64. Run only when the settings page asks, never in the hooks.
 BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
   auto& apps = *reinterpret_cast<std::vector<AppEntry>*>(lp);
@@ -145,10 +153,61 @@ BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
   return TRUE;
 }
 
+// Tray apps and background tools have no window, so the process table completes the list: one entry per image
+// that is not a system host and not on it already. A windowless image in the Windows directory, or without the
+// words to show for itself, is a component rather than an app. Run only when the settings page asks, never in the hooks.
+void collectOtherProcesses(std::vector<AppEntry>& apps) {
+  wchar_t windowsDir[MAX_PATH];
+  const UINT windowsLen = GetWindowsDirectoryW(windowsDir, MAX_PATH);
+  std::string windowsUtf8;
+  if (windowsLen > 0) {
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, windowsDir, windowsLen, nullptr, 0, nullptr, nullptr);
+    if (bytes > 0) {
+      windowsUtf8.resize(static_cast<size_t>(bytes), '\0');
+      WideCharToMultiByte(CP_UTF8, 0, windowsDir, windowsLen, windowsUtf8.data(), bytes, nullptr, nullptr);
+    }
+  }
+  const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return;
+  PROCESSENTRY32W pe{};
+  pe.dwSize = sizeof(pe);
+  std::map<std::wstring, DWORD, std::less<>> firstPid;  // an image name's first process, lower-cased
+  for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+    std::wstring name = pe.szExeFile;
+    for (wchar_t& ch : name) {
+      if (ch >= L'A' && ch <= L'Z') ch += L'a' - L'A';
+    }
+    firstPid.emplace(name, pe.th32ProcessID);
+  }
+  CloseHandle(snap);
+  for (const auto& [lower, pid] : firstPid) {
+    if (apps.size() >= 64) break;
+    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process == nullptr) continue;
+    wchar_t wide[MAX_PATH];
+    DWORD size = MAX_PATH;
+    if (QueryFullProcessImageNameW(process, 0, wide, &size) && size > 0) {
+      const AppEntry app = entryFromPath(std::wstring(wide, size));
+      const bool inWindows = !windowsUtf8.empty() && app.path.size() >= windowsUtf8.size() &&
+          _strnicmp(app.path.c_str(), windowsUtf8.c_str(), windowsUtf8.size()) == 0;
+      if (inWindows || app.name.empty() || isSystemHost(app.name)) continue;
+      AppEntry withDesc = app;
+      withDesc.desc = fileDescription(app.path);
+      if (!withDesc.desc.empty() &&
+          std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == app.name; }))
+        apps.push_back(withDesc);
+    }
+    CloseHandle(process);
+  }
+}
+
 std::vector<AppEntry> runningApps() {
   std::vector<AppEntry> apps;
   EnumWindows(collectAppWindow, reinterpret_cast<LPARAM>(&apps));
-  for (auto& app : apps) app.desc = fileDescription(app.path);
+  collectOtherProcesses(apps);
+  for (auto& app : apps) {
+    if (app.desc.empty()) app.desc = fileDescription(app.path);  // windowed apps have not had their turn yet
+  }
   return apps;
 }
 
