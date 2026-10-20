@@ -21,13 +21,13 @@ Most textures were exported as DDS (DXT5) with Obsidian. To convert a folder of 
 py -3.14 tools/extract-assets/extract_assets.py --dds-dir path/to/dds
 ```
 
-Standard render textures (Bait, On My Way, Danger, Enemy Vision, Push, Generic, and Vision Cleared) are read straight from League's `.tex` files in `Global.wad.client` (see `WAD_TEXTURES` in the script). This needs Pillow installed for Python 3.14:
+Bait, Vision Cleared, On My Way, Danger, Enemy Vision, Push, Generic and the normal-colour icons for All In, Assist Me, Need Vision and Enemy Missing are read straight from League's .tex files in Global.wad.client (see WAD_TEXTURES in the script). This needs Pillow installed for Python 3.14:
 
 ```bash
 py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --wad-textures
 ```
 
-`enemy_missing_flipped.png` is not a League file: it is `enemy_missing.png` turned 180° for the upside-down Enemy Missing ping. `--dds-dir` makes it again; on its own:
+`enemy_missing_flipped.png` is not a League file: it is `png_enemymissing_128x128.png` turned 180° for the upside-down Enemy Missing ping. `--dds-dir` makes it again; on its own:
 
 ```bash
 py -3.14 tools/extract-assets/extract_assets.py --derived
@@ -35,7 +35,7 @@ py -3.14 tools/extract-assets/extract_assets.py --derived
 
 No game file says which sound those two pings play: `SRP_11` (Bait) and `SRP_6` (Vision Cleared) were identified by listening. `SRP_13` is the structure-defend ping.
 
-Never reference colourblind (`*_cb*` or `Need/`) files in the app.
+Never reference the colourblind files in the app: the *_cb* ones, and the 128 px icons from PingUpdate/Need/ (lime, lemon, blue and pink where the normal set is teal, gold, cyan and red).
 
 ## Room UI art
 

@@ -121,6 +121,12 @@ WAD_TEXTURES = {
     'pingwheel_basicpingrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_BasicPingRender.tex',
     'pingwheel_visionclearedrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_VisionClearedRender.tex',
     'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
+    # The 128 px icons in PingUpdate/Need/ are the colourblind set (#83). These are the same icons in League's
+    # normal colours, named after the folder they come from.
+    'png_all_in': 'ASSETS/Shared/Particles/PingUpdate/PNG/All_In.tex',
+    'png_assist_me_128x128': 'ASSETS/Shared/Particles/PingUpdate/PNG/Assist_Me_128x128.tex',
+    'png_enemymissing_128x128': 'ASSETS/Shared/Particles/PingUpdate/PNG/EnemyMissing_128x128.tex',
+    'mt11_18_vision': 'ASSETS/Shared/Particles/PingUpdate/MT11-18/Vision.tex',
 }
 
 # The room panel, vote widgets and text box are drawn with these. Output file in assets/ui -> (WAD under the install
@@ -384,7 +390,7 @@ def convert_textures(dds_dir: Path) -> None:
 
 # output texture -> (extracted texture it is made from, degrees to rotate it). Not League files: made by --derived.
 DERIVED_TEXTURES = {
-    'enemy_missing_flipped': ('enemy_missing', 180),  # the upside-down Enemy Missing ping (#24)
+    'enemy_missing_flipped': ('png_enemymissing_128x128', 180),  # the upside-down Enemy Missing ping (#24)
 }
 
 

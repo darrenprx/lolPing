@@ -1,7 +1,7 @@
 import { Button, Switch } from '@fluentui/react-components';
 import type { AppStatus } from '../../../shared/ipc';
 import { hotkeyLabel } from '../../../shared/keys';
-import { textureUrl } from '../../../shared/pings';
+import { LOGO_TEXTURE, textureUrl } from '../../../shared/pings';
 import { triggerLabel, type Settings } from '../../../shared/settings';
 import { api } from '../api';
 import { useText } from '../text';
@@ -19,7 +19,7 @@ export function StatusCard({ settings, status }: { settings: Settings; status: A
   return (
     <div className="card status">
       <div className={`dot${failed || noAccess ? ' failed' : status.enabled ? '' : ' off'}`} />
-      <img className="statusPing" src={textureUrl('generic_ping')} alt="" />
+      <img className="statusPing" src={textureUrl(LOGO_TEXTURE)} alt="" />
       <div className="lbl">
         <b style={{ fontSize: 16 }}>{title}</b>
         <span className="desc">{hint}</span>

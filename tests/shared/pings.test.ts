@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_PINGS, DEFAULT_WHEEL, DEFAULT_WHEEL_PINGS, allSoundNames, allTextureNames, pingById, soundUrl, textureUrl,
+  ALL_PINGS, DEFAULT_WHEEL, DEFAULT_WHEEL_PINGS, FALLBACK_TEXTURE, LOGO_TEXTURE, allSoundNames, allTextureNames, pingById,
+  soundUrl, textureUrl,
 } from '../../src/shared/pings';
 
 const assets = resolve(__dirname, '../../assets');
@@ -48,11 +49,20 @@ describe('ping table', () => {
     }
   });
 
-  it('never uses colourblind textures', () => {
+  it('keeps the logo among the textures the build ships, though no ping draws it', () => {
+    expect(allTextureNames()).toContain(LOGO_TEXTURE);
+  });
+
+  it('never draws a ping with a colourblind texture', () => {
+    // League's PingUpdate/Need/ icons at 128 px are the colourblind set: lime instead of teal, lemon instead of gold,
+    // blue instead of cyan, pink instead of red.
+    const colourblind = ['all_in', 'assist_me', 'caution', 'enemy_missing', 'enemy_vision', 'generic_ping', 'hold_ig',
+      'need_vision', 'push', 'target', 'vision_cleared'];
     const knownCb = ['push_cb_128x128', 'genericping_cb_128x128', 'retreat_cb_128x128', 'pingwheel_omw_cb'];
-    for (const name of allTextureNames()) {
+    for (const name of [...ALL_PINGS.flatMap((p) => [p.icon, ...p.art]), FALLBACK_TEXTURE]) {
       expect(name).not.toMatch(/_cb/);
-      expect(knownCb).not.toContain(name);
+      expect(colourblind, name).not.toContain(name);
+      expect(knownCb, name).not.toContain(name);
     }
   });
 

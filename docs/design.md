@@ -1,7 +1,7 @@
 # lolPing — Design Spec
 
 **Date:** 2026-10-01
-**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1; rooms over LAN added in v0.3.0 (§12); emotes added in v0.5.0 (§13); foreign-chord pass-through and the fullscreen pause added in v0.5.1; custom emote stills travelling between room members, emote effects, signed room messages, room text, votes and the room panel (§14), feature switches (§15) and experimental Linux X11 support added in v0.5.2
+**Status:** Implemented in v0.1.0; wheel customization (Bait, Vision Cleared, drag-and-drop slots) added in v0.2.1; rooms over LAN added in v0.3.0 (§12); emotes added in v0.5.0 (§13); foreign-chord pass-through and the fullscreen pause added in v0.5.1; custom emote stills travelling between room members, emote effects, signed room messages, room text, votes and the room panel (§14), feature switches (§15) and experimental Linux X11 support added in v0.5.2; League's normal ping colours instead of the colourblind set, overlays that follow a game's display mode change, and Windows 10 before 1703 in v0.5.3
 
 ## 1. Purpose
 
@@ -43,18 +43,20 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 | `danger` | N | `pingwheel_retreatrender.png` | `pingwheel_retreatrender.png` | `SRP_12.wav` | `#ff3b55` |
 | `push` | NE | `pingwheel_pushrender.png` | `pingwheel_pushrender.png` | `SRP_9.wav` | `#35d27a` |
 | `omw` | E | `omw.png` | `omw.png` (upright icon in standard cyan; flat ground render `pingwheel_omw.png` also extracted) | `OnMyWay.wav` | `#2e8bff` |
-| `allin` | SE | `all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.wav` | `#f2b320` |
-| `assist` | S | `assist_me.png` | `assist_me.png` | `ComeHere.wav` | `#2fe098` |
-| `needvision` | SW | `need_vision.png` | `need_vision.png` | `SRP_7.wav` | `#2fe098` |
-| `missing` | W | `enemy_missing.png` | `enemy_missing.png` | `MIA.wav` | `#f2c518` |
+| `allin` | SE | `png_all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.wav` | `#f2b320` |
+| `assist` | S | `png_assist_me_128x128.png` | `png_assist_me_128x128.png` | `ComeHere.wav` | `#35d27a` |
+| `needvision` | SW | `mt11_18_vision.png` | `mt11_18_vision.png` | `SRP_7.wav` | `#35d27a` |
+| `missing` | W | `png_enemymissing_128x128.png` | `png_enemymissing_128x128.png` | `MIA.wav` | `#f2c518` |
 | `enemyvision` | NW | `pingwheel_enemyvisionrender.png` | `pingwheel_enemyvisionrender.png` | `AreaIsWarded.wav` | `#ff3b55` |
 | `generic` | (trigger+click) | `pingwheel_basicpingrender.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
 | `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.wav` | `#efbc12` |
 | `visioncleared` | — | `pingwheel_visionclearedrender.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
-| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
+| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`png_enemymissing_128x128` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
 | wheel tick | — | — | — | `button.wav` | — |
 
-Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures, `enemy_vision` (magenta, like the colourblind set; the wheel uses the red render), `caution`, `hold`, `target`, the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
+The 128 px icons from League's `PingUpdate/Need/` folder are the colourblind set: lime instead of teal, lemon instead of gold, blue instead of cyan, pink instead of red (#83). The wheel uses the `pingwheel_*` renders where League has them, and the same icons in normal colours from `PNG/` and `MT11-18/` otherwise. `generic_ping.png` stays as lolPing's own logo (tray, toasts, settings, site).
+
+Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures and the other `Need/` icons (`all_in`, `assist_me`, `need_vision`, `enemy_missing`, `enemy_vision`, `omw`, `push`, `vision_cleared`, `caution`, `hold_ig`, `target`), the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
 
 ### 3.2 Asset pipeline (already run; kept reproducible)
 
@@ -96,6 +98,8 @@ The extraction scripts live in `tools/extract-assets/`, together with a README. 
 - Only a low-level hook can swallow the Alt+drag so the app underneath doesn't drag or select text. Node global-hook libraries can only listen.
 - Windows silently removes a low-level hook that responds slowly, so it can't live on Electron's busy main thread.
 - A tiny dedicated process responds in microseconds and is isolated from renderer and GC pauses.
+
+The helper looks up `SetProcessDpiAwarenessContext` at run time and falls back to per-monitor v1 (`SetProcessDpiAwareness`) when it is missing. Windows 10 before 1703 doesn't have it, and a direct import kept the helper from starting there at all (#66). Every other function it imports exists since Windows 7.
 
 ### 4.1 Repository layout
 
@@ -180,6 +184,7 @@ All coordinates are **physical screen pixels**.
   - One `BrowserWindow` per display: `transparent`, `frame:false`, `focusable:false`, `skipTaskbar`, `alwaysOnTop` at level `screen-saver`, `setIgnoreMouseEvents(true)`, created with `showInactive()`.
   - On Windows the level is set again each time an overlay gets something new to draw (`wheel:open`, `ping:spawn`, `emote:spawn`, `toast:show`), never on moves. Windows 10 users saw the overlay end up behind normal windows after a while, and only a restart fixed it. Setting the level again calls `SetWindowPos(HWND_TOPMOST)` without activating, which puts the overlay back above every window, other topmost ones included. macOS is unchanged: its panel stays on top.
   - The windows cover each display's `bounds`, except that on Windows they stop one DIP short of the bottom edge. Explorer takes a shown window that covers a whole display for a full-screen app: it drops the taskbar behind it and won't slide an auto-hidden one up (`SHQueryUserNotificationState` reports `QUNS_BUSY`). Any smaller window doesn't count. The window still starts at the display's corner, so overlay coordinates don't change. They are rebuilt on `display-added`, `display-removed` and `display-metrics-changed`.
+  - `display-metrics-changed` can be missed on Windows (electron/electron#3403): a game switching the desktop's display mode leaves the windows and the coordinate maps sized for the old mode, so wheels clip at the new edges or land on the wrong display. Before placing anything from screen coordinates (a wheel or a click) and before every new draw the manager raises (`ping:spawn`, `emote:spawn`, `toast:show`, `text:spawn`), it compares the displays with the last rebuild and rebuilds when they disagree. The comparison includes the scale on Windows: 4K at 200% and 1080p at 100% have the same DIP bounds but different physical pixels.
   - Each event is routed to the overlay whose display contains the press point. A wheel near a screen edge may be clipped; it is not clamped, the same as in League.
 - **Coordinates:** `screen.screenToDipPoint({x,y})` converts physical pixels to DIP, then the display's DIP origin is subtracted to get overlay-local CSS pixels. Wheel moves are converted relative to the *wheel's* display, even when the cursor crosses onto another monitor.
 - **Toggle feedback:** tray icon state (normal or dimmed), the tray menu checkbox, and a small Fluent toast saying "Pings on" or "Pings off".
@@ -406,7 +411,7 @@ Every member counts the ballots itself. Nobody announces a result.
 
 - `config` gains `textMods`, `textVk` and `panelVk`. A `textVk` or `panelVk` of 0 means "not live": the helper then leaves that key to other apps. The main process sends a real code only while lolPing is on, we are in a room, and the matching feature is on (`liveKeys` in `src/shared/features.ts`).
 - Events gain `{"type":"textRequested"}` and `{"type":"panel","show":bool}`. The main process reads the cursor position itself.
-- **Text hotkey:** while live it is swallowed, together with its key-up, and the helper sends `textRequested`. An app's own Alt+T (the Tools menu in Firefox, the Office ribbon) and the Mac's ⌥T character do not reach it. Alt is also the default ping trigger; Alt+T is a key combination and the wheel needs the mouse, so they do not conflict. When Alt is released after a swallowed T, the helper injects the mask key (§5.2) so Windows does not open the menu bar.
+- **Text hotkey:** while live it is swallowed, together with its key-up, and the helper sends `textRequested`. An app's own Alt+T (the Tools menu in Firefox, the Office ribbon) and the Mac's ⌥T character do not reach it. Alt is also the default ping trigger; Alt+T is a key combination and the wheel needs the mouse, so they do not conflict. The same holds for a custom trigger key — the text branch matches its chord exactly, modifiers included, before the trigger branch sees the key — so the settings let a text chord share a custom ping or emote key (issue #100). When Alt is released after a swallowed T, the helper injects the mask key (§5.2) so Windows does not open the menu bar.
 - **Panel key (default Tab):** with no modifier held, the key down is captured at once and never replayed, and the helper sends `panel {show: true}`. Its key-up sends `panel {show: false}`. Auto-repeat is swallowed. These cases pass untouched: a key down with Ctrl, Alt, Shift, Win or ⌘ held (Alt+Tab, Ctrl+Tab, Shift+Tab), a fullscreen app in front with `gameCheck` on (Windows only, so League keeps its own scoreboard), lolPing paused, and no room or the feature off.
 - **Release paths:** if the configuration changes while the key is down (the room is left, lolPing is paused, the feature is turned off), the panel hides and the key-up is still swallowed, so the key never stays pressed. On Windows a watchdog hides the panel when a captured key has not repeated for 1.5 s, in case the key-up was lost. On macOS and Linux a held key does not reliably repeat, so the watchdog is off there and the panel waits for the key-up.
 - **The panel key is a deliberate exception to guarantee 1 in AGENTS.md** (input passes through), chosen by the maintainer. League shows its scoreboard the moment Tab goes down. Holding the key back to see whether it is a tap, and replaying it, would delay the panel or reorder input. So the key is taken at once and not given back. The exception is as small as it can be: only while in a room, only that one key, only with no modifier, never over a fullscreen game with `gameCheck` on, and the user can change the key or turn the panel off. The Settings page, both READMEs and this section say so.

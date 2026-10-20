@@ -9,7 +9,7 @@ import { LANGUAGE_NAMES, LANGUAGE_PREFS, resolveLang, strings, type LanguagePref
 import type { AppStatus } from '../../shared/ipc';
 import { featureOn, type FeatureId } from '../../shared/features';
 import { hotkeyParts } from '../../shared/keys';
-import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, textureUrl, type PingId } from '../../shared/pings';
+import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, LOGO_TEXTURE, textureUrl, type PingId } from '../../shared/pings';
 import { triggerLabel, type Settings } from '../../shared/settings';
 import type { WheelPatch } from '../../shared/wheelLayout';
 import { api } from './api';
@@ -97,6 +97,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
@@ -124,7 +125,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   return (
     <div className="app">
       <div className="titlebar">
-        <img src={textureUrl('generic_ping')} alt="" />
+        <img src={textureUrl(LOGO_TEXTURE)} alt="" />
         lolPing
       </div>
       <nav className="side">
@@ -156,8 +157,11 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             </>
           )}>
           <TriggerPicker value={s.trigger} blocked={s.emoteTrigger}
-            onChange={(k) => { if (k !== 'off') void update({ trigger: k }); }} />
+            onChange={(k) => {
+              if (k !== 'off') void update({ trigger: k }).then((r) => setTriggerError(r.ok ? null : r.error));
+            }} />
         </SettingRow>
+        {triggerError ? <div className="rowError" role="alert">{triggerError}</div> : null}
         <SliderRow limit="dragThresholdPx" icon={<ArrowMove24Regular />} title={t.dragDistance} description={t.dragDistanceDesc}
           value={s.dragThresholdPx} format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ dragThresholdPx: v })} dim={off} />
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}

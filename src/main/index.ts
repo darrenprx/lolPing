@@ -8,6 +8,7 @@ import { SETTINGS_CH, type About, type AppStatus, type PanelAction, type PanelSt
 import { announcedEmoteHashes } from '../shared/emotes';
 import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
+import { LOGO_TEXTURE } from '../shared/pings';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import type { VoteKind } from '../shared/roomProtocol';
@@ -257,7 +258,7 @@ function start(): void {
     return enabled ? 'on' : 'off';
   };
   const tray = new AppTray(
-    assetPath('textures', 'generic_ping.png'),
+    assetPath('textures', `${LOGO_TEXTURE}.png`),
     {
       openSettings: () => openSettingsWindow(),
       setEnabled: (on) => setEnabled(on),

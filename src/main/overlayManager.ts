@@ -36,6 +36,9 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 export const overlayBounds = (d: Display): Rectangle =>
   IS_MAC || IS_LINUX ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
 
+/** Physical pixels per DIP in a display's map. macOS reports DIPs; Linux is forced to scale 1 at startup. */
+const mapScale = (d: Display): number => (IS_MAC || IS_LINUX ? 1 : d.scaleFactor);
+
 /** Messages that put something new on an overlay. */
 const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'text:spawn']);
 
@@ -91,6 +94,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   handle(ev: HelperEvent): void {
+    // A wheel or a click is placed from screen coordinates, so stale display info would clip or misplace it.
+    if (ev.type === 'wheelOpen' || ev.type === 'click') this.refreshDisplays();
     switch (ev.type) {
       case 'wheelOpen': {
         const p = physicalToLocal(ev.x, ev.y, this.maps);
@@ -197,6 +202,24 @@ export class OverlayManager extends EventEmitter {
     return [...this.windows].find(([, w]) => w === win)?.[0];
   }
 
+  /**
+   * A game can switch the display mode without Electron noticing (electron/electron#3403), leaving the windows and
+   * the coordinate maps sized for the old mode: wheels then clip at the new screen edges, or land on the wrong
+   * display. Check before drawing something new, and rebuild everything at once when reality moved on.
+   */
+  private refreshDisplays(): void {
+    if (this.maps.length === 0) return;
+    const displays = screen.getAllDisplays();
+    const moved = displays.length !== this.maps.length
+      || displays.some((d) => {
+        const m = this.maps.find((map) => map.id === d.id);
+        // Without the scale, 4K at 200% and 1080p at 100% look the same: both are 1920x1080 DIPs.
+        return !m || m.dip.x !== d.bounds.x || m.dip.y !== d.bounds.y
+          || m.dip.width !== d.bounds.width || m.dip.height !== d.bounds.height || m.scale !== mapScale(d);
+      });
+    if (moved) this.rebuild();
+  }
+
   /** We keep one ping on screen: drop it on every display but the one that just showed our new one. */
   private unkeepElsewhere(displayId: number): void {
     if (!this.settings.keepLastPing) return;
@@ -211,10 +234,10 @@ export class OverlayManager extends EventEmitter {
   private rebuild(): void {
     this.cancelWheel();
     const displays = screen.getAllDisplays();
-    // macOS reports DIPs; Linux is forced to scale 1 at startup. dipToScreenRect exists only on Windows.
+    // dipToScreenRect exists only on Windows.
     this.maps = displays.map((d) => IS_MAC || IS_LINUX
-      ? { id: d.id, dip: d.bounds, phys: d.bounds, scale: 1 }
-      : { id: d.id, dip: d.bounds, phys: screen.dipToScreenRect(null, d.bounds), scale: d.scaleFactor });
+      ? { id: d.id, dip: d.bounds, phys: d.bounds, scale: mapScale(d) }
+      : { id: d.id, dip: d.bounds, phys: screen.dipToScreenRect(null, d.bounds), scale: mapScale(d) });
     this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
     this.emit('displays', this.numberedList);
     for (const [id, win] of this.windows) {
@@ -272,6 +295,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
+    // A room ping, a toast or a preview can appear with no gesture ahead of it, so the check lives here too.
+    if (RAISING_CHANNELS.has(channel)) this.refreshDisplays();
     const w = this.windows.get(displayId);
     if (!w || w.isDestroyed()) return;
     // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.

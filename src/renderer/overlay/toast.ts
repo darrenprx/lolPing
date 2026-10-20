@@ -1,11 +1,11 @@
-import { textureUrl } from '../../shared/pings';
+import { LOGO_TEXTURE, textureUrl } from '../../shared/pings';
 
 export function showToast(layer: HTMLElement, title: string, body: string, ms = 1800): void {
   layer.querySelectorAll('.toast').forEach((t) => t.remove());
   const toast = document.createElement('div');
   toast.className = 'toast';
   const icon = document.createElement('img');
-  icon.src = textureUrl('generic_ping');
+  icon.src = textureUrl(LOGO_TEXTURE);
   const text = document.createElement('div');
   const b = document.createElement('b');
   b.textContent = title;

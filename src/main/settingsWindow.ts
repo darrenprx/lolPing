@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
+import { LOGO_TEXTURE } from '../shared/pings';
 import { SETTINGS_CH } from '../shared/settingsChannels';
 import { assetPath, IS_LINUX, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
@@ -134,7 +135,7 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     minWidth: 720,
     minHeight: 520,
     title: 'lolPing',
-    icon: nativeImage.createFromPath(assetPath('textures', 'generic_ping.png')),
+    icon: nativeImage.createFromPath(assetPath('textures', `${LOGO_TEXTURE}.png`)),
     show: false,
     ...chromeOptions(),
     webPreferences: { preload: preloadPath('settings'), spellcheck: false, backgroundThrottling: !IS_MAC },

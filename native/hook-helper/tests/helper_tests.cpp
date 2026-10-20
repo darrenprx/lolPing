@@ -489,6 +489,37 @@ static void test_text_hotkey_needs_its_modifier() {
   CHECK(!d.onEvent(ku(KEY_T)).swallow);
 }
 
+// #100: T as the emote key and Alt+T as the text shortcut share a key. Alt+T opens the text box; T alone is the emote key.
+static void test_text_hotkey_shares_its_key_with_a_custom_emote_key() {
+  Config c;
+  c.emoteTrigger = Trigger::CustomVk;
+  c.emoteTriggerVk = KEY_T;
+  c.textMods = ModAlt;
+  c.textVk = KEY_T;
+  Decision d;
+  d.setConfig(c);
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(r.swallow && findEmit(r, Emit::Kind::TextRequested) != nullptr);
+  r = d.onEvent(ku(KEY_T));
+  CHECK(r.swallow && r.injects.empty());  // not typed afterwards as a held-back trigger tap
+  r = d.onEvent(ku(ALT));
+  CHECK(findEmit(r, Emit::Kind::WheelOpen) == nullptr && findEmit(r, Emit::Kind::Click) == nullptr);
+
+  r = d.onEvent(kd(KEY_T));  // a plain tap still types T
+  CHECK(r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+  r = d.onEvent(ku(KEY_T));
+  CHECK(r.injects.size() == 2);
+  CHECK(injectIs(r.injects[0], InjectKind::KeyDown, Btn::None, KEY_T));
+  CHECK(injectIs(r.injects[1], InjectKind::KeyUp, Btn::None, KEY_T));
+
+  d.onEvent(kd(KEY_T));  // and T + drag opens the emote wheel
+  CHECK(d.onEvent(md(Btn::Left, 0, 0)).swallow);
+  CHECK(emitIs(findEmit(d.onEvent(mv(0, 40)), Emit::Kind::WheelOpen), WheelKind::Emote));
+  CHECK(emitIs(findEmit(d.onEvent(mu(Btn::Left, 0, 40)), Emit::Kind::WheelRelease), WheelKind::Emote));
+  CHECK(d.onEvent(ku(KEY_T)).swallow);
+}
+
 static void test_nothing_is_live_before_the_first_config() {
   Decision d;
   d.onEvent(kd(CTRL));
@@ -1365,6 +1396,7 @@ int main() {
   test_alt_drag_still_opens_wheel_with_text_hotkey();
   test_text_hotkey_off_when_vk_zero();
   test_text_hotkey_needs_its_modifier();
+  test_text_hotkey_shares_its_key_with_a_custom_emote_key();
   test_nothing_is_live_before_the_first_config();
   test_panel_key_shows_on_press_and_hides_on_release();
   test_panel_key_with_modifier_passes();
