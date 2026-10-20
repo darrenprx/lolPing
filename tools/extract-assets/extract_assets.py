@@ -115,8 +115,12 @@ NAME_OVERRIDES: dict[str, tuple[str, str]] = {
 WAD_TEXTURES = {
     'pingwheel_baitrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_Bait.tex',
     'pingwheel_omw': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_OMW.tex',
-    'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
+    'pingwheel_retreatrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_RetreatRender.tex',
+    'pingwheel_enemyvisionrender': 'ASSETS/Shared/Particles/PingUpdate/PingWheel_EnemyVisionRender.tex',
+    'pingwheel_pushrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_PushRender.tex',
+    'pingwheel_basicpingrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_BasicPingRender.tex',
     'pingwheel_visionclearedrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_VisionClearedRender.tex',
+    'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
     # The 128 px icons in PingUpdate/Need/ are the colourblind set (#83). These are the same icons in League's
     # normal colours, named after the folder they come from.
     'png_all_in': 'ASSETS/Shared/Particles/PingUpdate/PNG/All_In.tex',
@@ -377,6 +381,9 @@ def convert_textures(dds_dir: Path) -> None:
 
     TEXTURE_OUT.mkdir(parents=True, exist_ok=True)
     for dds in sorted(dds_dir.glob('*.dds')):
+        if '_cb' in dds.stem.lower():
+            print(f'skipping colourblind texture: {dds.name}')
+            continue
         Image.open(dds).convert('RGBA').save(TEXTURE_OUT / f'{dds.stem}.png')
         print('texture', dds.stem)
 

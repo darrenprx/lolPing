@@ -19,7 +19,7 @@ export interface PingDef {
 export const ALL_PINGS: readonly PingDef[] = [
   { id: 'danger', name: 'Danger', icon: 'pingwheel_retreatrender', art: ['pingwheel_retreatrender'], sound: 'SRP_12', color: '#ff3b55' },
   { id: 'push', name: 'Push', icon: 'pingwheel_pushrender', art: ['pingwheel_pushrender'], sound: 'SRP_9', color: '#35d27a' },
-  { id: 'omw', name: 'On My Way', icon: 'pingwheel_omw', art: ['pingwheel_omw'], sound: 'OnMyWay', color: '#2e8bff' },
+  { id: 'omw', name: 'On My Way', icon: 'omw', art: ['omw'], sound: 'OnMyWay', color: '#2e8bff' },
   { id: 'allin', name: 'All In', icon: 'png_all_in', art: ['pingwheel_allin_render_01', 'pingwheel_allin_render_02'], sound: 'SRP_4', color: '#f2b320' },
   { id: 'assist', name: 'Assist Me', icon: 'png_assist_me_128x128', art: ['png_assist_me_128x128'], sound: 'ComeHere', color: '#35d27a' },
   { id: 'needvision', name: 'Need Vision', icon: 'mt11_18_vision', art: ['mt11_18_vision'], sound: 'SRP_7', color: '#35d27a' },

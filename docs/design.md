@@ -42,7 +42,7 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 |---|---|---|---|---|---|
 | `danger` | N | `pingwheel_retreatrender.png` | `pingwheel_retreatrender.png` | `SRP_12.wav` | `#ff3b55` |
 | `push` | NE | `pingwheel_pushrender.png` | `pingwheel_pushrender.png` | `SRP_9.wav` | `#35d27a` |
-| `omw` | E | `pingwheel_omw.png` | `pingwheel_omw.png` (League's flat ground render: its only On My Way in normal cyan; the upright `omw` is colourblind blue) | `OnMyWay.wav` | `#2e8bff` |
+| `omw` | E | `omw.png` | `omw.png` (upright icon in standard cyan; flat ground render `pingwheel_omw.png` also extracted) | `OnMyWay.wav` | `#2e8bff` |
 | `allin` | SE | `png_all_in.png` | `pingwheel_allin_render_01.png` + `_02.png` (two halves that clash together) | `SRP_4.wav` | `#f2b320` |
 | `assist` | S | `png_assist_me_128x128.png` | `png_assist_me_128x128.png` | `ComeHere.wav` | `#35d27a` |
 | `needvision` | SW | `mt11_18_vision.png` | `mt11_18_vision.png` | `SRP_7.wav` | `#35d27a` |

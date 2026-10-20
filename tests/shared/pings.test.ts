@@ -57,10 +57,12 @@ describe('ping table', () => {
     // League's PingUpdate/Need/ icons at 128 px are the colourblind set: lime instead of teal, lemon instead of gold,
     // blue instead of cyan, pink instead of red.
     const colourblind = ['all_in', 'assist_me', 'caution', 'enemy_missing', 'enemy_vision', 'generic_ping', 'hold_ig',
-      'need_vision', 'omw', 'push', 'target', 'vision_cleared'];
+      'need_vision', 'push', 'target', 'vision_cleared'];
+    const knownCb = ['push_cb_128x128', 'genericping_cb_128x128', 'retreat_cb_128x128', 'pingwheel_omw_cb'];
     for (const name of [...ALL_PINGS.flatMap((p) => [p.icon, ...p.art]), FALLBACK_TEXTURE]) {
       expect(name).not.toMatch(/_cb/);
       expect(colourblind, name).not.toContain(name);
+      expect(knownCb, name).not.toContain(name);
     }
   });
 
