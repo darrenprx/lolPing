@@ -163,7 +163,15 @@ npm run dev
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow creates a draft release, builds the Windows installer, Mac disk image, Linux AppImage and Debian package, and attaches them. It also attaches `latest.yml` and the Windows installer's `.blockmap`, which electron-updater needs to update installed copies. A last job publishes the release once all platform packages are attached.
+Bump `version` in `package.json`, commit, then push a tag that is exactly `v` followed by that version. For example, version `0.5.4` needs tag `v0.5.4`, not `v0.5.0.4`. Check the expected tag before creating it:
+
+```bash
+node -p "'v' + require('./package.json').version"
+```
+
+If the Release workflow fails at “Check the tag matches package.json”, push the matching tag on the intended release commit. Rerunning the mismatched tag will fail again; do not remove the check, since upload filenames also depend on the tag matching the package version.
+
+The Release workflow creates a draft release, builds the Windows installer, Mac disk image, Linux AppImage and Debian package, and attaches them. It also attaches `latest.yml` and the Windows installer's `.blockmap`, which electron-updater needs to update installed copies. A last job publishes the release once all platform packages are attached.
 
 ## How it works
 

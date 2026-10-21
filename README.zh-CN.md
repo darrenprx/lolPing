@@ -169,7 +169,15 @@ npm run dev
 
 ### 发布新版本
 
-修改 `package.json` 中的 `version` 并提交，然后推送匹配的标签，例如 `v0.2.0`。Release 工作流会先创建草稿 Release，再构建 Windows 安装程序、Mac 磁盘映像、Linux AppImage 和 Debian 包，并附加到 Release。工作流还会附加 `latest.yml` 和 Windows 安装程序的 `.blockmap`，electron-updater 需要这两个文件才能更新已安装的程序。所有平台的安装包都附加完成后，最后一个任务会发布 Release。
+修改 `package.json` 中的 `version` 并提交，然后推送标签，标签必须是 `v` 加上完整的版本号。例如，版本 `0.5.4` 对应的标签是 `v0.5.4`，不是 `v0.5.0.4`。创建标签前，先检查应使用的标签：
+
+```bash
+node -p "'v' + require('./package.json').version"
+```
+
+如果 Release 工作流在“Check the tag matches package.json”步骤失败，请在要发布的提交上推送匹配的标签。重新运行不匹配的标签仍会失败；不要删除这项检查，因为上传文件名也依赖标签与包版本一致。
+
+Release 工作流会先创建草稿 Release，再构建 Windows 安装程序、Mac 磁盘映像、Linux AppImage 和 Debian 包，并附加到 Release。工作流还会附加 `latest.yml` 和 Windows 安装程序的 `.blockmap`，electron-updater 需要这两个文件才能更新已安装的程序。所有平台的安装包都附加完成后，最后一个任务会发布 Release。
 
 ## 工作原理
 
