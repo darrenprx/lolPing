@@ -162,7 +162,7 @@ npm run dev
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow creates the GitHub release as a draft. The Windows job attaches the installer, `latest.yml` and the installer's `.blockmap`, and the Mac job attaches the disk image. electron-updater needs both `latest.yml` and the `.blockmap` to update installed copies. A last job publishes the release once everything is attached.
+Bump `version` in `package.json`, commit, then create and publish a GitHub release using a matching tag such as `v0.2.0`. The Release workflow switches it back to a draft while it builds the Windows installer, Mac disk image, Linux AppImage and Debian package. It also attaches `latest.yml` and the Windows installer's `.blockmap`, which electron-updater needs to update installed copies. A last job republishes the release once all platform packages are attached.
 
 ## How it works
 

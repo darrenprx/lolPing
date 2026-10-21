@@ -66,4 +66,4 @@ npm run dist:linux
 
 `test:linux-input` starts its own private Xvfb display, creates a receiving application window, and sends XTest input through the actual helper. It checks ordinary click delivery, short-click replay, modifier-first release, both wheels, custom/side-button triggers, cancellation, toggle/pause, key-capture suspension, cleanup and unsupported sessions. It never injects input into the user's desktop. `XVFB` can override the Xvfb binary path.
 
-The Linux CI job builds both packages and uploads them as workflow artifacts. Release publication is unchanged; this port does not publish packages automatically.
+The Linux CI job builds both packages and uploads them as workflow artifacts. Publishing a GitHub release also builds and attaches the AppImage and Debian package before the release is made public again.

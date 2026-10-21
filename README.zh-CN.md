@@ -168,7 +168,7 @@ npm run dev
 
 ### 发布新版本
 
-修改 `package.json` 中的 `version` 并提交，然后推送对应的标签，例如 `v0.2.0`。Release 工作流会先把 GitHub Release 创建为草稿。Windows 任务附加安装程序、`latest.yml` 和安装程序的 `.blockmap`，Mac 任务附加磁盘映像。electron-updater 需要 `latest.yml` 和 `.blockmap` 两者才能更新已安装的程序。全部附加完成后，最后一个任务会发布这个 Release。
+修改 `package.json` 中的 `version` 并提交，然后使用匹配的标签（例如 `v0.2.0`）创建并发布 GitHub Release。Release 工作流会先将它改回草稿，再构建 Windows 安装程序、Mac 磁盘映像、Linux AppImage 和 Debian 包。工作流还会附加 `latest.yml` 和 Windows 安装程序的 `.blockmap`，electron-updater 需要这两个文件才能更新已安装的程序。所有平台的安装包都附加完成后，最后一个任务会重新发布这个 Release。
 
 ## 工作原理
 

@@ -86,7 +86,7 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 - `npm run dist` builds the Windows installer, `npm run dist:mac` the Mac `.dmg` (`lolPing-<version>-arm64.dmg`), ad-hoc signed with `identity: "-"` and `hardenedRuntime: false`, `LSUIElement` not set (the Dock is managed at runtime).
 - `tools/make_icon.py` also writes `build/icon.png` (1024 px) and the tray templates.
 - CI: a `macos-latest` job runs typecheck, helper tests, TypeScript tests and `dist:mac`, then `codesign --verify --deep --strict` on the app.
-- Release: one job creates the GitHub release, then the Windows and Mac jobs upload their installers.
+- Release: publishing a GitHub release starts the workflow, which makes it a draft while Windows, Mac and Linux jobs upload their packages; the final job republishes it.
 
 ## 6. Known Mac limitations
 
