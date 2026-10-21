@@ -16,7 +16,9 @@ export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|sound)$/;
 /** Must run before app 'ready'. */
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    // corsEnabled: the overlay (lolping://app, or the Vite server in development) fetches an imported emote's sound
+    // from lolping://emotes, another origin. Without it Chromium refuses the fetch; an <img> needs no CORS.
+    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
 }
 
