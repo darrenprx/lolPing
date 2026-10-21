@@ -11,14 +11,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>Download for Windows</b></a> ·
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>Download for Mac</b></a> (Apple Silicon, experimental)
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>Download for Windows</b></a> ·
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>Download for Mac</b></a> (Apple Silicon, experimental) ·
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>Download for Linux</b></a> (X11, experimental)
 </p>
 
 <p align="center">
-  <a href="https://github.com/darrenprx/lolPing/actions/workflows/ci.yml"><img src="https://github.com/darrenprx/lolPing/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><img src="https://img.shields.io/github/v/release/darrenprx/lolPing" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/darrenprx/lolPing" alt="MIT license"></a>
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/actions/workflows/ci.yml"><img src="https://github.com/lujinyu223/lolPing_pollfeature/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><img src="https://img.shields.io/github/v/release/lujinyu223/lolPing_pollfeature" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/lujinyu223/lolPing_pollfeature" alt="MIT license"></a>
 </p>
 
 <p align="center"><img src="docs/media/demo.gif" width="880" alt="An app freezes with a not-responding dialog, and the ping wheel drops three Enemy Missing pings on it"></p>
@@ -29,13 +30,13 @@ Pings and emotes show up in whole-screen capture, so friends watching your Disco
 
 This source tree includes an **X11 Linux port**, with AppImage and Debian package targets. It requires a genuine X11 session, XInput 2.1/XTest and a compositor. Wayland sessions, including XWayland inside Wayland, are not supported yet. Caps Lock triggers and automatic fullscreen-game detection are not available on Linux. Build with Node.js 22.12+, a C++20 compiler and `libx11-dev libxi-dev libxtst-dev`, then run `npm ci` and `npm run dist:linux`.
 
-See [Linux build, installation and testing instructions](docs/linux.md) for package usage, desktop shortcut conflicts, tray requirements, HiDPI behavior and manual updates. Upstream releases may not yet contain this port.
+The latest release includes an AppImage and a Debian package for x64. See [Linux build, installation and testing instructions](docs/linux.md) for package usage, desktop shortcut conflicts, tray requirements, HiDPI behavior and manual updates.
 
 ## Install
 
 ### Windows
 
-1. Download `lolPing-Setup-<version>.exe` from the [latest release](https://github.com/darrenprx/lolPing/releases/latest).
+1. Download `lolPing-Setup-<version>.exe` from the [latest release](https://github.com/lujinyu223/lolPing_pollfeature/releases/latest).
 2. Run it. The installer isn't code-signed, so Windows SmartScreen may say "Windows protected your PC". Select **More info**, then **Run anyway**.
 3. lolPing opens its settings and moves to the tray. Hold Alt and drag anywhere to ping.
 
@@ -43,9 +44,9 @@ lolPing is built for Windows 11, 64-bit. Windows 10 may work, but it isn't teste
 
 ### macOS (experimental)
 
-The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 13 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
+The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 13 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/lujinyu223/lolPing_pollfeature/issues) anything that doesn't work.
 
-1. Download `lolPing-<version>-arm64.dmg` from the [latest release](https://github.com/darrenprx/lolPing/releases/latest), open it, and drag lolPing into Applications.
+1. Download `lolPing-<version>-arm64.dmg` from the [latest release](https://github.com/lujinyu223/lolPing_pollfeature/releases/latest), open it, and drag lolPing into Applications.
 2. Open lolPing. It isn't signed by a registered Apple developer, so macOS says it can't check it for malware. Select **Done**, open **System Settings → Privacy & Security**, scroll down, select **Open Anyway** next to the lolPing message, and confirm.
    If macOS instead says lolPing "is damaged", run `xattr -dr com.apple.quarantine /Applications/lolPing.app` in Terminal and open it again.
 3. lolPing asks for **Accessibility** access, which it needs to read the mouse and keyboard. Select **Open System Settings** and turn lolPing on. Pinging starts as soon as it's allowed.
@@ -162,7 +163,7 @@ npm run dev
 
 ### Releasing
 
-Bump `version` in `package.json`, commit, then create and publish a GitHub release using a matching tag such as `v0.2.0`. The Release workflow switches it back to a draft while it builds the Windows installer, Mac disk image, Linux AppImage and Debian package. It also attaches `latest.yml` and the Windows installer's `.blockmap`, which electron-updater needs to update installed copies. A last job republishes the release once all platform packages are attached.
+Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow creates a draft release, builds the Windows installer, Mac disk image, Linux AppImage and Debian package, and attaches them. It also attaches `latest.yml` and the Windows installer's `.blockmap`, which electron-updater needs to update installed copies. A last job publishes the release once all platform packages are attached.
 
 ## How it works
 
@@ -181,7 +182,7 @@ Pull requests and ideas are welcome. Before you start:
 - Read [AGENTS.md](AGENTS.md): the layout, the behaviour every change keeps, and the code, test and commit conventions. If you use an AI tool, give it that file too. Claude Code reads it through `CLAUDE.md`, and most other agents read `AGENTS.md` on their own.
 - Title the pull request in [Conventional Commits](https://www.conventionalcommits.org/) style, such as `fix(helper): keep clicks in order after a cancelled wheel`. Pull requests are squash-merged, so the title becomes the commit on `main`.
 - Keep one change per pull request and fill in the template. CI has to pass on Windows and macOS before anything merges.
-- For bigger ideas, open an issue or a [discussion](https://github.com/darrenprx/lolPing/discussions) first, so we can agree on the approach before you write it.
+- For bigger ideas, open an issue or a [discussion](https://github.com/lujinyu223/lolPing_pollfeature/discussions) first, so we can agree on the approach before you write it.
 
 ## Ping assets
 

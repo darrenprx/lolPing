@@ -11,14 +11,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>下载 Windows 版</b></a> ·
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><b>下载 Mac 版</b></a>（Apple 芯片，实验性）
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>下载 Windows 版</b></a> ·
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>下载 Mac 版</b></a>（Apple 芯片，实验性） ·
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><b>下载 Linux 版</b></a>（X11，实验性）
 </p>
 
 <p align="center">
-  <a href="https://github.com/darrenprx/lolPing/actions/workflows/ci.yml"><img src="https://github.com/darrenprx/lolPing/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/darrenprx/lolPing/releases/latest"><img src="https://img.shields.io/github/v/release/darrenprx/lolPing" alt="最新版本"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/darrenprx/lolPing" alt="MIT 许可证"></a>
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/actions/workflows/ci.yml"><img src="https://github.com/lujinyu223/lolPing_pollfeature/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/lujinyu223/lolPing_pollfeature/releases/latest"><img src="https://img.shields.io/github/v/release/lujinyu223/lolPing_pollfeature" alt="最新版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/lujinyu223/lolPing_pollfeature" alt="MIT 许可证"></a>
 </p>
 
 <p align="center"><img src="docs/media/demo.zh-CN.gif" width="880" alt="一个程序卡死弹出“未响应”对话框，信号轮盘在上面连发三个“敌人消失”信号"></p>
@@ -29,7 +30,7 @@
 
 ### Windows
 
-1. 从[最新版本](https://github.com/darrenprx/lolPing/releases/latest)下载 `lolPing-Setup-<版本号>.exe`。
+1. 从[最新版本](https://github.com/lujinyu223/lolPing_pollfeature/releases/latest)下载 `lolPing-Setup-<版本号>.exe`。
 2. 运行安装程序。安装程序没有代码签名，Windows SmartScreen 可能会提示“Windows 已保护你的电脑”：点击**更多信息**，再点**仍要运行**。
 3. lolPing 会打开设置窗口并常驻系统托盘。按住 Alt 在任意位置拖动即可发信号。
 
@@ -37,9 +38,9 @@ lolPing 面向 64 位 Windows 11。Windows 10 也许可以用，但没有测试�
 
 ### macOS（实验性）
 
-Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 13 或更新版本。它会自动构建和测试，但还没在真实的 Mac 上用过多少。遇到问题请[反馈](https://github.com/darrenprx/lolPing/issues)。
+Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 13 或更新版本。它会自动构建和测试，但还没在真实的 Mac 上用过多少。遇到问题请[反馈](https://github.com/lujinyu223/lolPing_pollfeature/issues)。
 
-1. 从[最新版本](https://github.com/darrenprx/lolPing/releases/latest)下载 `lolPing-<版本号>-arm64.dmg`，打开后把 lolPing 拖进“应用程序”。
+1. 从[最新版本](https://github.com/lujinyu223/lolPing_pollfeature/releases/latest)下载 `lolPing-<版本号>-arm64.dmg`，打开后把 lolPing 拖进“应用程序”。
 2. 打开 lolPing。它没有经过注册 Apple 开发者的签名，macOS 会提示无法检查其是否包含恶意软件：点“完成”，打开**系统设置 → 隐私与安全性**，向下滚动，在 lolPing 的提示旁点**仍要打开**并确认。
    如果 macOS 提示 lolPing“已损坏”，请在“终端”中运行 `xattr -dr com.apple.quarantine /Applications/lolPing.app`，然后再次打开。
 3. lolPing 会请求**辅助功能**权限，用来读取鼠标和键盘。点“打开系统设置”并打开 lolPing。授权后立即可以发信号。
@@ -49,7 +50,7 @@ Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 13 或更新版本
 
 ### Linux（实验性，X11）
 
-此源码分支已增加 Linux 支持，在 Ubuntu 24.04 / X11 上开发验证。请使用真正的 **X11 / Xorg 登录会话**；目前不支持 Wayland（包括 Wayland 会话中的 XWayland）。
+此 fork 已增加 Linux 支持，在 Ubuntu 24.04 / X11 上开发验证。请使用真正的 **X11 / Xorg 登录会话**；目前不支持 Wayland（包括 Wayland 会话中的 XWayland）。[最新版本](https://github.com/lujinyu223/lolPing_pollfeature/releases/latest)提供 x64 的 AppImage 和 Debian 安装包。
 
 - 构建：安装 Node.js 22.12+、C++20 编译器及 `libx11-dev libxi-dev libxtst-dev`，运行 `npm ci` 和 `npm run dist:linux`。
 - 输出：`release/` 中的 `.AppImage` 和 `.deb`。Ubuntu/Debian 推荐 `sudo apt install ./release/lolPing-0.5.1-amd64.deb`。
@@ -168,7 +169,7 @@ npm run dev
 
 ### 发布新版本
 
-修改 `package.json` 中的 `version` 并提交，然后使用匹配的标签（例如 `v0.2.0`）创建并发布 GitHub Release。Release 工作流会先将它改回草稿，再构建 Windows 安装程序、Mac 磁盘映像、Linux AppImage 和 Debian 包。工作流还会附加 `latest.yml` 和 Windows 安装程序的 `.blockmap`，electron-updater 需要这两个文件才能更新已安装的程序。所有平台的安装包都附加完成后，最后一个任务会重新发布这个 Release。
+修改 `package.json` 中的 `version` 并提交，然后推送匹配的标签，例如 `v0.2.0`。Release 工作流会先创建草稿 Release，再构建 Windows 安装程序、Mac 磁盘映像、Linux AppImage 和 Debian 包，并附加到 Release。工作流还会附加 `latest.yml` 和 Windows 安装程序的 `.blockmap`，electron-updater 需要这两个文件才能更新已安装的程序。所有平台的安装包都附加完成后，最后一个任务会发布 Release。
 
 ## 工作原理
 
@@ -187,7 +188,7 @@ npm run dev
 - 阅读 [AGENTS.md](AGENTS.md)（英文）：项目结构、每个改动都要保持的行为，以及代码、测试和提交信息的约定。如果你用 AI 工具，也让它读取这个文件。Claude Code 通过 `CLAUDE.md` 读取它，其他大多数 AI 工具会自动读取 `AGENTS.md`。
 - PR 标题使用 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/) 格式，例如 `fix(helper): keep clicks in order after a cancelled wheel`。PR 以 squash 方式合并，标题就是 `main` 上的提交信息。
 - 一个 PR 只做一件事，并填写模板。CI 在 Windows 和 macOS 上都通过后才能合并。
-- 较大的想法请先开 issue 或 [discussion](https://github.com/darrenprx/lolPing/discussions)，先商量好做法再动手。
+- 较大的想法请先开 issue 或 [discussion](https://github.com/lujinyu223/lolPing_pollfeature/discussions)，先商量好做法再动手。
 
 ## 信号素材
 

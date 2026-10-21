@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and help
-    url: https://github.com/darrenprx/lolPing/discussions
+    url: https://github.com/lujinyu223/lolPing_pollfeature/discussions
     about: Ask how something works or get help setting it up.
   - name: Share your fork or mod
-    url: https://github.com/darrenprx/lolPing/discussions
+    url: https://github.com/lujinyu223/lolPing_pollfeature/discussions
     about: Show what you built on lolPing. Please don't open an issue for it.
