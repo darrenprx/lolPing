@@ -22,7 +22,7 @@ export const isEmoteFx = (v: unknown): v is number =>
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
-  | { kind: 'custom'; url: string; animated: boolean; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
+  | { kind: 'custom'; url: string; animated: boolean; stillUrl?: string; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';

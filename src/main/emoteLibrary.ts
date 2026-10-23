@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AUDIO_TYPES, sniffAudio } from '../shared/audioSniff';
 import {
@@ -37,7 +37,7 @@ export function checkStill(b: Uint8Array): ImportError | null {
 }
 
 /** The original animation: a GIF or WebP, small enough to decode on every emote. */
-function checkAnim(b: Uint8Array): ImportError | null {
+export function checkAnim(b: Uint8Array): ImportError | null {
   const type = sniffImage(b);
   if (type !== 'gif' && type !== 'webp') return 'type';
   if (b.length > ANIM_MAX_BYTES) return 'animSize';
@@ -78,6 +78,23 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
 export class EmoteLibrary {
   /** `dir` is <settings folder>/emotes. */
   constructor(readonly dir: string) {}
+
+  /** Reads a bounded original for LAN transfer; never returns a sound or a thumbnail. */
+  async animation(hash: string): Promise<Uint8Array | null> {
+    if (!isCustomRef(`c:${hash}`)) return null;
+    for (const format of ['gif', 'webp']) {
+      try {
+        const file = join(this.dir, `${hash}.anim.${format}`);
+        const size = await stat(file);
+        if (!size.isFile() || size.size > ANIM_MAX_BYTES) continue;
+        const bytes = new Uint8Array(await readFile(file));
+        if (checkAnim(bytes) === null) return bytes;
+      } catch {
+        // A removed or unreadable original falls back to the still.
+      }
+    }
+    return null;
+  }
 
   async save(file: EmoteFile, existing: readonly CustomEmote[]): Promise<SaveResult> {
     const f = emoteFileFrom(file);

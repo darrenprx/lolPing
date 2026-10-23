@@ -13,7 +13,7 @@ export interface EmoteOptions {
 interface Live {
   root: HTMLElement;
   timer: ReturnType<typeof setTimeout>;
-  /** The object URL of a bundled emote's image, once its Blob has arrived. */
+  /** The object URL of an emote's animation, once its Blob has arrived. */
   url: string | null;
   gone: boolean;
 }
@@ -54,7 +54,10 @@ export class EmoteStage {
     this.live.set(owner, live);
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
-    else if (art.kind === 'custom') root.append(emoteFxContent(art.fx, art.url));
+    else if (art.kind === 'custom') {
+      if (art.animated) this.showCustomAnimation(live, art);
+      else root.append(emoteFxContent(art.fx, art.url));
+    }
     else root.append(envelope(bubble(), 0));
 
     if (opts.tag) {
@@ -70,6 +73,23 @@ export class EmoteStage {
   clear(owner: string): void {
     const live = this.live.get(owner);
     if (live) this.end(owner, live);
+  }
+
+  /** Each spawn gets a fresh clock, with no unbounded renderer cache of multi-megabyte originals. */
+  private showCustomAnimation(live: Live, art: Extract<EmoteArt, { kind: 'custom' }>): void {
+    const fallback = art.stillUrl ?? art.url.replace(/\.anim$/, '.webp');
+    const content = emoteFxContent(art.fx, fallback);
+    live.root.append(content);
+    this.fetchBlob(art.url).then((blob) => {
+      if (live.gone) return;
+      live.url = URL.createObjectURL(blob);
+      const animation = emoteFxContent(art.fx, live.url);
+      const img = animation.querySelector('img');
+      img?.addEventListener('error', () => {
+        if (!live.gone) animation.replaceWith(emoteFxContent(art.fx, fallback));
+      }, { once: true });
+      content.replaceWith(animation);
+    }, () => { /* The still is already visible when a cached original disappeared. */ });
   }
 
   /**

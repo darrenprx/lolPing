@@ -79,6 +79,7 @@ let emotes: RemoteEmote[];
 let texts: RemoteText[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
+let animationEnabled = false;
 
 function sentMessages(to?: string): RoomMessage[] {
   return lan.sent
@@ -100,6 +101,7 @@ beforeEach(() => {
   texts = [];
   toasts = [];
   saved = [];
+  animationEnabled = false;
   room = new RoomManager({
     transports: [lan],
     now: () => Date.now(),
@@ -109,6 +111,7 @@ beforeEach(() => {
     profile: () => profile,
     resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
     announceEmotes: () => [],
+    animationSync: () => animationEnabled,
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
@@ -120,6 +123,60 @@ beforeEach(() => {
 afterEach(() => {
   room.quit();
   vi.useRealTimers();
+});
+
+describe('RoomManager LAN animations', () => {
+  const body = { t: 'anim-chunk', to: SELF, h: 'c'.repeat(32), a: 'd'.repeat(64), i: 0, b: 'AQID' };
+
+  it('accepts only signed animation packets from capable LAN peers addressed to us', async () => {
+    animationEnabled = true;
+    await joinActive();
+    const sender = new SignedRemote(12, 'lan:friend', lan);
+    sender.presence({ app: '0.5.3', ea: 1 });
+    const chunks: RoomMessage[] = [];
+    room.on('anim-chunk', (m: RoomMessage) => chunks.push(m));
+    expect(room.canSyncAnimation(sender.peer)).toBe(true);
+    lan.deliver(sender.key, sender.packet(body));
+    expect(chunks).toHaveLength(1);
+    lan.deliver(sender.key, sender.packet({ ...body, to: 'e'.repeat(16) }));
+    lan.deliver(sender.key, forged(sender.peer, body));
+    sender.presence({ app: '0.5.3' });
+    lan.deliver(sender.key, sender.packet(body));
+    expect(chunks).toHaveLength(1);
+    expect(room.canSyncAnimation(sender.peer)).toBe(false);
+  });
+
+  it.each(['paused', 'room mute', 'member mute', 'remote pause', 'disabled'])('stops animation traffic on %s', async (reason) => {
+    animationEnabled = true;
+    await joinActive();
+    const sender = new SignedRemote(12, 'lan:friend', lan);
+    sender.presence({ app: '0.5.3', ea: 1 });
+    const chunks: RoomMessage[] = [];
+    room.on('anim-chunk', (m: RoomMessage) => chunks.push(m));
+    if (reason === 'paused') room.setStatusFlags({ paused: true, roomMuted: false });
+    if (reason === 'room mute') room.setStatusFlags({ paused: false, roomMuted: true });
+    if (reason === 'member mute') room.muteMember(sender.peer, true);
+    if (reason === 'remote pause') sender.presence({ app: '0.5.3', ea: 1, status: 'paused' });
+    if (reason === 'disabled') animationEnabled = false;
+    lan.deliver(sender.key, sender.packet(body));
+    expect(chunks).toHaveLength(0);
+    expect(room.canSyncAnimation(sender.peer)).toBe(false);
+  });
+
+  it('does not let bulk animation chunks move the signed replay window or change the LAN route', async () => {
+    animationEnabled = true;
+    await joinActive();
+    const sender = new SignedRemote(12, 'lan:friend', lan);
+    sender.presence({ app: '0.5.3', ea: 1 });
+    const ping = sender.packet({ t: 'ping', ping: 'danger', d: 1, x: 0, y: 0 });
+    sender.seq += 100;
+    lan.deliver('lan:other', sender.packet(body));
+    lan.deliver(sender.key, ping);
+    expect(pings).toHaveLength(1);
+    lan.sent.length = 0;
+    room.sendToLan(sender.peer, { t: 'anim-want', to: sender.peer, h: 'c'.repeat(32) });
+    expect(lan.sent.map((m) => m.to)).toEqual(['lan:friend']);
+  });
 });
 
 describe('joining', () => {

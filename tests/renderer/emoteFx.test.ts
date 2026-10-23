@@ -46,6 +46,14 @@ class FakeElement {
   find(cls: string): FakeElement[] {
     return this.children.flatMap((c) => [...(c.className.split(' ').includes(cls) ? [c] : []), ...c.find(cls)]);
   }
+  querySelector(tag: string): FakeElement | null {
+    for (const child of this.children) {
+      if (child.tagName === tag) return child;
+      const found = child.querySelector(tag);
+      if (found) return found;
+    }
+    return null;
+  }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -58,6 +66,45 @@ afterEach(() => {
 });
 
 describe('EmoteStage', () => {
+  it('restarts a custom animation with a distinct object URL and releases it on replacement', async () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement, async () => new Blob(['gif'], { type: 'image/gif' }));
+    const art = { kind: 'custom' as const, url: 'lolping://emotes/animation.anim', animated: true, stillUrl: 'still.webp', fx: 2 };
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    stage.spawn('friend', art, 10, 20, { sizePx: 150 });
+    await flush();
+    const first = layer.find('fx')[0].children[0].src;
+    expect(first).toMatch(/^blob:/);
+    stage.spawn('friend', art, 10, 20, { sizePx: 150 });
+    await flush();
+    const second = layer.find('fx')[0].children[0].src;
+    expect(second).toMatch(/^blob:/);
+    expect(second).not.toBe(first);
+    expect(revoke).toHaveBeenCalledWith(first);
+    layer.find('fx')[0].children[0].dispatch('error');
+    expect(layer.find('fx')[0].children[0].src).toBe('still.webp');
+    stage.clear('friend');
+    expect(revoke).toHaveBeenCalledWith(second);
+    revoke.mockRestore();
+  });
+
+  it('keeps the still when an animation fetch fails or finishes after its emote was cleared', async () => {
+    const layer = new FakeElement('div');
+    let resolve: (b: Blob) => void = () => undefined;
+    const stage = new EmoteStage(layer as unknown as HTMLElement, () => new Promise((r) => { resolve = r; }));
+    stage.spawn('friend', { kind: 'custom', url: 'anim', stillUrl: 'still', animated: true, fx: 0 }, 0, 0, { sizePx: 100 });
+    expect(layer.find('fx')[0].children[0].src).toBe('still');
+    stage.clear('friend');
+    resolve(new Blob(['gif']));
+    await flush();
+    expect(layer.find('emote')).toHaveLength(0);
+    const failing = new EmoteStage(layer as unknown as HTMLElement, async () => { throw new Error('missing'); });
+    failing.spawn('friend', { kind: 'custom', url: 'anim', stillUrl: 'still', animated: true, fx: 0 }, 0, 0, { sizePx: 100 });
+    await flush();
+    expect(layer.find('fx')[0].children[0].src).toBe('still');
+    failing.clear('friend');
+  });
+
   it('shows the placeholder when a bundled emote’s animation arrives but cannot be decoded', async () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob(['not a webp'])));

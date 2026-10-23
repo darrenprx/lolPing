@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CACHE_MAX_BYTES, CACHE_MAX_FILES, EmoteCache } from '../../src/main/emoteCache';
+import { ANIMATION_CACHE_MAX_BYTES, CACHE_MAX_BYTES, CACHE_MAX_FILES, EmoteCache } from '../../src/main/emoteCache';
 
 const HASH = (n: number): string => n.toString(16).padStart(32, '0');
 const stillOf = (n: number, size: number): Uint8Array => new Uint8Array(size).fill(n + 1);
@@ -24,6 +24,44 @@ afterEach(() => {
 });
 
 describe('EmoteCache', () => {
+  it('coalesces simultaneous writes of the same verified content into one complete file', async () => {
+    const animations = new EmoteCache(dir, () => clock, true);
+    const hash = 'a'.repeat(64);
+    const bytes = new Uint8Array([...Buffer.from('GIF89a'), 2, 0, 2, 0]);
+    expect(await Promise.all([animations.put(hash, bytes), animations.put(hash, bytes)])).toEqual([true, true]);
+    expect(animations.has(hash)).toBe(true);
+    expect(readdirSync(dir)).toEqual([`${hash}.anim.gif`]);
+  });
+  it('keeps independently hashed animation files across launches without changing the still cache', async () => {
+    const animations = new EmoteCache(dir, () => clock, true);
+    const hash = 'a'.repeat(64);
+    const bytes = new Uint8Array([...Buffer.from('GIF89a'), 2, 0, 2, 0]);
+    expect(await animations.put(hash, bytes)).toBe(true);
+    expect(existsSync(join(dir, `${hash}.anim.gif`))).toBe(true);
+    const again = new EmoteCache(dir, () => clock, true);
+    await again.present();
+    expect(again.has(hash)).toBe(true);
+    expect(cache.has(hash)).toBe(false);
+    expect(await animations.put('../escape', bytes)).toBe(false);
+    expect(await animations.put(HASH(1), bytes)).toBe(false);
+    expect(await animations.put('b'.repeat(64), Buffer.from('<svg/>'))).toBe(false);
+  });
+
+  it('evicts animations at their separate byte cap and protects a recently shown original', async () => {
+    const animations = new EmoteCache(dir, () => clock, true);
+    const size = 5 * 1024 * 1024;
+    const bytes = new Uint8Array(size);
+    bytes.set(Buffer.from('GIF89a'));
+    const hash = (n: number): string => n.toString(16).padStart(64, '0');
+    for (let i = 0; i < ANIMATION_CACHE_MAX_BYTES / size; i++) await animations.put(hash(i), bytes);
+    animations.touch(hash(0));
+    await animations.put(hash(100), bytes);
+    expect(animations.has(hash(0))).toBe(true);
+    expect(animations.has(hash(1))).toBe(false);
+    expect(animations.has(hash(100))).toBe(true);
+    expect(readdirSync(dir).filter((n) => n.endsWith('.gif')).length * size).toBeLessThanOrEqual(ANIMATION_CACHE_MAX_BYTES);
+  });
+
   it('stores a verified still and finds it again after a relaunch', async () => {
     expect(await cache.put(HASH(1), stillOf(1, 100))).toBe(true);
     expect(cache.has(HASH(1))).toBe(true);
