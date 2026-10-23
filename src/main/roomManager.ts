@@ -159,6 +159,8 @@ export class RoomManager extends EventEmitter {
   private unsignedGuard: ReplayGuard;
   /** Every ID a signed presence has proved this session: unsigned packets claiming one are forgeries. */
   private boundIds = new Set<string>();
+  /** IDs dropped by a timeout this session: a peer ID is made fresh on every join, so one we know is the same app. */
+  private timedOut = new Set<string>();
   private readonly limiter: RateLimiter;
   /** Emote stills (want/chunk) per member: their own, wider bucket, so a flood of wants still meets a wall. */
   private readonly transferLimiter: RateLimiter;
@@ -475,6 +477,7 @@ export class RoomManager extends EventEmitter {
     this.members.clear();
     this.answered.clear();
     this.staleStrikes.clear();
+    this.timedOut.clear();
     this.lastPresence = {};
     this.aloneSince = null;
     this.emitState();
@@ -579,6 +582,9 @@ export class RoomManager extends EventEmitter {
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg, pk: KeyObject | null): void {
     let m = this.members.get(msg.peer);
     const isNew = !m;
+    // A member that timed out and comes back with the same ID is the same app waking up or reconnecting over a
+    // network drop, not a new one. Its row returns either way, so the "joined" notice would only be noise.
+    const returning = isNew && this.timedOut.has(msg.peer);
     if (!m) {
       // The room cap is judged here too, not only at settle: without this, anyone can grow the room past
       // MAX_MEMBERS afterwards, and every extra "member" earns its own emote-chunk serving quota. We are one of them.
@@ -617,7 +623,9 @@ export class RoomManager extends EventEmitter {
       if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
       else t.sendTo(key, this.presencePacket());
     }
-    if (isNew && this.phase === 'active') this.emit('toast', { kind: 'joined', name: m.name } satisfies RoomToast);
+    if (isNew && !returning && this.phase === 'active') {
+      this.emit('toast', { kind: 'joined', name: m.name } satisfies RoomToast);
+    }
     this.emitState();
   }
 
@@ -650,6 +658,7 @@ export class RoomManager extends EventEmitter {
     this.transferLimiter.forget(m.peer);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
+    if (kind === 'disconnected') this.timedOut.add(m.peer);
     this.emit('memberGone', m.peer);
     this.emit('toast', { kind, name: m.name } satisfies RoomToast);
     this.emitState();
