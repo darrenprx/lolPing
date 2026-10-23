@@ -132,7 +132,7 @@ const grid = document.getElementById('grid');
 for (const [, img, name, snd] of pings) {
   const t = document.createElement('div'); t.className = 'tile';
   t.innerHTML = `<img src="../assets/textures/${img}.png" alt=""><span>${name}</span>`;
-  t.onclick = () => new Audio(`../assets/sounds/${snd}.wav`).play().catch(() => {});
+  t.onclick = () => new Audio(`../assets/sounds/${snd}.flac`).play().catch(() => {});
   grid.append(t);
 }
 const root = document.documentElement, btn = document.getElementById('theme');

@@ -60,7 +60,7 @@ export function serveAppScheme(opts: { rendererRoot: string | null; emoteDirs: (
     }
     if (url.host === 'app' && opts.rendererRoot) {
       const file = resolveInside(opts.rendererRoot, url.pathname);
-      if (file) return net.fetch(pathToFileURL(file).toString());
+      if (file) return net.fetch(pathToFileURL(file).toString(), { method: request.method === 'HEAD' ? 'HEAD' : 'GET' });
     }
     return notFound();
   });

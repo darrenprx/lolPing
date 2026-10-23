@@ -6,6 +6,7 @@ import { pruneAssets } from './tools/pruneAssets';
 export default defineConfig({
   main: {
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: { index: resolve('src/main/index.ts') },
         output: { format: 'cjs', entryFileNames: '[name].js' },
@@ -14,6 +15,7 @@ export default defineConfig({
   },
   preload: {
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: { overlay: resolve('src/preload/overlay.ts'), settings: resolve('src/preload/settings.ts'), text: resolve('src/preload/text.ts'), panel: resolve('src/preload/panel.ts') },
         output: { format: 'cjs', entryFileNames: '[name].js' },
@@ -25,6 +27,7 @@ export default defineConfig({
     publicDir: resolve('assets'),
     plugins: [react(), pruneAssets()],
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: {
           overlay: resolve('src/renderer/overlay/index.html'),

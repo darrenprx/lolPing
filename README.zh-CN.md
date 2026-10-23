@@ -157,7 +157,8 @@ npm run dev
 | 命令 | 作用 |
 | --- | --- |
 | `npm test` | TypeScript 测试，包括以 `--simulate` 模式运行真实输入助手的协议测试 |
-| `npm run test:helper` | 构建输入助手并运行 C++ 测试 |
+| `npm run test:helper` | 构建输入助手，运行 C++ 测试、输出背压和修饰键生命周期场景 |
+| `npm run test:performance` | 检查设置、输入助手、房间生命周期、资源请求和两个生产构建的浮层；先运行 `npm run build:helper` 和 `npm run build`（见 [`tools/performance`](tools/performance)） |
 | `npm run typecheck` | 全量类型检查 |
 | `npm run dist` | 在 `release/` 中生成 Windows 安装程序 |
 | `npm run dist:mac` | 在 `release/` 中生成 Mac 磁盘映像（需在 Mac 上运行） |

@@ -28,3 +28,6 @@ if [ "$(uname -s)" = Darwin ]; then
 else
   echo "Built build/hook-helper and build/helper_tests"
 fi
+"$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/output-scenario.cpp src/json.cpp src/output.cpp -o build/output-scenario
+"$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/decision-scenario.cpp src/decision.cpp -o build/decision-scenario
+echo "Built build/output-scenario and build/decision-scenario"

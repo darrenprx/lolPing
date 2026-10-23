@@ -26,20 +26,30 @@ Output::Output(Writer writer, size_t maxQueued) : writer_(std::move(writer)), ma
 
 Output::~Output() { stop(); }
 
-void Output::line(std::string s) {
+void Output::enqueue(Message message) {
   {
     std::lock_guard<std::mutex> lk(mu_);
     if (stopping_) return;
+    if (const auto* move = std::get_if<Emit>(&message);
+        move && move->kind == Emit::Kind::WheelMove && !q_.empty()) {
+      auto* pending = std::get_if<Emit>(&q_.back());
+      if (pending && pending->kind == Emit::Kind::WheelMove && pending->wheel == move->wheel) {
+        *pending = *move;
+        return;
+      }
+    }
     if (q_.size() >= max_) {
       ++dropped_;
       return;
     }
-    q_.push_back(std::move(s));
+    q_.push_back(std::move(message));
   }
   cv_.notify_one();
 }
 
-void Output::emit(const Emit& e) { line(formatEmit(e)); }
+void Output::line(std::string s) { enqueue(std::move(s)); }
+
+void Output::emit(const Emit& e) { enqueue(e); }
 
 // Version 4: the config takes a panel key and can emit panel.
 void Output::ready() { line("{\"type\":\"ready\",\"version\":4}"); }
@@ -69,10 +79,11 @@ void Output::run() {
   while (true) {
     cv_.wait(lk, [this] { return !q_.empty() || stopping_; });
     if (q_.empty()) return;  // stopping and fully drained
-    std::string s = std::move(q_.front());
+    Message message = std::move(q_.front());
     q_.pop_front();
     lk.unlock();
-    const bool ok = writer_(s);
+    const auto* event = std::get_if<Emit>(&message);
+    const bool ok = event ? writer_(formatEmit(*event)) : writer_(std::get<std::string>(message));
     lk.lock();
     if (!ok) {  // Electron is gone: drop the rest
       dropped_ += q_.size();
