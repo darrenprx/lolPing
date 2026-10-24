@@ -128,6 +128,7 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
 - Exclusive-fullscreen games draw above the overlay.
+- Window-picking screenshot tools that walk the window list (QQ's screenshot) can't trace window edges while a ping or emote is on screen — the overlay is the topmost window then. When nothing is shown it shrinks to a pixel and captures work as usual.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
 - While you are in a room, a held Tab shows the room panel and doesn't reach other apps, and Alt + T opens the text box instead of reaching the app underneath. Change these keys, or turn the features off, in Settings → Room and Settings → Features.
 - While lolPing is on, Ctrl + drag opens the emote wheel instead of copying files or text. Pick another emote key, or turn it off, in Settings → Emotes.

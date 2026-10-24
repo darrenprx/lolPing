@@ -131,6 +131,8 @@ export function parsePanelAction(raw: unknown): PanelAction | null {
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
 export const OVERLAY_ASSETS = 'overlay:assets';
+/** overlay renderer → main: boolean, whether anything is on screen; main parks the window while not. */
+export const OVERLAY_OCCUPANCY = 'overlay:occupancy';
 /** overlay renderer → main: {id, x, y} of a ping the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */

@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebC
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_OCCUPANCY, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
@@ -42,6 +42,13 @@ const mapScale = (d: Display): number => (IS_MAC || IS_LINUX ? 1 : d.scaleFactor
 /** Messages that put something new on an overlay. */
 const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'text:spawn']);
 
+/** How long an idle overlay stays expanded before parking: something spawning in that margin cancels the park. */
+const PARK_DELAY_MS = 250;
+
+/** The parked overlay: a 1×1 window at its display's corner, so screenshot tools that walk the window list
+ * (QQ's, issue #127) find real windows again. Nothing is on the screen while parked. */
+const parkedRect = (d: Display): Rectangle => ({ x: d.bounds.x, y: d.bounds.y, width: 1, height: 1 });
+
 /**
  * One transparent, click-through, always-on-top window per display.
  * Emits 'shared' (SharedPing) for every wheel or trigger+click ping and 'sharedEmote' (SharedEmote) for every wheel or
@@ -50,6 +57,9 @@ const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['
 export class OverlayManager extends EventEmitter {
   readonly missingAssets = new Set<string>();
   private readonly windows = new Map<number, BrowserWindow>();
+  private readonly parked = new Set<number>();
+  private readonly parkTimers = new Map<number, NodeJS.Timeout>();
+  private readonly displaysById = new Map<number, Display>();
   private maps: DisplayMap[] = [];
   private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
@@ -81,6 +91,12 @@ export class OverlayManager extends EventEmitter {
       this.emit('sharedEmote', { ref: p.ref, displayId, x: p.x, y: p.y } satisfies SharedEmote);
       // The wheel's own overlay already shows it. Another display may still hold an earlier one of ours.
       this.clearElsewhere(displayId, 'self');
+    });
+    ipcMain.on(OVERLAY_OCCUPANCY, (event, occupied: unknown) => {
+      const displayId = this.displayOf(event.sender);
+      if (displayId === undefined || typeof occupied !== 'boolean') return;
+      if (occupied) this.expand(displayId);
+      else this.schedulePark(displayId);
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -180,6 +196,9 @@ export class OverlayManager extends EventEmitter {
   }
 
   destroy(): void {
+    for (const timer of this.parkTimers.values()) clearTimeout(timer);
+    this.parkTimers.clear();
+    this.parked.clear();
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
     this.windows.clear();
   }
@@ -244,11 +263,18 @@ export class OverlayManager extends EventEmitter {
       if (!displays.some((d) => d.id === id)) {
         win.destroy();
         this.windows.delete(id);
+        this.parked.delete(id);
+        const timer = this.parkTimers.get(id);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          this.parkTimers.delete(id);
+        }
       }
     }
     for (const d of displays) {
+      this.displaysById.set(d.id, d);
       const win = this.windows.get(d.id);
-      if (win) win.setBounds(overlayBounds(d));
+      if (win) win.setBounds(this.parked.has(d.id) ? parkedRect(d) : overlayBounds(d));
       else this.windows.set(d.id, this.createWindow(d));
     }
   }
@@ -299,9 +325,38 @@ export class OverlayManager extends EventEmitter {
     if (RAISING_CHANNELS.has(channel)) this.refreshDisplays();
     const w = this.windows.get(displayId);
     if (!w || w.isDestroyed()) return;
-    // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
-    // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
-    if (!IS_MAC && !IS_LINUX && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
+    if (RAISING_CHANNELS.has(channel)) {
+      this.expand(displayId); // a parked overlay grows back before anything is placed on it
+      // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
+      // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
+      if (!IS_MAC && !IS_LINUX) w.setAlwaysOnTop(true, 'screen-saver');
+    }
     w.webContents.send(channel, payload);
+  }
+
+  /** Grows a parked overlay back at once, dropping a park that was still pending. */
+  private expand(displayId: number): void {
+    const timer = this.parkTimers.get(displayId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.parkTimers.delete(displayId);
+    }
+    if (!this.parked.delete(displayId)) return;
+    const win = this.windows.get(displayId);
+    const d = this.displaysById.get(displayId);
+    if (win && !win.isDestroyed() && d) win.setBounds(overlayBounds(d));
+  }
+
+  /** Parks an idle overlay after a beat: something spawning inside the margin cancels the park instead. */
+  private schedulePark(displayId: number): void {
+    if (this.parkTimers.has(displayId)) return;
+    this.parkTimers.set(displayId, setTimeout(() => {
+      this.parkTimers.delete(displayId);
+      const win = this.windows.get(displayId);
+      const d = this.displaysById.get(displayId);
+      if (!win || win.isDestroyed() || !d) return;
+      win.setBounds(parkedRect(d));
+      this.parked.add(displayId);
+    }, PARK_DELAY_MS));
   }
 }

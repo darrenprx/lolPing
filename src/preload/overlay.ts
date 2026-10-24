@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
+  OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_OCCUPANCY, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
 } from '../shared/ipc';
 import type { PingId } from '../shared/pings';
 
@@ -12,6 +12,10 @@ const api = {
   },
   reportMissingAssets(names: string[]): void {
     ipcRenderer.send(OVERLAY_ASSETS, names);
+  },
+  /** Whether this page has anything on screen; main parks the window while it does not. */
+  setOccupancy(occupied: boolean): void {
+    ipcRenderer.send(OVERLAY_OCCUPANCY, occupied);
   },
   /** A wheel ping was placed here (CSS px in this overlay). */
   reportPing(id: PingId, x: number, y: number): void {
