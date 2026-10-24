@@ -1,7 +1,7 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
 import { isCustomRef, isEmoteFx, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
-import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
+import { SETTINGS_CH, type About, type AppStatus, type RunningApp, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
@@ -26,6 +26,10 @@ export interface SettingsIpcDeps {
   about(): About;
   retryHelper(): void;
   setCapturing(on: boolean): void;
+  /** Hides the settings window for three seconds, then names the app that stayed in front; the capture button asks. */
+  captureForegroundApp(): Promise<string | null>;
+  /** The apps the user can switch to, with icons; the app-exception list's dropdown asks. */
+  appList(): Promise<RunningApp[]>;
   openAccessibility(): void;
   /** Strings in the app's current language. */
   text(): Strings;
@@ -148,6 +152,8 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   });
   ipcMain.handle(SETTINGS_CH.retryHelper, () => d.retryHelper());
   ipcMain.handle(SETTINGS_CH.capture, (_e, on: unknown) => d.setCapturing(on === true));
+  ipcMain.handle(SETTINGS_CH.captureApp, () => d.captureForegroundApp());
+  ipcMain.handle(SETTINGS_CH.appList, () => d.appList());
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
   ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
   ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());

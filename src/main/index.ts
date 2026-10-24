@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, clipboard, dialog, Menu, nativeImage, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
@@ -18,6 +18,7 @@ import { overlaySettings, soundLevel, type Settings } from '../shared/settings';
 import { parseTextInput } from '../shared/textCommands';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { AppIcons } from './appIcons';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -124,6 +125,17 @@ function start(): void {
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
+  // An image file's own icon where the platform can read one (Windows); anywhere else this settles null. The small
+  // size is native 16px: what the dropdown shows, without a blurry downscale from 32. ApplicationFrameHost.exe has
+  // no icon of its own, so its icon is the system's default program icon - the copy an icon-less exe embeds.
+  // macOS: app.getFileIcon hands back the same generic tile for every bundle (observed on macOS 26), so the icon
+  // comes from the thumbnail generator instead, which draws the app's real one.
+  const appIcons = new AppIcons(async (path) => {
+    const image = IS_MAC
+      ? await nativeImage.createThumbnailFromPath(path, { width: 32, height: 32 })
+      : await app.getFileIcon(path, { size: 'small' });
+    return image.isEmpty() ? null : image.toDataURL();
+  }, 'C:\\Windows\\System32\\ApplicationFrameHost.exe');
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
@@ -616,6 +628,30 @@ function start(): void {
     setCapturing: (on) => {
       capturing = on;
       syncSuspended();
+    },
+    // The app-exception list: the capture button (the settings window hides, so the app the user wants is the one
+    // left in front) and everything the user can switch to (the dropdown). Icons come from the image file itself
+    // where the platform can read one; otherwise the dropdown shows the name only.
+    appList: async () => {
+      const apps = await bridge.ask({ type: 'getAppList' }, (ev) => (ev.type === 'appList' ? ev.apps : null), []);
+      return Promise.all(apps.map(async (a) => ({ ...a, icon: await appIcons.icon(a.path) })));
+    },
+    captureForegroundApp: async () => {
+      const win = settingsWindow();
+      // Minimizing hands focus to the next top-level window, so the app the user wants is simply in front;
+      // when the answer is in, the window comes back on top.
+      win?.minimize();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const name = await bridge.ask(
+        { type: 'getForegroundApp' },
+        (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
+        null,
+      );
+      if (win && !win.isDestroyed()) {
+        win.restore();
+        win.focus();
+      }
+      return name;
     },
     openAccessibility: () => {
       if (!IS_MAC) return;

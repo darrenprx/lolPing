@@ -81,6 +81,7 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). A custom key still types when tapped, but its letter appears when the key comes up, and holding it alone doesn't repeat.
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
 - **Pause in fullscreen apps:** on by default. A fullscreen game keeps every click — trigger + click does nothing there — and gestures resume on the desktop and on other monitors. Windowed games aren't detected, and with an auto-hiding taskbar only borderless fullscreen counts. Windows only for now.
+- **App exceptions:** name apps (by process name, or captured from whatever is in front) where lolPing stands down entirely — gestures and hotkeys pass through, so Photoshop's Option + click colour picker and a Tab that toggles panels keep working.
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound. **Keep my last ping on screen** leaves your newest ping up until your next one or until you pause lolPing, for example to mark where you stopped reading.
 - **Wheel:** adjust the size of both the ping and emote wheels, without changing placed pings or emotes. Drag any ping onto any slice, including Bait, Vision Cleared and the upside-down Enemy Missing, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
@@ -127,6 +128,7 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
 - Exclusive-fullscreen games draw above the overlay.
+- Window-picking screenshot tools that walk the window list (QQ's screenshot) can't trace window edges while a ping or emote is on screen — the overlay is the topmost window then. When nothing is shown it shrinks to a pixel and captures work as usual.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
 - While you are in a room, a held Tab shows the room panel and doesn't reach other apps, and Alt + T opens the text box instead of reaching the app underneath. Change these keys, or turn the features off, in Settings → Room and Settings → Features.
 - While lolPing is on, Ctrl + drag opens the emote wheel instead of copying files or text. Pick another emote key, or turn it off, in Settings → Emotes.

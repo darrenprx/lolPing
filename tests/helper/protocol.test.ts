@@ -33,7 +33,7 @@ const sim = (ev: string, extra: Record<string, unknown> = {}) => ({ type: 'sim',
 describe('hook-helper --simulate', () => {
   it('announces itself first', async () => {
     const events = await simulate([]);
-    expect(events[0]).toEqual({ type: 'ready', version: 4 });
+    expect(events[0]).toEqual({ type: 'ready', version: 5 });
   });
 
   it('opens and releases the wheel on Alt+drag', async () => {

@@ -2,7 +2,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <tlhelp32.h>
+#include <winver.h>
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -37,6 +39,125 @@ bool isExtendedVk(uint32_t vk) {
 }
 
 bool isKeyDown(uint32_t vk) { return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0; }
+
+// One process image's entry: its file name and full path as the file system names them, UTF-8. Empty when the
+// image can't be read. QueryFullProcessImageName crosses a process boundary but sends no messages.
+AppEntry entryFromPath(const std::wstring& path) {
+  const int bytes = WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0, nullptr, nullptr);
+  if (bytes <= 0) return {};
+  std::string utf8(static_cast<size_t>(bytes), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), utf8.data(), bytes, nullptr, nullptr);
+  const size_t slash = utf8.find_last_of("\\/");
+  AppEntry out;
+  out.path = utf8;
+  out.name = slash == std::string::npos ? utf8 : utf8.substr(slash + 1);
+  return out;
+}
+
+AppEntry processOf(HWND window) {
+  DWORD pid = 0;
+  if (GetWindowThreadProcessId(window, &pid) == 0 || pid == 0) return {};
+  const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (process == nullptr) return {};
+  wchar_t wide[MAX_PATH];
+  DWORD size = MAX_PATH;
+  AppEntry out;
+  if (QueryFullProcessImageNameW(process, 0, wide, &size) && size > 0) out = entryFromPath(std::wstring(wide, size));
+  CloseHandle(process);
+  return out;
+}
+
+// The foreground window's process image name ("Photoshop.exe"), or '' when it can't be read. The query only
+// runs when the foreground window changed since the last call, so the per-event cost is one GetForegroundWindow.
+std::string foregroundAppName() {
+  static HWND last = nullptr;
+  static std::string name;
+  const HWND fg = GetForegroundWindow();
+  if (fg == nullptr) {
+    last = nullptr;
+    name.clear();
+    return name;
+  }
+  if (fg == last) return name;
+  last = fg;
+  name = processOf(fg).name;
+  return name;
+}
+
+// The file's FileDescription ("网易UU远程" for GameViewer.exe): the words the system and IMEs show for an app, which
+// is what a user types. Only for the settings page's app list, never in the hooks.
+std::string fileDescription(const std::string& pathUtf8) {
+  if (pathUtf8.empty()) return {};
+  const int wideLen = MultiByteToWideChar(CP_UTF8, 0, pathUtf8.data(), static_cast<int>(pathUtf8.size()), nullptr, 0);
+  if (wideLen <= 0) return {};
+  std::wstring path(static_cast<size_t>(wideLen), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, pathUtf8.data(), static_cast<int>(pathUtf8.size()), path.data(), wideLen);
+  DWORD handle = 0;
+  const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &handle);
+  if (size == 0) return {};
+  std::vector<BYTE> block(size);
+  if (!GetFileVersionInfoW(path.c_str(), 0, size, block.data())) return {};
+  struct Lang { WORD language, codepage; }* langs = nullptr;
+  UINT langCount = 0;
+  if (!VerQueryValueW(block.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&langs), &langCount) ||
+      langCount < sizeof(Lang) || langs == nullptr)
+    return {};
+  wchar_t key[64];
+  swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\FileDescription", langs[0].language, langs[0].codepage);
+  wchar_t* value = nullptr;
+  UINT valueLen = 0;
+  if (!VerQueryValueW(block.data(), key, reinterpret_cast<void**>(&value), &valueLen) || value == nullptr) return {};
+  const std::wstring wide(value, valueLen > 0 ? valueLen - 1 : 0);  // the length counts the NUL
+  const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
+  if (bytes <= 0) return {};
+  std::string utf8(static_cast<size_t>(bytes), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), utf8.data(), bytes, nullptr, nullptr);
+  return utf8;
+}
+
+// Windows' own hosts and brokers: svchost farms hold no windows, the window hosts hold them for other apps -
+// nobody works inside one, and an exception entry would silently do nothing. Same idea as the shell surfaces
+// the fullscreen probe skips.
+bool isSystemHost(const std::string& name) {
+  static const char* const hosts[] = {
+      "ApplicationFrameHost.exe", "TextInputHost.exe", "ShellExperienceHost.exe", "SearchHost.exe",
+      "StartMenuExperienceHost.exe", "RuntimeBroker.exe", "dllhost.exe", "taskhostw.exe", "Widgets.exe",
+      "WidgetService.exe", "svchost.exe", "csrss.exe", "smss.exe", "services.exe", "lsass.exe", "wininit.exe",
+      "winlogon.exe", "dwm.exe", "conhost.exe", "OpenConsole.exe", "fontdrvhost.exe", "audiodg.exe", "spoolsv.exe",
+      "WudfHost.exe", "MsMpEng.exe", "NisSrv.exe", "SecurityHealthService.exe", "SecurityHealthSystray.exe",
+      "SearchIndexer.exe", "msedgewebview2.exe", "steamwebhelper.exe", "hook-helper.exe",
+  };
+  for (const char* host : hosts) {
+    if (_stricmp(name.c_str(), host) == 0) return true;
+  }
+  return false;
+}
+
+// The apps behind the windows the user can switch to: visible, titled, not a tool window or a shell surface,
+// deduplicated by name, at most 64. Run only when the settings page asks, never in the hooks.
+BOOL CALLBACK collectAppWindow(HWND window, LPARAM lp) {
+  auto& apps = *reinterpret_cast<std::vector<AppEntry>*>(lp);
+  if (apps.size() >= 64) return FALSE;
+  if (!IsWindowVisible(window)) return TRUE;
+  if (GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
+  if (GetWindowTextLengthW(window) <= 0) return TRUE;
+  wchar_t cls[64];
+  if (GetClassNameW(window, cls, 64) != 0 &&
+      (lstrcmpiW(cls, L"Progman") == 0 || lstrcmpiW(cls, L"WorkerW") == 0 || lstrcmpiW(cls, L"Shell_TrayWnd") == 0))
+    return TRUE;
+  const AppEntry app = processOf(window);
+  if (app.name.empty() || isSystemHost(app.name)) return TRUE;
+  if (std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == app.name; }))
+    apps.push_back(app);
+  return TRUE;
+}
+
+std::vector<AppEntry> runningApps() {
+  std::vector<AppEntry> apps;
+  EnumWindows(collectAppWindow, reinterpret_cast<LPARAM>(&apps));
+  for (auto& app : apps) app.desc = fileDescription(app.path);
+  return apps;
+}
 
 // True when the click at (x, y) lands on a monitor that the foreground window covers whole: a game, or any
 // fullscreen app, owns that screen, so trigger+click belongs to it, not to a wheel. A click on another
@@ -226,6 +347,7 @@ int runHooks(Output& out) {
   g_decision = &decision;
   g_out = &out;
   decision.setFullscreenProbe(clickIsOnFullscreenApp);
+  decision.setForegroundApp(foregroundAppName);
   const DWORD threadId = GetCurrentThreadId();
   g_hookThreadId = threadId;
   MSG msg;
@@ -271,6 +393,8 @@ int runHooks(Output& out) {
         case Command::Kind::Config: apply(decision.setConfig(c.config)); break;
         case Command::Kind::SetEnabled: apply(decision.setEnabled(c.flag)); break;
         case Command::Kind::Suspend: apply(decision.setSuspended(c.flag)); break;
+        case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
+        case Command::Kind::AppList: g_out->appList(runningApps()); break;
         case Command::Kind::Shutdown: PostQuitMessage(0); break;
         default: out.error("invalid command: " + *text); break;
       }

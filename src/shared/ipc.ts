@@ -131,6 +131,8 @@ export function parsePanelAction(raw: unknown): PanelAction | null {
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
 export const OVERLAY_ASSETS = 'overlay:assets';
+/** overlay renderer → main: boolean, whether anything is on screen; main parks the window while not. */
+export const OVERLAY_OCCUPANCY = 'overlay:occupancy';
 /** overlay renderer → main: {id, x, y} of a ping the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
@@ -158,6 +160,18 @@ export type SetSettingsResult = { ok: true; settings: Settings } | { ok: false; 
 // with the overlay preload (a sandboxed preload can only require('electron'), never a sibling file).
 export { SETTINGS_CH } from './settingsChannels';
 
+/** One app the exception dropdown offers: its process name, image path and icon. */
+export interface RunningApp {
+  /** The process image's file name, "Photoshop.exe"; what the exception list stores. */
+  name: string;
+  /** The words the system shows for it (the file's description); what a user types, so adding can match it. */
+  desc: string;
+  /** The image's full path; only to fetch the icon. */
+  path: string;
+  /** The icon as a PNG data URL, null where there is none worth showing. */
+  icon: string | null;
+}
+
 /** window.settingsApi in the settings renderer. */
 export interface SettingsApi {
   readonly platform: Platform;
@@ -183,6 +197,11 @@ export interface SettingsApi {
   openProjectPage(): Promise<void>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
+  /** Hides the settings window for three seconds, then names the app that stayed in front, or null when the helper
+   * can't tell. Feeds the app-exception list's capture button. */
+  captureForegroundApp(): Promise<string | null>;
+  /** The apps the user can switch to right now, with icons, [] when the helper can't tell. Feeds the exception list's dropdown. */
+  getAppList(): Promise<RunningApp[]>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
   getRoom(): Promise<RoomState>;

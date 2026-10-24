@@ -37,6 +37,8 @@ export interface Settings {
   clickPingId: PingId;
   /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
   gameCheck: boolean;
+  /** Apps where lolPing stands down entirely, gestures and hotkeys alike: process names without .exe. */
+  skipApps: string[];
   /** The displayed SVG size, shared by the ping and emote wheels. */
   wheelSizePx: number;
   /** The wheel's slices, top (N) then clockwise. */
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dragThresholdPx: 8,
   clickPing: false,
   gameCheck: true,
+  skipApps: [],
   clickPingId: DEFAULT_CLICK_PING,
   wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
@@ -153,6 +156,26 @@ export const LIMITS = {
 type NumKey = keyof typeof LIMITS;
 type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'keepLastPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
   | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
+
+/** At most MAX_SKIP_APPS entries: the list exists for a handful of apps. */
+export const MAX_SKIP_APPS = 32;
+
+/** One process name as the exception list stores it: trimmed, without a trailing ".exe". Case is kept for display;
+ * every match, here and in the helper, ignores it. */
+export const appNameStem = (name: string): string => {
+  const trimmed = name.trim();
+  return trimmed.toLowerCase().endsWith('.exe') ? trimmed.slice(0, -4) : trimmed;
+};
+
+/**
+ * What an exception entry should store for `input`: a running app's process name when the user typed the words the
+ * system shows for it (an IME offers "网易UU远程", the process is GameViewer.exe), else the typed name as a stem.
+ */
+export const resolveSkipApp = (input: string, running: readonly { name: string; desc?: string }[]): string => {
+  const typed = input.trim().toLowerCase();
+  const match = running.find((a) => typeof a.desc === 'string' && a.desc.trim().toLowerCase() === typed);
+  return match ? appNameStem(match.name) : appNameStem(input);
+};
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isVk = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 254;
@@ -264,6 +287,20 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
+/** Process names where lolPing stands down: trimmed, no .exe, no duplicate stems; the first MAX_SKIP_APPS. */
+function skipApps(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const e of raw) {
+    if (out.length >= MAX_SKIP_APPS) break;
+    if (typeof e !== 'string') continue;
+    const stem = appNameStem(e);
+    if (stem === '' || out.some((kept) => kept.toLowerCase() === stem.toLowerCase())) continue;
+    out.push(stem);
+  }
+  return out;
+}
+
 /** Valid entries only, rebuilt field by field: well-formed unique ids, boolean flags, a safe name; the first MAX_CUSTOM_EMOTES. */
 function customEmotes(raw: unknown): CustomEmote[] {
   if (!Array.isArray(raw)) return [];
@@ -306,6 +343,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
     gameCheck: bool(r.gameCheck, 'gameCheck'),
+    skipApps: skipApps(r.skipApps),
     wheelSizePx: num(r.wheelSizePx, 'wheelSizePx'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],

@@ -12,6 +12,7 @@ import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, soundLevel, type OverlaySettings } from '../../shared/settings';
 import '../shared/emoteFx.css';
 import { EmoteStage } from './emoteStage';
+import { Occupancy } from './occupancy';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
@@ -94,12 +95,30 @@ function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag
 
 const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);
 
+// Main parks this window at 1×1 while nothing is on it, so screenshot tools that walk the window list see no
+// full-screen layer (issue #127); any spawn expands it first. The DOM is the truth about "anything on it".
+const occupancy = new Occupancy(
+  () =>
+    pingLayer.childElementCount > 0 || emoteLayer.childElementCount > 0 || textLayer.childElementCount > 0 ||
+    toastLayer.childElementCount > 0 || pingWheel.isOpen || emoteWheel.isOpen,
+  (occupied) => window.overlay.setOccupancy(occupied),
+);
+for (const layer of [pingLayer, emoteLayer, textLayer, toastLayer]) {
+  new MutationObserver(() => occupancy.refresh()).observe(layer, { childList: true });
+}
+
 window.overlay.on('overlay:settings', applySettings);
-window.overlay.on('wheel:open', (p) => wheelOf(p).open(p.x, p.y));
+window.overlay.on('wheel:open', (p) => {
+  wheelOf(p).open(p.x, p.y);
+  occupancy.refresh();
+});
 window.overlay.on('wheel:move', (p) => wheelOf(p).move(p.x, p.y));
 window.overlay.on('wheel:release', (p) => {
   const chosen = wheelOf(p).release(p.x, p.y);
-  if (!chosen) return;
+  if (!chosen) {
+    occupancy.refresh();
+    return;
+  }
   if (p.wheel === 'emote') {
     emote('self', localArt(chosen.key), chosen.x, chosen.y);
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
@@ -108,10 +127,12 @@ window.overlay.on('wheel:release', (p) => {
     ping(def, chosen.x, chosen.y, undefined, settings.keepLastPing);
     window.overlay.reportPing(def.id, chosen.x, chosen.y);
   }
+  occupancy.refresh();
 });
 window.overlay.on('wheel:cancel', () => {
   pingWheel.cancel();
   emoteWheel.cancel();
+  occupancy.refresh();
 });
 window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag, p.keep === true));
 window.overlay.on('ping:unkeep', dropKeptPing);

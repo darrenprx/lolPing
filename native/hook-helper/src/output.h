@@ -5,10 +5,19 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "decision.h"
 
 namespace lp {
+
+/** One app the user can switch to: its process image's file name, the words the system shows for it (the file's
+ * description on Windows, the localised name on macOS; empty when neither is there), and the image's path. */
+struct AppEntry {
+  std::string name;
+  std::string desc;
+  std::string path;
+};
 
 // Writes protocol lines on a background thread so the hook thread never blocks
 // on a full stdout pipe. When the queue is full, new lines are dropped.
@@ -24,6 +33,8 @@ class Output {
   void line(std::string s);
   void emit(const Emit& e);
   void ready();
+  void foregroundApp(const std::string& name);
+  void appList(const std::vector<AppEntry>& apps);
   void error(const std::string& message);
   void error(const std::string& code, const std::string& message);  // machine-readable code, e.g. "noAccess"
   void stop();  // drains the queue, then joins the writer thread

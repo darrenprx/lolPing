@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_EMOTED, OVERLAY_OCCUPANCY, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -21,6 +21,7 @@ const h = vi.hoisted(() => {
       hiddenInMissionControl: boolean;
     }>,
     handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
+    screen: null as { emit: (event: string) => boolean } | null,
     isMac: false,
     isLinux: false,
     displays,
@@ -77,6 +78,7 @@ vi.mock('electron', async () => {
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
   screen.setMaxListeners(0); // every test starts a manager on this one fake screen
+  h.screen = screen;
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
 });
@@ -413,5 +415,53 @@ describe('OverlayManager z-order', () => {
     mac.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
     mac.previewPing('danger');
     expect(raised()).toEqual([[], []]);
+  });
+});
+
+describe('OverlayManager idle parking', () => {
+  const sender = (i: number): unknown => h.windows[i].webContents;
+  const report = (i: number, occupied: boolean): void => {
+    h.handlers.get(OVERLAY_OCCUPANCY)!({ sender: sender(i) }, occupied);
+  };
+
+  it('shrinks an idle overlay to a pixel after a beat and expands before the next spawn', () => {
+    vi.useFakeTimers();
+    try {
+      report(0, false);
+      vi.advanceTimersByTime(250);
+      expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+      mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+      expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1079 });
+      expect(sent(0)[0][0]).toBe('wheel:open');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a full overlay when something spawns inside the margin', () => {
+    vi.useFakeTimers();
+    try {
+      report(0, false);
+      mgr.handle({ type: 'click', x: 50, y: 60, wheel: 'ping' }); // a ping in flight as the idle report lands
+      vi.advanceTimersByTime(250);
+      expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1079 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('grows back on an occupied report while parked, and stays parked across a display change', () => {
+    vi.useFakeTimers();
+    try {
+      report(1, false);
+      vi.advanceTimersByTime(250);
+      expect(h.windows[1].bounds).toEqual({ x: 1920, y: 0, width: 1, height: 1 });
+      h.screen!.emit('display-metrics-changed');
+      expect(h.windows[1].bounds).toEqual({ x: 1920, y: 0, width: 1, height: 1 });
+      report(1, true);
+      expect(h.windows[1].bounds).toEqual({ x: 1920, y: 0, width: 1280, height: 1023 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

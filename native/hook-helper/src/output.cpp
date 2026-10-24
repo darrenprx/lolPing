@@ -41,8 +41,22 @@ void Output::line(std::string s) {
 
 void Output::emit(const Emit& e) { line(formatEmit(e)); }
 
-// Version 4: the config takes a panel key and can emit panel.
-void Output::ready() { line("{\"type\":\"ready\",\"version\":4}"); }
+// Version 5: the config takes the skipped-app list, and getForegroundApp asks for the front app.
+void Output::ready() { line("{\"type\":\"ready\",\"version\":5}"); }
+
+void Output::foregroundApp(const std::string& name) {
+  line("{\"type\":\"foregroundApp\",\"name\":\"" + jsonEscape(name) + "\"}");
+}
+
+void Output::appList(const std::vector<AppEntry>& apps) {
+  std::string out = "{\"type\":\"appList\",\"apps\":[";
+  for (size_t i = 0; i < apps.size(); ++i) {
+    if (i != 0) out += ",";
+    out += "{\"name\":\"" + jsonEscape(apps[i].name) + "\",\"desc\":\"" + jsonEscape(apps[i].desc) + "\",\"path\":\"" +
+           jsonEscape(apps[i].path) + "\"}";
+  }
+  line(out + "]}");
+}
 
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 

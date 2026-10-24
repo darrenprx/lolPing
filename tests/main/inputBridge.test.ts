@@ -45,12 +45,32 @@ describe('InputBridge', () => {
   it('re-sends the last config whenever the helper becomes ready', async () => {
     const b = bridge('echo');
     b.send({
-      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true, emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
+      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true, skipApps: '', emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false,
       dragThresholdPx: 8, toggleMods: 3, toggleVk: 80, textMods: 3, textVk: 84, panelVk: 0, enabled: true,
     });
     const echoed = waitFor<HelperEvent>(b, 'event', (e) => e.type === 'error' && e.message === 'got:config');
     b.start();
     await echoed;
+  });
+
+  it('asks the helper and resolves its answer', async () => {
+    const b = bridge('answer');
+    const read = (e: HelperEvent) => (e.type === 'foregroundApp' ? e.name : null);
+    expect(await b.ask({ type: 'getForegroundApp' }, read, 'none')).toBe('none'); // not running yet
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    expect(await b.ask({ type: 'getForegroundApp' }, read, 'none')).toBe('Photoshop.exe');
+  });
+
+  it('settles the fallback when nothing answers in time', async () => {
+    const b = bridge('answer');
+    const running = waitFor<string>(b, 'status', (s) => s === 'running');
+    b.start();
+    await running;
+    // setEnabled is echoed as an error event, which the question does not read: it runs out of time instead.
+    const read = (e: HelperEvent) => (e.type === 'appList' ? e.apps[0]?.name ?? 'none' : null);
+    expect(await b.ask({ type: 'setEnabled', enabled: true }, read, 'none', 30)).toBe('none');
   });
 
   it('restarts a crashing helper and gives up after three crashes', async () => {
