@@ -45,8 +45,23 @@ void Output::line(std::string s) {
 
 void Output::emit(const Emit& e) { line(formatEmit(e)); }
 
-// Version 6: the config takes askDoubleTap; askWords and scroll events and the staleWatch command are new.
-void Output::ready() { line("{\"type\":\"ready\",\"version\":6}"); }
+// Version 7: the config takes the skipped-app list, and the foregroundApp and appList events
+// and the getForegroundApp and getAppList commands are new.
+void Output::ready() { line("{\"type\":\"ready\",\"version\":7}"); }
+
+void Output::foregroundApp(const std::string& name) {
+  line("{\"type\":\"foregroundApp\",\"name\":\"" + jsonEscape(name) + "\"}");
+}
+
+void Output::appList(const std::vector<AppEntry>& apps) {
+  std::string out = "{\"type\":\"appList\",\"apps\":[";
+  for (size_t i = 0; i < apps.size(); ++i) {
+    if (i != 0) out += ",";
+    out += "{\"name\":\"" + jsonEscape(apps[i].name) + "\",\"desc\":\"" + jsonEscape(apps[i].desc) + "\",\"path\":\"" +
+           jsonEscape(apps[i].path) + "\"}";
+  }
+  line(out + "]}");
+}
 
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 

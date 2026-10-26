@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createInterface } from 'node:readline';
 import {
-  HELPER_EXIT_NO_ACCESS, parseHelperLine, serializeCommand, type HelperCommand, type HelperStatus,
+  HELPER_EXIT_NO_ACCESS, parseHelperLine, serializeCommand, type HelperCommand, type HelperEvent, type HelperStatus,
 } from '../shared/protocol';
 import { RestartPolicy } from './restartPolicy';
 
@@ -25,6 +25,7 @@ export class InputBridge extends EventEmitter {
   private lastConfig: HelperCommand | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
   private current: HelperStatus = 'starting';
+  private questions: ((ev: HelperEvent) => boolean)[] = [];
   private readonly policy: RestartPolicy;
   private readonly now: () => number;
 
@@ -72,6 +73,30 @@ export class InputBridge extends EventEmitter {
     if (!this.child && !this.restartTimer) this.start();
   }
 
+  /**
+   * One question to the running helper: resolves what `read` accepts from its next events, or `fallback` once the
+   * helper is gone or stays silent past `ms`. `read` returning null means "not my event" and keeps the question open.
+   */
+  ask<T>(cmd: HelperCommand, read: (ev: HelperEvent) => T | null, fallback: T, ms = 1500): Promise<T> {
+    if (this.current !== 'running') return Promise.resolve(fallback);
+    return new Promise((resolve) => {
+      const question = (ev: HelperEvent): boolean => {
+        const answer = read(ev);
+        if (answer === null) return false;
+        clearTimeout(timer);
+        resolve(answer);
+        return true; // the pass that saw it drops the question
+      };
+      const timer = setTimeout(() => {
+        const i = this.questions.indexOf(question);
+        if (i >= 0) this.questions.splice(i, 1);
+        resolve(fallback);
+      }, ms);
+      this.questions.push(question);
+      this.write(cmd);
+    });
+  }
+
   /** Always settles: on the child's 'exit' or 'error', or after a 1 s fallback that kills it. */
   stop(): Promise<void> {
     this.stopping = true;
@@ -107,6 +132,7 @@ export class InputBridge extends EventEmitter {
       this.emit('log', `unparsed helper output: ${line}`);
       return;
     }
+    if (this.questions.length > 0) this.questions = this.questions.filter((q) => !q(ev));
     if (ev.type === 'ready') {
       this.setStatus('running');
       if (this.lastConfig) this.write(this.lastConfig);
