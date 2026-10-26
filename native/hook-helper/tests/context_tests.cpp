@@ -665,7 +665,8 @@ static void test_form_fields_file_keeps_one_line_per_field_and_the_caps() {
   f.value = "line one\nline two";
   const std::string text = formFieldsFileText({f});
   CHECK(lines(text).size() == 1);  // the newlines are escaped
-  CHECK(text.find(R"("label":"Say \"hi\"\nthen\ttab")") != std::string::npos);
+  const std::string escapedLabel = R"("label":"Say \"hi\"\nthen\ttab")";
+  CHECK(text.find(escapedLabel) != std::string::npos);
   CHECK(text.find(R"("value":"line one\nline two")") != std::string::npos);
   std::vector<RawField> many;
   for (int i = 0; i < 70; ++i) many.push_back(field("1." + std::to_string(i), "text", "F"));
@@ -1125,7 +1126,8 @@ static void test_parse_set_field_command() {
   CHECK(bad(R"("window":"1","field":"","value":"x")"));
   CHECK(bad(R"("window":"1","field":"1..2","value":"x")"));
   CHECK(bad(R"("window":"1","field":")" + std::string(121, '1') + R"(","value":"x")"));
-  CHECK(bad(R"("window":"1","field":"1.2","value":")" + std::string(2001, 'v') + "\""));
+  const std::string longValue = R"("window":"1","field":"1.2","value":")" + std::string(2001, 'v') + "\"";
+  CHECK(bad(longValue));
   CHECK(bad(R"("field":"1.2","value":"x")"));
   CHECK(bad(R"("window":"1","field":"1.2")"));
 }
