@@ -3,9 +3,9 @@ import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emote
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
-  askKeyClashes, askKeyHeld, asksOnPing, DEFAULT_SETTINGS, keyboardTriggers, mergeSettings, normalizeSettings,
-  overlaySettings, patchClashes, rendererPatch, sameTrigger, separateAskKey, soundLevel, triggerLabel, triggersClash,
-  type TriggerKey,
+  askKeyClashes, askKeyHeld, asksOnPing, DEFAULT_SETTINGS, keyboardTriggers, MAX_SKIP_APPS, mergeSettings,
+  normalizeSettings, overlaySettings, patchClashes, rendererPatch, resolveSkipApp, sameTrigger, separateAskKey,
+  soundLevel, triggerLabel, triggersClash, type TriggerKey,
 } from '../../src/shared/settings';
 import type { AskTrigger } from '../../src/shared/teammate/settings';
 
@@ -315,6 +315,26 @@ describe('emote settings', () => {
   it('custom emotes keep a sound flag only when it is true', () => {
     const list = normalizeSettings({ customEmotes: [{ ...entry('a'), sound: true }, { ...entry('b'), sound: 'yes' }] }).customEmotes;
     expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
+  });
+
+  it('skip apps keep their case but match stems without .exe, deduplicated', () => {
+    expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.EXE', 7, null] }).skipApps)
+      .toEqual(['Photoshop', 'IDEA64', 'nope']);
+    expect(normalizeSettings({ skipApps: 'nope' }).skipApps).toEqual([]);
+    expect(DEFAULT_SETTINGS.skipApps).toEqual([]);
+  });
+
+  it('a typed display name becomes the running app it names', () => {
+    const running = [{ name: 'GameViewer.exe', desc: '网易UU远程' }, { name: 'ZCode.exe', desc: 'ZCode' }];
+    expect(resolveSkipApp(' 网易UU远程 ', running)).toBe('GameViewer');
+    expect(resolveSkipApp('zcode.exe', running)).toBe('zcode');
+    expect(resolveSkipApp('Notepad', running)).toBe('Notepad');
+  });
+
+  it('skip apps keep the first 32', () => {
+    const kept = normalizeSettings({ skipApps: Array.from({ length: 40 }, (_, i) => `app${i}`) }).skipApps;
+    expect(kept).toHaveLength(MAX_SKIP_APPS);
+    expect(kept[0]).toBe('app0');
   });
 
   it('custom emotes keep the first 24', () => {

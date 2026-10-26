@@ -75,6 +75,7 @@ Command parseCommand(const std::string& line, const Config& current) {
     cfg.triggerVk = static_cast<uint32_t>(getInt(m, "triggerVk", cfg.triggerVk));
     cfg.clickPing = getBool(m, "clickPing", cfg.clickPing);
     cfg.gameCheck = getBool(m, "gameCheck", cfg.gameCheck);
+    if (m.count("skipApps") != 0) cfg.skipApps = m["skipApps"];
     if (m.count("emoteTrigger") != 0 && !parseEmoteTrigger(m["emoteTrigger"], cfg.emoteTrigger)) return c;
     cfg.emoteTriggerVk = static_cast<uint32_t>(getInt(m, "emoteTriggerVk", cfg.emoteTriggerVk));
     cfg.emoteClick = getBool(m, "emoteClick", cfg.emoteClick);
@@ -101,6 +102,10 @@ Command parseCommand(const std::string& line, const Config& current) {
   } else if (type == "staleWatch") {
     c.kind = Command::Kind::StaleWatch;
     c.flag = getBool(m, "on", false);
+  } else if (type == "getForegroundApp") {
+    c.kind = Command::Kind::ForegroundApp;
+  } else if (type == "getAppList") {
+    c.kind = Command::Kind::AppList;
   } else if (type == "shutdown") {
     c.kind = Command::Kind::Shutdown;
   } else if (type == "sim") {

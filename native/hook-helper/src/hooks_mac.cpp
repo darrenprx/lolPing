@@ -1,7 +1,9 @@
 // macOS input layer: a CGEventTap feeding the shared Decision logic. Needs Accessibility permission.
+#import <Cocoa/Cocoa.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -43,6 +45,37 @@ bool isKeyDown(uint32_t vk) {
   if (isModifierVk(vk)) return mac::modifierHeld(CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState), vk);
   const int code = mac::vkToKeyCode(vk);
   return code >= 0 && CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, static_cast<CGKeyCode>(code));
+}
+
+// The frontmost app's process name ("Photoshop"), or '' when there is none. The run loop serving the tap is this
+// process's main thread, which is where NSWorkspace answers from, so the query is safe in the tap callback.
+std::string foregroundAppName() {
+  @autoreleasepool {
+    NSRunningApplication* app = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    NSString* name = app.localizedName;
+    return name != nil ? std::string(name.UTF8String) : std::string();
+  }
+}
+
+// The regular apps the user can switch to, by process name and bundle path, at most 64. Asked only by the settings page.
+std::vector<AppEntry> runningApps() {
+  @autoreleasepool {
+    std::vector<AppEntry> apps;
+    for (NSRunningApplication* app in [[NSWorkspace sharedWorkspace] runningApplications]) {
+      if (apps.size() >= 64) break;
+      if (app.activationPolicy != NSApplicationActivationPolicyRegular) continue;
+      NSString* name = app.localizedName;
+      if (name == nil) continue;
+      AppEntry entry;
+      entry.name = name.UTF8String;
+      NSString* path = app.bundleURL.path;
+      if (path != nil) entry.path = path.UTF8String;
+      if (std::none_of(apps.begin(), apps.end(), [&](const AppEntry& a) { return a.name == entry.name; }))
+        apps.push_back(entry);
+    }
+    std::sort(apps.begin(), apps.end(), [](const AppEntry& a, const AppEntry& b) { return a.name < b.name; });
+    return apps;
+  }
 }
 
 CGPoint cursorLocation() {
@@ -205,6 +238,8 @@ void handleCommand(const std::string& text) {
     case Command::Kind::SetEnabled: apply(g_decision->setEnabled(c.flag)); break;
     case Command::Kind::Suspend: apply(g_decision->setSuspended(c.flag)); break;
     case Command::Kind::StaleWatch: apply(g_decision->setStaleWatch(c.flag)); break;
+    case Command::Kind::ForegroundApp: g_out->foregroundApp(foregroundAppName()); break;
+    case Command::Kind::AppList: g_out->appList(runningApps()); break;
     case Command::Kind::Shutdown: CFRunLoopStop(CFRunLoopGetCurrent()); break;
     default: g_out->error("invalid command: " + text); break;
   }
@@ -217,6 +252,7 @@ int runHooks(Output& out) {
   decision.setMaskMenuKeys(false);
   // The repeat watchdog only guards lost key-ups; macOS repeat delay and the repeat setting make repeats unreliable.
   decision.setPanelRepeatGap(0);
+  decision.setForegroundApp(foregroundAppName);
   g_decision = &decision;
   g_out = &out;
 

@@ -371,6 +371,111 @@ static void test_fullscreen_probe_ignored_when_disabled() {
   CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
 }
 
+// An app on the skip list stands down entirely: its clicks and its chords (the text hotkey, the panel key)
+// reach it untouched, while the enable/disable toggle still works there as the way back out.
+static void test_skipped_app_stands_down() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  c.skipApps = "Photoshop.exe,idea64";
+  c.toggleMods = ModCtrl | ModAlt;
+  c.toggleVk = KEY_P;
+  c.textMods = ModAlt;
+  c.textVk = KEY_T;
+  c.panelVk = TAB;
+  Decision d;
+  d.setConfig(c);
+  std::string front = "Photoshop.exe";
+  d.setForegroundApp([&front] { return front; });
+
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(!r.swallow);  // Photoshop keeps the click
+  CHECK(!findEmit(r, Emit::Kind::Click));
+  CHECK(d.state() == S::Idle);
+  CHECK(!d.onEvent(mu(Btn::Left, 100, 100)).swallow);
+  d.onEvent(ku(ALT));
+
+  // Its chords are its own again: the text hotkey passes untouched.
+  d.onEvent(kd(ALT));
+  r = d.onEvent(kd(KEY_T));
+  CHECK(!r.swallow);
+  CHECK(!findEmit(r, Emit::Kind::TextRequested));
+  d.onEvent(ku(KEY_T));
+  d.onEvent(ku(ALT));
+  // The panel key too.
+  r = d.onEvent(kd(TAB));
+  CHECK(!r.swallow);
+  CHECK(!findEmit(r, Emit::Kind::Panel));
+  d.onEvent(ku(TAB));
+
+  // Matching ignores case and the .exe suffix; another app gets gestures back.
+  front = "Explorer.EXE";
+  d.onEvent(kd(ALT));
+  r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
+  d.onEvent(ku(ALT));
+
+  // The toggle still answers in the skipped app: it is the way back out.
+  front = "idea64";
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(CTRL));
+  r = d.onEvent(kd(KEY_P));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Toggled) != nullptr);
+  d.onEvent(ku(KEY_P));
+  d.onEvent(ku(CTRL));
+  d.onEvent(ku(ALT));
+}
+
+// With no apps on the skip list, the foreground app is never queried.
+static void test_skip_apps_empty_never_queries() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.clickPing = true;
+  Decision d;
+  d.setConfig(c);
+  int consulted = 0;
+  d.setForegroundApp([&consulted] { ++consulted; return "photoshop"; });
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(md(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(consulted == 0);
+  r = d.onEvent(mu(Btn::Left, 100, 100));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::Click) != nullptr);
+}
+
+// Adding and removing an app by config takes effect at once, without touching the supplier.
+static void test_skip_apps_live_update() {
+  Config c;
+  c.trigger = Trigger::Alt;
+  Decision d;
+  d.setConfig(c);
+  d.setForegroundApp([] { return "photoshop"; });
+  d.onEvent(kd(ALT));
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);  // not on the list yet
+  d.onEvent(mu(Btn::Left, 100, 100));
+  d.onEvent(ku(ALT));
+
+  Config withApp = c;
+  withApp.skipApps = "photoshop";
+  d.setConfig(withApp);
+  d.onEvent(kd(ALT));
+  CHECK(!d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  d.onEvent(mu(Btn::Left, 100, 100));
+  d.onEvent(ku(ALT));
+
+  d.setConfig(c);  // the list is empty again
+  d.onEvent(kd(ALT));
+  CHECK(d.onEvent(md(Btn::Left, 100, 100)).swallow);
+  d.onEvent(mu(Btn::Left, 100, 100));
+  d.onEvent(ku(ALT));
+}
+
 static void test_alt_up_after_gesture_is_masked() {
   Decision d;
   openWheel(d);
@@ -1386,6 +1491,10 @@ static void test_parse_config_panel_key() {
   CHECK(c.kind == Command::Kind::Config && c.config.panelVk == 9);
   const Command keep = parseCommand(R"({"type":"config"})", c.config);
   CHECK(keep.config.panelVk == 9);
+  const Command front = parseCommand(R"({"type":"getForegroundApp"})", c.config);
+  CHECK(front.kind == Command::Kind::ForegroundApp);
+  const Command list = parseCommand(R"({"type":"getAppList"})", c.config);
+  CHECK(list.kind == Command::Kind::AppList);
 }
 
 static void test_json_parses_flat_objects() {
@@ -1967,6 +2076,9 @@ int main() {
   test_win_tab_clicks_pass_through_and_sync_clears_flag();
   test_fullscreen_game_keeps_the_click();
   test_fullscreen_probe_ignored_when_disabled();
+  test_skipped_app_stands_down();
+  test_skip_apps_empty_never_queries();
+  test_skip_apps_live_update();
   test_toggle_hotkey_disables_and_enables();
   test_hotkey_autorepeat_toggles_once();
   test_hotkey_ignored_while_suspended();

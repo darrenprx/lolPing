@@ -7,7 +7,7 @@
 namespace lp {
 
 struct Command {
-  enum class Kind { Invalid, Config, SetEnabled, Suspend, Shutdown, SimEvent, SimTick, StaleWatch } kind = Kind::Invalid;
+  enum class Kind { Invalid, Config, SetEnabled, Suspend, Shutdown, StaleWatch, ForegroundApp, AppList, SimEvent, SimTick } kind = Kind::Invalid;
   Config config;      // Config
   bool flag = false;  // SetEnabled / Suspend / StaleWatch
   InputEvent event;   // SimEvent
