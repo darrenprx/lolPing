@@ -58,6 +58,9 @@ export interface SettingsIpcDeps {
     clipboardCode(): Promise<string | null>;
     copyCode(): void;
     retryInternet(): void;
+    audience?(value: unknown): void;
+    retryMedia?(): void;
+    setTurnCredential?(value: string): Promise<boolean>;
   };
   teammate: {
     /** null while the teammate feature is off: then no key or instructions are read or stored. */
@@ -199,6 +202,10 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomClipboard, () => d.room.clipboardCode());
   ipcMain.handle(SETTINGS_CH.roomCopy, () => d.room.copyCode());
   ipcMain.handle(SETTINGS_CH.roomRetryInternet, () => d.room.retryInternet());
+  ipcMain.handle(SETTINGS_CH.roomAudience, (_e, raw: unknown) => d.room.audience?.(raw));
+  ipcMain.handle(SETTINGS_CH.roomRetryMedia, () => d.room.retryMedia?.());
+  ipcMain.handle(SETTINGS_CH.roomTurnCredential, (_e, value: unknown) =>
+    typeof value === 'string' && value.length <= 4096 ? d.room.setTurnCredential?.(value) ?? false : false);
 
   registerTeammateIpc(d);
 

@@ -35,6 +35,8 @@ import { EmoteCache } from './emoteCache';
 import { EmoteAnimationTransfer } from './emoteAnimationTransfer';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { EmoteTransfer } from './emoteTransfer';
+import { RoomMediaBridge } from './roomMediaBridge';
+import { mediaConfig } from '../shared/roomMedia';
 import { isFile } from './fileState';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
@@ -291,6 +293,8 @@ function start(): void {
   // Room: pings shared with other lolPing users, on the network and through public relays.
   const lan = new LanTransport();
   const relay = new RelayTransport({ urls: relayUrls() });
+  const mediaSecrets = new SecretStore(join(settingsDir(), 'room-media-secrets'), safeStorage);
+  let media: RoomMediaBridge | undefined;
   const room = new RoomManager({
     transports: [lan, relay],
     now: Date.now,
@@ -308,7 +312,17 @@ function start(): void {
     // With emotes switched off we announce none, so friends don't send stills for emotes we won't use.
     announceEmotes: () => (featureOn(settings, 'emotes') ? announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId) : []),
     animationSync: () => settings.friendEmotes && featureOn(settings, 'emotes'),
+    internetAnimation: () => settings.roomMedia.enabled && settings.friendEmotes && featureOn(settings, 'emotes'),
+    media: { status: (peer) => media?.status(peer) ?? 'off', send: (peer, packet) => media?.sendPacket(peer, packet) },
   });
+  media = new RoomMediaBridge({
+    signal: (peer, signal) => room.sendMediaSignal(peer, signal),
+    packet: (peer, packet) => room.receiveMedia(peer, packet),
+    changed: () => room.mediaChanged(),
+  });
+  const syncMedia = (): void => media?.configure(room.self, mediaConfig(settings.roomMedia, mediaSecrets.key('turn')), room.mediaPeers());
+  room.on('mediaSignal', (peer, signal) => media?.signal(peer, signal));
+  room.on('state', syncMedia);
   // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
   const transfer = new EmoteTransfer({
     now: Date.now,
@@ -323,7 +337,10 @@ function start(): void {
     },
     announced: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
     put: (hash, bytes) => void cache.put(hash, bytes),
-    routeOf: (peer) => room.routeKind(peer),
+    routeOf: (peer) => room.transferRoute(peer),
+    canServe: (peer) => enabled && room.canSendTo(peer),
+    broadcastAllowed: () => room.broadcastAllowed(),
+    sendDirect: (peer, body) => room.sendStill(peer, body),
     sendToLan: (peer, body) => room.sendToLan(peer, body),
     broadcastShared: (body) => room.broadcastShared(body),
     spareSharedToken: (keep) => room.spareSharedToken(keep),
@@ -341,7 +358,7 @@ function start(): void {
     have: (hash) => animationCache.has(hash),
     put: (hash, bytes) => animationCache.put(hash, bytes),
     touch: (hash) => animationCache.touch(hash),
-    send: (peer, body) => room.sendToLan(peer, body),
+    send: (peer, body) => room.sendAnimation(peer, body),
   });
   animationTransfer = animations;
   room.on('animationEmotes', (peer: string, hashes: string[]) => animations.announced(peer, hashes));
@@ -353,6 +370,8 @@ function start(): void {
     const all = screen.getAllDisplays();
     return {
       ...room.state(),
+      turnConfigured: mediaSecrets.hasKey('turn'),
+      mediaSecretsAvailable: mediaSecrets.available(),
       displays: overlays.numbered().map((d) => {
         const scale = all.find((x) => x.id === d.id)?.scaleFactor ?? 1; // show pixels, as the OS display settings do
         return { number: d.number, width: Math.round(d.bounds.width * scale), height: Math.round(d.bounds.height * scale), primary: d.primary };
@@ -1122,8 +1141,14 @@ function start(): void {
       || featureOn(s, 'roomVotes') !== featureOn(previous, 'roomVotes')
       || featureOn(s, 'emotes') !== featureOn(previous, 'emotes')
       || s.friendEmotes !== previous.friendEmotes
+      || s.roomMedia.enabled !== previous.roomMedia.enabled
       || JSON.stringify(s.emoteWheel) !== JSON.stringify(previous.emoteWheel) || s.clickEmoteId !== previous.clickEmoteId
     ) room.profileChanged();
+    if (JSON.stringify(s.roomMedia) !== JSON.stringify(previous.roomMedia)
+      || s.friendEmotes !== previous.friendEmotes || featureOn(s, 'emotes') !== featureOn(previous, 'emotes')) {
+      syncMedia();
+      room.mediaChanged();
+    }
     if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
       if (!featureOn(s, 'rooms')) room.leave();
       tray.setRoomsShown(featureOn(s, 'rooms'));
@@ -1183,6 +1208,17 @@ function start(): void {
       clipboardCode,
       copyCode: copyRoomCode,
       retryInternet: () => relay.retryNow(),
+      audience: (value) => room.setAudience(value),
+      retryMedia: () => media?.retry(),
+      setTurnCredential: async (value) => {
+        try {
+          await mediaSecrets.setKey('turn', value);
+          media?.retry();
+          syncMedia();
+          pushRoom();
+          return true;
+        } catch { return false; }
+      },
     },
     teammate: {
       secrets: () => mate?.secrets ?? null,
@@ -1279,6 +1315,7 @@ function start(): void {
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
     transfer.stop();
     animations.stop();
+    media?.stop();
     stopWaitingForAccess();
     const mateStopped = stopMate();
     tray.destroy();

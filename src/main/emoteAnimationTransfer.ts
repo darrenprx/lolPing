@@ -50,7 +50,7 @@ interface SendQueue {
 export interface EmoteAnimationTransferDeps {
   now(): number;
   enabled(): boolean;
-  /** A live, unmuted LAN member who advertised signed animation support. */
+  /** A live, unmuted member with signed animation support and an available LAN or media route. */
   canPeer(peer: string): boolean;
   announced(): readonly string[];
   animation(hash: string): Promise<Uint8Array | null>;
@@ -60,7 +60,7 @@ export interface EmoteAnimationTransferDeps {
   send(peer: string, body: Record<string, unknown>): void;
 }
 
-/** Optional LAN-only originals. Stills keep their existing transfer, cache and old-peer fallback. */
+/** Optional originals over LAN or encrypted internet media. Stills keep their old-peer fallback. */
 export class EmoteAnimationTransfer {
   private readonly peers = new Map<string, Map<string, Entry>>();
   private readonly sends = new Map<string, SendQueue>();

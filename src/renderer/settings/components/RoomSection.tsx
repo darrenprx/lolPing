@@ -1,4 +1,4 @@
-import { Button, Dropdown, Input, Option, Slider, Spinner } from '@fluentui/react-components';
+import { Button, Checkbox, Dropdown, Input, Option, Radio, RadioGroup, Slider, Spinner } from '@fluentui/react-components';
 import {
   ArrowSync24Regular, Chat24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Image24Regular, Keyboard24Regular, Person24Regular,
   PeopleCommunity24Regular, SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
@@ -17,6 +17,7 @@ import type { Update } from '../useAppState';
 import { useRoomState } from '../useRoomState';
 import { KeyCapture } from './KeyCapture';
 import { SettingRow, SwitchRow } from './rows';
+import { RoomMediaSection } from './RoomMediaSection';
 
 const { max: LIMIT_MAX } = LIMITS.incomingPingLimit;
 /** The slider runs 1…max+1; its last stop is Unlimited (stored as 0). */
@@ -83,10 +84,14 @@ function JoinCard() {
   );
 }
 
-function MemberRow({ m }: { m: RoomMember }) {
+function MemberRow({ m, room }: { m: RoomMember; room: RoomState }) {
   const t = useText();
   return (
     <div className="member">
+      {!m.self && room.audience?.mode === 'selected' ? <Checkbox disabled={!m.direct}
+        aria-label={m.name} checked={room.audience.peers.includes(m.peer)}
+        onChange={(_, d) => void api.setRoomAudience({ mode: 'selected', peers: d.checked
+          ? [...(room.audience?.peers ?? []), m.peer] : (room.audience?.peers ?? []).filter((p) => p !== m.peer) })} /> : null}
       <span className="tagDot" style={{ background: tagColorCss(m.color, m.rgb) }} />
       <span className="memberName">
         {m.name}
@@ -95,6 +100,8 @@ function MemberRow({ m }: { m: RoomMember }) {
         {m.noChat ? <span className="desc">{t.memberNoChat}</span> : null}
         {m.textOff ? <span className="desc">{t.memberTextOff}</span> : null}
         {m.votesOff ? <span className="desc">{t.memberVotesOff}</span> : null}
+        {!m.self && !m.direct && room.audience?.mode === 'selected' ? <span className="desc">{t.roomDirectUpgrade}</span> : null}
+        {!m.self && m.media && m.media !== 'off' ? <span className="desc">{t.roomMediaStatus[m.media]}</span> : null}
       </span>
       {m.self ? null : <span className={`badge ${m.path}`}>{t.roomPath[m.path]}</span>}
       {m.status === 'paused' ? <span className="badge">{t.roomPaused}</span> : null}
@@ -156,8 +163,19 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
           </div>
         </div>
       ) : null}
+      <SettingRow className="roomAudience" icon={<PeopleCommunity24Regular />} title={t.roomAudience} description={t.roomAudienceDesc}>
+        <RadioGroup layout="horizontal" value={room.audience?.mode ?? 'all'} aria-label={t.roomAudience}
+          onChange={(_, d) => {
+            if (d.value === 'all' || d.value === 'selected' || d.value === 'self')
+              void api.setRoomAudience({ mode: d.value, peers: room.audience?.peers ?? [] });
+          }}>
+          <Radio value="all" label={t.roomAudienceModes.all} />
+          <Radio value="selected" label={t.roomAudienceModes.selected} />
+          <Radio value="self" label={t.roomAudienceModes.self} />
+        </RadioGroup>
+      </SettingRow>
       <div className="card members">
-        {room.members.map((m) => <MemberRow key={m.peer} m={m} />)}
+        {room.members.map((m) => <MemberRow key={m.peer} m={m} room={room} />)}
         {alone ? (
           <div className="desc roomWaiting">
             {room.lonely ? `${t.roomWaiting} ${t.roomLonely}` : t.roomWaiting}
@@ -218,6 +236,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
         checked={s.friendEmotes} onChange={(v) => void update({ friendEmotes: v })} />
       <SwitchRow icon={<Globe24Regular />} title={t.roomInternet} description={t.roomInternetDesc}
         checked={s.allowInternet} onChange={(v) => void update({ allowInternet: v })} />
+      <RoomMediaSection settings={s} room={room} update={update} />
       {featureOn(s, 'roomText') ? (
         <>
           <SettingRow icon={<Chat24Regular />} title={t.roomTextStyle} description={t.roomTextStyleDesc}>

@@ -43,6 +43,10 @@ export interface PresenceMsg extends Base {
   pk?: string;
   /** Optional LAN animation transfer capability; absent on older apps. */
   ea?: 1;
+  /** Pairwise X25519 key bound by this presence's Ed25519 signature. */
+  dk?: string;
+  /** Internet animation data channels, enabled by the user. */
+  er?: 1;
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -143,7 +147,19 @@ export interface AnimationChunkMsg extends Base {
   b: string;
 }
 export type AnimationMessage = AnimationWantMsg | AnimationInfoMsg | AnimationChunkMsg;
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg | AnimationMessage;
+/** Only accepted in a pairwise encrypted packet. Older apps reject that packet format. */
+export interface EmoteListMsg extends Base {
+  t: 'emote-list';
+  em: string[];
+}
+export interface RtcMsg extends Base {
+  t: 'rtc';
+  id: string;
+  i: number;
+  n: number;
+  s: string;
+}
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg | AnimationMessage | EmoteListMsg | RtcMsg;
 
 /** Signed animation packets retain room for worst-case sequence numbers under MAX_PACKET. */
 export const ANIMATION_CHUNK_BYTES = 540;
@@ -225,6 +241,8 @@ export function validateMessage(raw: unknown): RoomMessage | null {
         t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
         em: emList(em), nf: nfList(nf), ...(typeof pk === 'string' && PK_RE.test(pk) ? { pk } : {}),
         ...(raw.ea === 1 ? { ea: 1 as const } : {}),
+        ...(typeof raw.dk === 'string' && PK_RE.test(raw.dk) ? { dk: raw.dk } : {}),
+        ...(raw.er === 1 ? { er: 1 as const } : {}),
       };
       // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
       return isTagRgb(rgb) ? { ...presence, rgb } : presence;
@@ -309,6 +327,14 @@ export function validateMessage(raw: unknown): RoomMessage | null {
     }
     case 'bye':
       return { t, ...base };
+    case 'emote-list':
+      return { t, ...base, em: emList(raw.em) };
+    case 'rtc': {
+      const { id, i, n, s } = raw;
+      if (typeof id !== 'string' || !PEER_RE.test(id) || !isUint(i) || !isUint(n) || n < 1 || n > 64 || i >= n) return null;
+      if (typeof s !== 'string' || s.length < 1 || s.length > 600) return null;
+      return { t, ...base, id, i, n, s };
+    }
     default:
       return null;
   }

@@ -13,6 +13,7 @@ import { isTagColor, isTagRgb, readableTagRgb, type TagRgb } from './roomColors'
 import { parseRoomCode } from './roomCode';
 import { sanitizeName } from './roomProtocol';
 import { isVersion } from './update';
+import { DEFAULT_ROOM_MEDIA, normalizeRoomMedia, type RoomMediaSettings } from './roomMedia';
 import type { PingTag } from './ipc';
 import { intentFor } from './teammate/intents';
 import { DEFAULT_TEAMMATE, normalizeTeammate, type TeammateSettings } from './teammate/settings';
@@ -67,6 +68,7 @@ export interface Settings {
   /** Pings per second accepted from each room member; 0 = unlimited. */
   incomingPingLimit: number;
   allowInternet: boolean;
+  roomMedia: RoomMediaSettings;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
   lastRoomCode: string | null;
@@ -128,6 +130,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tagColorCustom: null,
   incomingPingLimit: 5,
   allowInternet: true,
+  roomMedia: { ...DEFAULT_ROOM_MEDIA },
   rejoinRoom: true,
   lastRoomCode: null,
   roomMuted: false,
@@ -360,6 +363,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     tagColorCustom: isTagRgb(r.tagColorCustom) ? readableTagRgb(r.tagColorCustom) : null,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
+    roomMedia: normalizeRoomMedia(r.roomMedia),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
     roomMuted: bool(r.roomMuted, 'roomMuted'),

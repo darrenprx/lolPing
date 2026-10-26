@@ -146,6 +146,11 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.permission ol { margin: 6px 0 12px; padding-left: 18px; }
 .card.permission .actions { display: flex; gap: 8px; }
 /* Room */
+.card.roomAudience, .card.roomMediaField { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px 16px; }
+.card.roomAudience .ctl, .card.roomMediaField .ctl { grid-column: 2; min-width: 0; }
+.roomAudience .fui-RadioGroup { flex-wrap: wrap; }
+.card.roomMediaField .ctl { width: 320px; max-width: 100%; }
+.roomMediaField .fui-Input { flex: 1; min-width: 0; }
 .swatches { display: flex; gap: 6px; align-items: center; }
 /* display: contents keeps the radiogroup wrapper out of the flex row, so the picker sits beside the palette. */
 .swatchRow { display: contents; }
