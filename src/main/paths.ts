@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
 
-export type Page = 'overlay' | 'settings' | 'text' | 'panel' | 'teammate';
+export type Page = 'overlay' | 'settings' | 'text' | 'panel' | 'teammate' | 'media';
 
 export const PLATFORM: Platform = platformOf(process.platform);
 export const IS_MAC = PLATFORM === 'mac';

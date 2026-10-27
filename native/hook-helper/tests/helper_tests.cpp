@@ -1392,7 +1392,8 @@ static void test_json_parses_flat_objects() {
   std::map<std::string, std::string> m;
   CHECK(parseFlatJson(R"({"type":"config","enabled":true,"dragThresholdPx":8,"trigger":"alt"})", m));
   CHECK(m["type"] == "config" && m["enabled"] == "true" && m["dragThresholdPx"] == "8" && m["trigger"] == "alt");
-  CHECK(parseFlatJson(R"( { "msg" : "a\"b\\c" } )", m) && m["msg"] == "a\"b\\c");
+  const std::string escapedJson = R"( { "msg" : "a\"b\\c" } )";
+  CHECK(parseFlatJson(escapedJson, m) && m["msg"] == "a\"b\\c");
   CHECK(parseFlatJson("{}", m) && m.empty());
 }
 

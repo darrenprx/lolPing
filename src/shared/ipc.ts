@@ -3,7 +3,7 @@ import type { Lang } from './i18n';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
-import type { JoinResult, RoomState, RoomStateCore } from './room';
+import type { JoinResult, RoomAudience, RoomState, RoomStateCore } from './room';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 import type { HistoryLine } from './roomHistory';
 import { PEER_RE } from './roomProtocol';
@@ -280,6 +280,9 @@ export interface SettingsApi {
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
   getRoom(): Promise<RoomState>;
+  setRoomAudience(audience: RoomAudience): Promise<void>;
+  retryRoomMedia(): Promise<void>;
+  setRoomTurnCredential(value: string): Promise<boolean>;
   onRoom(cb: (s: RoomState) => void): () => void;
   createRoom(): Promise<void>;
   /** Accepts a code or any text containing one. */

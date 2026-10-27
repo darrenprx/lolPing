@@ -5,9 +5,9 @@ import { useId, useState, type ReactNode } from 'react';
 import { LIMITS } from '../../../shared/settings';
 import { useText } from '../text';
 
-export function SettingRow(props: { icon: ReactNode; title: ReactNode; description?: ReactNode; dim?: boolean; children: ReactNode }) {
+export function SettingRow(props: { icon: ReactNode; title: ReactNode; description?: ReactNode; dim?: boolean; className?: string; children: ReactNode }) {
   return (
-    <div className={`card${props.dim ? ' dim' : ''}`}>
+    <div className={`card${props.dim ? ' dim' : ''}${props.className ? ` ${props.className}` : ''}`}>
       {props.icon === null ? null : <span className="icon">{props.icon}</span>}
       <div className="lbl">
         {props.title}

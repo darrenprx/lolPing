@@ -2,13 +2,15 @@ import type { KeyObject } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
-import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
+import type { JoinResult, MemberPath, RoomAudience, RoomMember, RoomStateCore } from '../shared/room';
+import { parseMediaSignal, type MediaSignal, type MediaStatus } from '../shared/roomMedia';
 import type { TagRgb } from '../shared/roomColors';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
   decodeSigned, encodeMessage, isOlderThan, joinSigned, PROTOCOL_VERSION, ROOM_CHAT_SINCE, type BallotMsg, type MemberStatus,
-  type PresenceMsg, type RoomFeatureOff, type RoomMessage, type VoteKind, type VoteMsg,
+  type PresenceMsg, type RoomFeatureOff, type RoomMessage, type RtcMsg, type VoteKind, type VoteMsg,
 } from '../shared/roomProtocol';
+import { directHeader, directKey, makeDirectIdentity, openDirect, sealDirect, type DirectIdentity } from './directRoomCrypto';
 import { RateLimiter } from './rateLimiter';
 import { ReplayGuard } from './replayGuard';
 import {
@@ -106,6 +108,13 @@ export interface RoomDeps {
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   /** The 32-hex hashes our presence announces: the custom emotes on our wheel and centre. Read on every presence. */
   announceEmotes(): readonly string[];
+  /** Optional LAN animation extension; omitted by apps and tools that only transfer stills. */
+  animationSync?(): boolean;
+  internetAnimation?(): boolean;
+  media?: {
+    status(peer: string): MediaStatus;
+    send(peer: string, packet: Uint8Array): void;
+  };
 }
 
 interface Member {
@@ -122,6 +131,12 @@ interface Member {
   muted: boolean;
   /** The custom emote hashes their last presence announced. */
   em: string[];
+  animationSync: boolean;
+  internetAnimation: boolean;
+  directKey: Buffer | null;
+  directPublic: string | null;
+  publicEm: string[];
+  privateEm: string[];
   firstSeen: number;
   /** Ever heard over the internet: dropped after the longer silence. */
   viaInternet: boolean;
@@ -144,6 +159,12 @@ export class RoomManager extends EventEmitter {
    */
   self: string;
   private identity: RoomIdentity;
+  private directIdentity: DirectIdentity;
+  private audience: RoomAudience = { mode: 'all', peers: [] };
+  private directQueue: { peer: string; body: Record<string, unknown>; expires: number; keep: number }[] = [];
+  private directTimer: NodeJS.Timeout | null = null;
+  private readonly privateLists = new Map<string, { value: string; at: number }>();
+  private readonly signalParts = new Map<string, { id: string; n: number; parts: Map<number, string>; at: number }>();
   private phase: RoomStateCore['phase'] = 'idle';
   private code: string | null = null;
   private keys: RoomKeys | null = null;
@@ -164,6 +185,7 @@ export class RoomManager extends EventEmitter {
   private readonly limiter: RateLimiter;
   /** Emote stills (want/chunk) per member: their own, wider bucket, so a flood of wants still meets a wall. */
   private readonly transferLimiter: RateLimiter;
+  private readonly animationLimiter: RateLimiter;
   /** Ballots per member, apart from `limiter`: a vote needs every answer, but not a flood of them. */
   private readonly ballotLimiter: RateLimiter;
   private paused = false;
@@ -189,11 +211,13 @@ export class RoomManager extends EventEmitter {
   constructor(private readonly deps: RoomDeps) {
     super();
     this.identity = makeIdentity(deps.randomBytes(32));
+    this.directIdentity = makeDirectIdentity(deps.randomBytes(32));
     this.self = peerIdOf(this.identity.pk);
     this.signedGuard = new ReplayGuard(deps.now);
     this.unsignedGuard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.transferLimiter = new RateLimiter(deps.now);
+    this.animationLimiter = new RateLimiter(deps.now);
     this.ballotLimiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
     for (const t of deps.transports) {
@@ -232,21 +256,21 @@ export class RoomManager extends EventEmitter {
   }
 
   sendPing(ping: PingId, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'ping', ping, ...shared });
+    this.sendSelected({ t: 'ping', ping, ...shared });
   }
 
   /** `fx` is the effect stored on the emote's entry here; absent (the plain pop) leaves the field out for the older peers. */
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }, fx?: number): void {
-    this.sendShared({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}) });
+    this.sendSelected({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}) });
   }
 
   sendText(text: string, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'text', text, ...shared });
+    this.sendSelected({ t: 'text', text, ...shared });
   }
 
   /** `who` is the member whose name the line shows; the receivers write the words themselves. */
   sendAlive(who: string, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'alive', who, ...shared });
+    this.sendSelected({ t: 'alive', who, ...shared });
   }
 
   sendVote(v: { id: string; kind: VoteKind; target?: string }): void {
@@ -255,6 +279,147 @@ export class RoomManager extends EventEmitter {
 
   sendBallot(id: string, yes: boolean): void {
     this.sendShared({ t: 'ballot', id, yes });
+  }
+
+  /** Selection is scoped to this join, never to names or a later room session. */
+  setAudience(raw: unknown): void {
+    if (this.phase === 'idle' || typeof raw !== 'object' || raw === null) return;
+    const r = raw as Record<string, unknown>;
+    if (r.mode !== 'all' && r.mode !== 'self' && r.mode !== 'selected') return;
+    if (!Array.isArray(r.peers) || r.peers.length > MAX_MEMBERS) return;
+    const peers = r.mode === 'selected'
+      ? [...new Set(r.peers.filter((p): p is string => typeof p === 'string' && Boolean(this.members.get(p)?.directKey)))] : [];
+    this.audience = { mode: r.mode, peers };
+    this.directQueue = this.directQueue.filter((q) => ['rtc', 'want', 'anim-want'].includes(String(q.body.t)));
+    for (const sent of this.privateLists.values()) sent.at = -Infinity;
+    this.profileChanged();
+  }
+
+  canSendTo(peer: string): boolean {
+    return this.audience.mode === 'all' || this.audience.mode === 'selected' && this.audience.peers.includes(peer);
+  }
+
+  transferRoute(peer: string): 'lan' | 'shared' | 'direct' | null {
+    const route = this.routeKind(peer);
+    return route && this.members.get(peer)?.directKey ? 'direct' : route;
+  }
+
+  broadcastAllowed(): boolean { return this.audience.mode === 'all' && !this.paused; }
+
+  sendStill(peer: string, body: Record<string, unknown>): boolean {
+    if (this.paused || body.t === 'chunk' && !this.canSendTo(peer)) return false;
+    return this.tryDirect(peer, body, 5);
+  }
+
+  private sendSelected(body: Record<string, unknown>): void {
+    if (this.audience.mode === 'all') return this.sendShared(body);
+    if (this.paused) return;
+    for (const peer of this.audience.peers) this.sendDirect(peer, body);
+  }
+
+  /** Pairwise encryption works over LAN and room relays. It never falls back to a room-key packet. */
+  sendDirect(peer: string, body: Record<string, unknown>, keep = 0): boolean {
+    if (!this.keys || this.phase === 'idle' || this.paused || !this.members.get(peer)?.directKey) return false;
+    if (['chunk', 'anim-info', 'anim-chunk'].includes(String(body.t)) && !this.canSendTo(peer)) return false;
+    if (this.tryDirect(peer, body, keep)) return true;
+    if (!this.routeKind(peer) || this.directQueue.length >= 256) return false;
+    if (body.t === 'emote-list') this.directQueue = this.directQueue.filter((q) => q.peer !== peer || q.body.t !== body.t);
+    this.directQueue.push({ peer, body, keep, expires: this.deps.now() + (body.t === 'rtc' ? 30_000 : 5000) });
+    return true;
+  }
+
+  private tryDirect(peer: string, body: Record<string, unknown>, keep: number): boolean {
+    const m = this.members.get(peer);
+    const route = m && this.route(m);
+    if (!m?.directKey || !route || !this.keys || m.needsUpdate || m.muted) return false;
+    try {
+      const packet = sealDirect(m.directKey, this.self, peer, encodeMessage({
+        peer: this.self, seq: ++this.seq, ts: this.deps.now(), ...body,
+      } as RoomMessage));
+      if (route.transport.shared) {
+        if (this.relayCap.tokens(route.transport.kind, RELAY_PING_RATE, RELAY_PING_BURST) < keep + 1) return false;
+        if (!this.relayCap.allow(route.transport.kind, RELAY_PING_RATE, RELAY_PING_BURST)) return false;
+        route.transport.broadcast(packet);
+      } else route.transport.sendTo(route.key, packet);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private flushDirect(): void {
+    const now = this.deps.now();
+    this.directQueue = this.directQueue.filter((q) => {
+      if (q.expires <= now || this.paused || !this.members.has(q.peer)) return false;
+      if (!['rtc', 'want', 'anim-want', 'emote-list'].includes(String(q.body.t)) && !this.canSendTo(q.peer)) return false;
+      return !this.tryDirect(q.peer, q.body, q.keep);
+    });
+  }
+
+  mediaPeers(): string[] {
+    return [...this.members.values()].filter((m) => this.canMediaPeer(m.peer)).map((m) => m.peer);
+  }
+
+  private canMediaPeer(peer: string): boolean {
+    const m = this.members.get(peer);
+    return Boolean(this.internetAllowed && this.deps.internetAnimation?.() && m?.directKey && m.internetAnimation &&
+      m.status === 'on' && !m.muted && !m.needsUpdate && !this.paused && !this.roomMuted && this.routeKind(peer) === 'shared');
+  }
+
+  mediaChanged(): void {
+    for (const m of this.members.values()) this.emit('animationEmotes', m.peer, this.canSyncAnimation(m.peer) ? [...m.em] : []);
+    this.emitState();
+  }
+
+  sendMediaSignal(peer: string, signal: MediaSignal): void {
+    if (!this.canMediaPeer(peer)) return;
+    const text = JSON.stringify(signal);
+    const n = Math.ceil(text.length / 600);
+    if (n > 64) return;
+    const id = Buffer.from(this.deps.randomBytes(8)).toString('hex');
+    for (let i = 0; i < n; i++) this.sendDirect(peer, { t: 'rtc', id, i, n, s: text.slice(i * 600, (i + 1) * 600) }, 5);
+  }
+
+  private onRtc(msg: RtcMsg): void {
+    if (!this.canMediaPeer(msg.peer)) return;
+    let entry = this.signalParts.get(msg.peer);
+    if (!entry || entry.id !== msg.id || this.deps.now() - entry.at > 30_000) {
+      entry = { id: msg.id, n: msg.n, parts: new Map(), at: this.deps.now() };
+      this.signalParts.set(msg.peer, entry);
+    }
+    if (entry.n !== msg.n) return;
+    entry.parts.set(msg.i, msg.s);
+    if (entry.parts.size !== entry.n) return;
+    this.signalParts.delete(msg.peer);
+    try {
+      const signal = parseMediaSignal(JSON.parse(Array.from({ length: entry.n }, (_, i) => entry.parts.get(i) ?? '').join('')));
+      if (signal) this.emit('mediaSignal', msg.peer, signal);
+    } catch { /* A malformed description cannot reach Chromium. */ }
+  }
+
+  receiveMedia(peer: string, packet: Uint8Array): void {
+    if (!this.canMediaPeer(peer) || this.deps.media?.status(peer) !== 'connected') return;
+    const header = directHeader(packet);
+    const m = this.members.get(peer);
+    const route = m && this.route(m);
+    if (!header || header.from !== peer || !route) return;
+    this.onPacket(route.transport, route.key, packet, true);
+  }
+
+  sendAnimation(peer: string, body: Record<string, unknown>): void {
+    if (!this.canSyncAnimation(peer)) return;
+    if (body.t !== 'anim-want' && !this.canSendTo(peer)) return;
+    if (this.routeKind(peer) === 'lan') {
+      if (this.audience.mode === 'all') this.sendToLan(peer, body);
+      else this.sendDirect(peer, body);
+      return;
+    }
+    const key = this.members.get(peer)?.directKey;
+    if (!key) return;
+    try {
+      const bytes = encodeMessage({ peer: this.self, seq: ++this.seq, ts: this.deps.now(), ...body } as RoomMessage);
+      this.deps.media?.send(peer, sealDirect(key, this.self, peer, bytes));
+    } catch { /* A vanished channel leaves the still in place. */ }
   }
 
   /** Removes a member and ignores that peer ID for the rest of the session, as if it had said bye. */
@@ -286,6 +451,13 @@ export class RoomManager extends EventEmitter {
     const route = m && this.route(m);
     if (!route) return null;
     return route.transport.shared ? 'shared' : 'lan';
+  }
+
+  canSyncAnimation(peer: string): boolean {
+    const m = this.members.get(peer);
+    return Boolean(this.deps.animationSync?.() && m?.pk && m.animationSync && m.status === 'on' &&
+      !m.muted && !m.needsUpdate && !this.paused && !this.roomMuted && (this.routeKind(peer) === 'lan' ||
+        this.canMediaPeer(peer) && this.deps.media?.status(peer) === 'connected'));
   }
 
   /** Seals and sends `body` straight to one member over its LAN path. Nothing goes when LAN isn't what reaches them. */
@@ -368,6 +540,7 @@ export class RoomManager extends EventEmitter {
   /** Name or colour changed: tell everyone now. */
   profileChanged(): void {
     this.announce();
+    for (const m of this.members.values()) this.announcePrivate(m);
     this.emitState();
   }
 
@@ -380,17 +553,18 @@ export class RoomManager extends EventEmitter {
       {
         peer: this.self, name: p.name, color: p.color, rgb: p.rgb, path: 'lan', status: this.status(),
         needsUpdate: false, noEmotes: false, noChat: false, textOff: p.nf.includes('text'), votesOff: p.nf.includes('votes'),
-        muted: false, self: true,
+        muted: false, self: true, direct: true,
       },
       ...[...this.members.values()].map((m) => ({
         peer: m.peer, name: m.name, color: m.color, rgb: m.rgb, path: this.path(m, now), status: m.status,
         needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, noChat: m.noChat, textOff: m.textOff, votesOff: m.votesOff,
-        muted: m.muted, self: false,
+        muted: m.muted, self: false, direct: Boolean(m.directKey), media: this.deps.media?.status(m.peer) ?? 'off',
       })),
     ];
     return {
       phase: this.phase,
       code: this.code ? formatRoomCode(this.code) : null,
+      audience: { mode: this.audience.mode, peers: [...this.audience.peers] },
       members,
       lan: status('lan'),
       internet: status('internet'),
@@ -404,6 +578,7 @@ export class RoomManager extends EventEmitter {
     if (this.phase !== 'idle') this.leave();
     const session = ++this.session;
     this.identity = makeIdentity(this.deps.randomBytes(32));
+    this.directIdentity = makeDirectIdentity(this.deps.randomBytes(32));
     this.self = peerIdOf(this.identity.pk);
     this.seq = 0;
     this.phase = 'joining';
@@ -429,6 +604,7 @@ export class RoomManager extends EventEmitter {
     for (const t of this.active) t.start(keys);
     this.announce();
     this.ticker = setInterval(() => this.tick(), TICK_MS);
+    this.directTimer = setInterval(() => this.flushDirect(), 100);
     this.checkSettle();
     this.emitState();
     return true;
@@ -469,6 +645,12 @@ export class RoomManager extends EventEmitter {
     this.active.clear();
     for (const t of [...this.sharedTimers.keys()]) this.cancelShared(t);
     if (this.ticker) clearInterval(this.ticker);
+    if (this.directTimer) clearInterval(this.directTimer);
+    this.directTimer = null;
+    this.directQueue = [];
+    this.privateLists.clear();
+    this.signalParts.clear();
+    this.audience = { mode: 'all', peers: [] };
     if (this.settle) clearTimeout(this.settle);
     this.ticker = this.settle = null;
     this.phase = 'idle';
@@ -488,6 +670,7 @@ export class RoomManager extends EventEmitter {
     if (now - this.lastTick > SLEEP_GAP_MS) this.wokeAt = now;
     this.lastTick = now;
     for (const [peer, s] of this.staleStrikes) if (now - s.at >= SKEW_HINT_MS) this.staleStrikes.delete(peer);
+    for (const [peer, s] of this.signalParts) if (now - s.at >= 30_000) this.signalParts.delete(peer);
     for (const m of [...this.members.values()]) {
       const heard = Math.max(...Object.values(m.paths).map((p) => p.seenAt), m.firstSeen, this.wokeAt);
       if (now - heard >= DROP_MS[m.viaInternet ? 'internet' : 'lan']) this.remove(m, 'disconnected');
@@ -498,12 +681,18 @@ export class RoomManager extends EventEmitter {
     this.emitState();
   }
 
-  private onPacket(t: Transport, key: PeerKey, packet: Uint8Array): void {
+  private onPacket(t: Transport, key: PeerKey, packet: Uint8Array, media = false): void {
     if (!this.keys) return;
-    const plain = open(this.keys.msgKey, packet);
+    const header = directHeader(packet);
+    const pair = header?.to === this.self ? this.members.get(header.from)?.directKey : null;
+    const plain = header ? pair && openDirect(pair, packet) : open(this.keys.msgKey, packet);
     const decoded = plain && decodeSigned(plain);
     if (!decoded || decoded.msg.peer === this.self) return;
     const { msg, body, sig } = decoded;
+    const direct = Boolean(header && pair && header.from === msg.peer);
+    if (header && !direct) return;
+    if ((msg.t === 'rtc' || msg.t === 'emote-list') && !direct) return;
+    if (media && msg.t !== 'anim-want' && msg.t !== 'anim-info' && msg.t !== 'anim-chunk') return;
     // Chunks are never signed (a signature wouldn't fit), and needn't be: a still is checked against its hash when
     // assembled. So whoever a chunk claims to be from, it never moves a replay window, a liveness clock or a route.
     if (msg.t === 'chunk') {
@@ -516,10 +705,23 @@ export class RoomManager extends EventEmitter {
     if (sig) {
       pk = msg.t === 'presence' ? this.provenKey(msg) : this.members.get(msg.peer)?.pk ?? null;
       if (!pk || !verifyBody(pk, body, sig)) return;
-    } else if (this.boundIds.has(msg.peer)) {
+    } else if (!direct && this.boundIds.has(msg.peer)) {
       return;
     }
-    const guard = sig ? this.signedGuard : this.unsignedGuard;
+    const animation = msg.t === 'anim-want' || msg.t === 'anim-info' || msg.t === 'anim-chunk';
+    if (animation) {
+      if (!(sig || direct) || !media && (t.shared || t.kind !== 'lan') || msg.to !== this.self || !this.canSyncAnimation(msg.peer)) return;
+      const chunk = msg.t === 'anim-chunk';
+      if (!this.animationLimiter.allow(`${msg.peer}:${chunk ? 'chunk' : 'control'}`, chunk ? 100 : 10)) return;
+      // Bulk traffic must not advance the replay window or keep a vanished member's route alive.
+      // The transfer only accepts requested indexes for the signed, content-addressed original.
+      if (msg.t === 'anim-want' && !this.canSendTo(msg.peer)) return;
+      if (chunk) {
+        this.emit('anim-chunk', msg);
+        return;
+      }
+    }
+    const guard = sig || direct ? this.signedGuard : this.unsignedGuard;
     const verdict = guard.accept(msg.peer, msg.seq, msg.ts);
     if (verdict === 'stale') return this.onStale(msg);
     if (verdict !== 'ok') return;
@@ -533,12 +735,28 @@ export class RoomManager extends EventEmitter {
       return;
     }
     if (!m) return;
-    this.heard(m, t, key);
+    if (!media) this.heard(m, t, key);
+    if (msg.t === 'rtc') {
+      if (this.animationLimiter.allow(`${m.peer}:rtc`, 20)) this.onRtc(msg);
+      return;
+    }
+    if (msg.t === 'emote-list') {
+      if (!this.transferLimiter.allow(m.peer, TRANSFER_RATE)) return;
+      m.privateEm = msg.em;
+      m.em = [...new Set([...m.publicEm, ...m.privateEm])];
+      if (!this.paused) this.emit('emotes', m.peer, [...m.em]);
+      this.emit('animationEmotes', m.peer, this.canSyncAnimation(m.peer) ? [...m.em] : []);
+      return;
+    }
+    if (msg.t === 'anim-want' || msg.t === 'anim-info') {
+      this.emit(msg.t, msg);
+      return;
+    }
     // Emote still requests travel in their own bucket: a flood of wants still meets a wall. A paused lolPing neither
     // fetches nor serves stills. An app on another protocol generation can't have sent these (its validator drops
     // unknown types), so that check is defence in depth.
     if (msg.t === 'want') {
-      if (this.paused || m.muted || m.needsUpdate || msg.to !== this.self) return;
+      if (this.paused || m.muted || m.needsUpdate || msg.to !== this.self || !this.canSendTo(m.peer)) return;
       if (!this.transferLimiter.allow(m.peer, TRANSFER_RATE)) return;
       this.emit('want', msg);
       return;
@@ -594,8 +812,9 @@ export class RoomManager extends EventEmitter {
       if (!t.shared && this.membersAt(t.kind, key) >= 2) return;
       m = {
         peer: msg.peer, name: msg.name, color: msg.color, rgb: msg.rgb ?? null, status: msg.status,
-        needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [],
+        needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [], animationSync: false,
         firstSeen: this.deps.now(), viaInternet: false, paths: {}, pk: null,
+        internetAnimation: false, directKey: null, directPublic: null, publicEm: [], privateEm: [],
       };
       this.members.set(m.peer, m);
       this.aloneSince = null;
@@ -603,6 +822,10 @@ export class RoomManager extends EventEmitter {
     if (pk) {
       m.pk = pk;
       this.boundIds.add(m.peer);
+      if (msg.dk && !m.directPublic && this.keys) {
+        m.directKey = directKey(this.directIdentity, msg.dk, this.keys.msgKey, this.self, m.peer);
+        if (m.directKey) m.directPublic = msg.dk;
+      }
     }
     m.name = msg.name;
     m.color = msg.color;
@@ -613,11 +836,16 @@ export class RoomManager extends EventEmitter {
     m.noChat = isOlderThan(msg.app, ROOM_CHAT_SINCE);
     m.textOff = msg.nf.includes('text');
     m.votesOff = msg.nf.includes('votes');
-    m.em = msg.em;
+    m.publicEm = msg.em;
+    m.em = [...new Set([...m.publicEm, ...m.privateEm])];
+    m.animationSync = msg.ea === 1 && pk !== null;
+    m.internetAnimation = msg.er === 1 && pk !== null;
     // Every presence, so a hash whose assembly gave up is asked for again: EmoteTransfer skips what is already here.
     // A paused lolPing neither fetches nor serves stills; the next presence after unpausing starts prefetch again.
     if (!this.paused) this.emit('emotes', m.peer, [...m.em]);
     this.heard(m, t, key);
+    this.announcePrivate(m);
+    this.emit('animationEmotes', m.peer, this.canSyncAnimation(m.peer) ? [...m.em] : []);
     if (!this.answered.has(key)) {
       this.answered.add(key);
       if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
@@ -653,9 +881,16 @@ export class RoomManager extends EventEmitter {
 
   private remove(m: Member, kind: 'left' | 'disconnected' | 'kicked'): void {
     this.members.delete(m.peer);
+    this.audience.peers = this.audience.peers.filter((p) => p !== m.peer);
+    this.directQueue = this.directQueue.filter((q) => q.peer !== m.peer);
+    this.privateLists.delete(m.peer);
+    this.signalParts.delete(m.peer);
     this.limiter.forget(m.peer);
     this.ballotLimiter.forget(m.peer);
     this.transferLimiter.forget(m.peer);
+    this.animationLimiter.forget(`${m.peer}:chunk`);
+    this.animationLimiter.forget(`${m.peer}:control`);
+    this.animationLimiter.forget(`${m.peer}:rtc`);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
     // A laptop that sleeps and wakes now and then would toast every cycle: once is news, then the member list tells.
@@ -696,12 +931,27 @@ export class RoomManager extends EventEmitter {
     const p = this.deps.profile();
     return this.seal({
       t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
-      em: [...this.deps.announceEmotes()], pk: this.identity.pk.toString('base64'),
+      em: this.audience.mode === 'all' ? [...this.deps.announceEmotes()] : [], pk: this.identity.pk.toString('base64'),
+      dk: this.directIdentity.publicKey,
+      ...(this.deps.internetAnimation?.() && this.internetAllowed ? { er: 1 } : {}),
+      ...(this.deps.animationSync?.() ? { ea: 1 } : {}),
       // Left out when nothing is off, so a presence to an older peer carries nothing new.
       ...(p.nf.length ? { nf: [...p.nf] } : {}),
       // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.
       ...(p.rgb ? { rgb: p.rgb } : {}),
     });
+  }
+
+  private announcePrivate(m: Member): void {
+    if (!m.directKey) return;
+    const em = this.audience.mode === 'selected' && this.canSendTo(m.peer) ? [...this.deps.announceEmotes()] : [];
+    const value = JSON.stringify(em);
+    const sent = this.privateLists.get(m.peer);
+    if (sent?.value === value && this.deps.now() - sent.at < 10_000) return;
+    if (this.audience.mode === 'all' && !sent) return;
+    if (this.sendDirect(m.peer, { t: 'emote-list', em }, 5)) {
+      this.privateLists.set(m.peer, { value, at: this.deps.now() });
+    }
   }
 
   /**

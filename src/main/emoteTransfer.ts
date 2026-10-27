@@ -37,6 +37,7 @@ interface SendQueue {
   n: number;
   /** LAN requesters: chunks go unicast, at most LAN_CHUNKS_PER_TICK per requester per tick. */
   lan: Map<string, Set<number>>;
+  direct: Map<string, Set<number>>;
   /** Chunks that must ride a relay: one broadcast reaches the whole room, gated by the ping bucket. */
   shared: Set<number>;
 }
@@ -54,7 +55,10 @@ export interface EmoteTransferDeps {
   /** Keeps a still that passed the hash and image checks. */
   put(hash: string, bytes: Uint8Array): void;
   /** How a member is reached right now: a LAN unicast, a relay broadcast, or neither. */
-  routeOf(peer: string): 'lan' | 'shared' | null;
+  routeOf(peer: string): 'lan' | 'shared' | 'direct' | null;
+  canServe?(peer: string): boolean;
+  broadcastAllowed?(): boolean;
+  sendDirect?(peer: string, body: Record<string, unknown>): boolean;
   sendToLan(peer: string, body: Record<string, unknown>): void;
   broadcastShared(body: Record<string, unknown>): void;
   /** True when a relay chunk may go: the shared bucket keeps `keep` tokens for pings and emotes. */
@@ -97,23 +101,24 @@ export class EmoteTransfer {
 
   /** Another member asks for one of our stills. Only hashes in our own current announcement are served. */
   onWant(w: WantMsg): void {
-    if (!this.deps.enabled()) return; // the switch stops both directions: nothing of ours leaves either
+    if (!this.deps.enabled() || this.deps.canServe?.(w.peer) === false) return;
     if (!this.deps.announced().includes(w.h)) return;
     const lane = this.deps.routeOf(w.peer);
-    if (lane !== 'lan' && lane !== 'shared') return;
+    if (!lane) return;
     let queue = this.sends.get(w.h);
     if (!queue) {
       const bytes = this.deps.still(w.h); // read once per queue: a flood of wants can't make it read the disk each time
       if (!bytes) return;
-      queue = { bytes, n: Math.ceil(bytes.length / EMOTE_CHUNK_BYTES), lan: new Map(), shared: new Set() };
+      queue = { bytes, n: Math.ceil(bytes.length / EMOTE_CHUNK_BYTES), lan: new Map(), direct: new Map(), shared: new Set() };
       this.sends.set(w.h, queue);
     }
     const want = w.need.length > 0 ? w.need.filter((i) => i < queue.n) : Array.from({ length: queue.n }, (_, i) => i);
     if (want.length === 0) return;
-    if (lane === 'lan') {
-      const set = queue.lan.get(w.peer) ?? new Set<number>();
+    if (lane === 'lan' || lane === 'direct') {
+      const map = lane === 'lan' ? queue.lan : queue.direct;
+      const set = map.get(w.peer) ?? new Set<number>();
       for (const i of want) set.add(i);
-      queue.lan.set(w.peer, set);
+      map.set(w.peer, set);
     } else {
       for (const i of want) queue.shared.add(i); // a broadcast reaches the requester as well as everyone else
     }
@@ -147,7 +152,8 @@ export class EmoteTransfer {
     this.announcers.delete(peer);
     for (const [hash, q] of this.sends) {
       q.lan.delete(peer);
-      if (q.lan.size === 0 && q.shared.size === 0) this.sends.delete(hash);
+      q.direct.delete(peer);
+      if (q.lan.size === 0 && q.direct.size === 0 && q.shared.size === 0) this.sends.delete(hash);
     }
     for (const [hash, a] of this.assemblies) if (a.ask === peer) this.assemblies.delete(hash);
   }
@@ -182,6 +188,7 @@ export class EmoteTransfer {
   private sendWant(peer: string, hash: string, need: readonly number[]): boolean {
     const body = { t: 'want', to: peer, h: hash, need: [...need] };
     const lane = this.deps.routeOf(peer);
+    if (lane === 'direct') return this.deps.sendDirect?.(peer, body) ?? false;
     if (lane === 'lan') this.deps.sendToLan(peer, body);
     else if (lane === 'shared' && this.deps.spareSharedToken(RELAY_KEEP_TOKENS)) this.deps.broadcastShared(body); // `to` addresses it, the seal protects it
     else return false;
@@ -209,6 +216,10 @@ export class EmoteTransfer {
           continue;
         }
         for (const [peer, need] of [...q.lan]) {
+          if (this.deps.canServe?.(peer) === false || this.deps.broadcastAllowed?.() === false) {
+            q.lan.delete(peer);
+            continue;
+          }
           for (let k = 0; k < LAN_CHUNKS_PER_TICK && need.size > 0 && egress < LAN_TOTAL_CHUNKS_PER_TICK; k++) {
             const i = need.values().next().value as number;
             need.delete(i);
@@ -217,12 +228,23 @@ export class EmoteTransfer {
           }
           if (need.size === 0) q.lan.delete(peer);
         }
+        for (const [peer, need] of [...q.direct]) {
+          if (this.deps.canServe?.(peer) === false) { q.direct.delete(peer); continue; }
+          for (let k = 0; k < LAN_CHUNKS_PER_TICK && need.size && egress < LAN_TOTAL_CHUNKS_PER_TICK; k++) {
+            const i = need.values().next().value as number;
+            if (!this.deps.sendDirect?.(peer, this.chunkBody(hash, i, q))) break;
+            need.delete(i);
+            egress++;
+          }
+          if (!need.size) q.direct.delete(peer);
+        }
+        if (this.deps.broadcastAllowed?.() === false) q.shared.clear();
         if (q.shared.size > 0 && this.deps.spareSharedToken(RELAY_KEEP_TOKENS)) {
           const i = q.shared.values().next().value as number;
           q.shared.delete(i);
           this.deps.broadcastShared(this.chunkBody(hash, i, q));
         }
-        if (q.lan.size === 0 && q.shared.size === 0) this.sends.delete(hash);
+        if (q.lan.size === 0 && q.direct.size === 0 && q.shared.size === 0) this.sends.delete(hash);
       }
       const now = this.deps.now();
       for (const [hash, a] of [...this.assemblies]) {

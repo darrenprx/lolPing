@@ -1,4 +1,4 @@
-import { ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
+import { ANIM_MAX_BYTES, ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
@@ -41,6 +41,12 @@ export interface PresenceMsg extends Base {
   nf: RoomFeatureOff[];
   /** Added in 0.5.2: the Ed25519 public key, raw, in base64. The peer id is its hash, and every message but a chunk is signed with it. */
   pk?: string;
+  /** Optional LAN animation transfer capability; absent on older apps. */
+  ea?: 1;
+  /** Pairwise X25519 key bound by this presence's Ed25519 signature. */
+  dk?: string;
+  /** Internet animation data channels, enabled by the user. */
+  er?: 1;
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -111,7 +117,55 @@ export interface ChunkMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg;
+export interface AnimationInfo {
+  /** Full SHA-256 of the animation, independent of the still's emote ID. */
+  a: string;
+  size: number;
+  format: 'gif' | 'webp';
+}
+/** No `a` asks for metadata; otherwise `need` requests one bounded window of chunks. */
+export interface AnimationWantMsg extends Base {
+  t: 'anim-want';
+  to: string;
+  h: string;
+  a?: string;
+  need?: number[];
+}
+/** Signed binding between this member's still and its original animation. */
+export interface AnimationInfoMsg extends Base {
+  t: 'anim-info';
+  to: string;
+  h: string;
+  info: AnimationInfo | null;
+}
+export interface AnimationChunkMsg extends Base {
+  t: 'anim-chunk';
+  to: string;
+  h: string;
+  a: string;
+  i: number;
+  b: string;
+}
+export type AnimationMessage = AnimationWantMsg | AnimationInfoMsg | AnimationChunkMsg;
+/** Only accepted in a pairwise encrypted packet. Older apps reject that packet format. */
+export interface EmoteListMsg extends Base {
+  t: 'emote-list';
+  em: string[];
+}
+export interface RtcMsg extends Base {
+  t: 'rtc';
+  id: string;
+  i: number;
+  n: number;
+  s: string;
+}
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg | AnimationMessage | EmoteListMsg | RtcMsg;
+
+/** Signed animation packets retain room for worst-case sequence numbers under MAX_PACKET. */
+export const ANIMATION_CHUNK_BYTES = 540;
+export const ANIMATION_WINDOW = 32;
+export const ANIMATION_CHUNKS_MAX = Math.ceil(ANIM_MAX_BYTES / ANIMATION_CHUNK_BYTES);
+export const ANIMATION_HASH_RE = /^[0-9a-f]{64}$/;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -186,6 +240,9 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       const presence: PresenceMsg = {
         t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
         em: emList(em), nf: nfList(nf), ...(typeof pk === 'string' && PK_RE.test(pk) ? { pk } : {}),
+        ...(raw.ea === 1 ? { ea: 1 as const } : {}),
+        ...(typeof raw.dk === 'string' && PK_RE.test(raw.dk) ? { dk: raw.dk } : {}),
+        ...(raw.er === 1 ? { er: 1 as const } : {}),
       };
       // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
       return isTagRgb(rgb) ? { ...presence, rgb } : presence;
@@ -244,8 +301,40 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (typeof b !== 'string' || b.length > EMOTE_CHUNK_B64_MAX || b.length % 4 !== 0 || !B64_RE.test(b)) return null;
       return { t, ...base, h, i: i as number, n: n as number, b };
     }
+    case 'anim-want':
+    case 'anim-info':
+    case 'anim-chunk': {
+      const { to, h, a, need, info, i, b } = raw;
+      if (typeof to !== 'string' || !PEER_RE.test(to) || typeof h !== 'string' || !HASH_RE.test(h)) return null;
+      const addressed = { ...base, to, h };
+      if (t === 'anim-info') {
+        if (info === null) return { t, ...addressed, info: null };
+        if (!isObj(info) || typeof info.a !== 'string' || !ANIMATION_HASH_RE.test(info.a)) return null;
+        if (!isUint(info.size) || info.size < 1 || info.size > ANIM_MAX_BYTES) return null;
+        if (info.format !== 'gif' && info.format !== 'webp') return null;
+        return { t, ...addressed, info: { a: info.a, size: info.size, format: info.format } };
+      }
+      if (t === 'anim-want' && a === undefined && need === undefined) return { t, ...addressed };
+      if (typeof a !== 'string' || !ANIMATION_HASH_RE.test(a)) return null;
+      if (t === 'anim-want') {
+        if (!Array.isArray(need) || need.length < 1 || need.length > ANIMATION_WINDOW) return null;
+        if (!need.every((v) => isUint(v) && v < ANIMATION_CHUNKS_MAX)) return null;
+        return { t, ...addressed, a, need: [...new Set(need)] };
+      }
+      if (!isUint(i) || i >= ANIMATION_CHUNKS_MAX) return null;
+      if (typeof b !== 'string' || b.length > ANIMATION_CHUNK_BYTES / 3 * 4 || b.length % 4 !== 0 || !B64_RE.test(b)) return null;
+      return { t, ...addressed, a, i, b };
+    }
     case 'bye':
       return { t, ...base };
+    case 'emote-list':
+      return { t, ...base, em: emList(raw.em) };
+    case 'rtc': {
+      const { id, i, n, s } = raw;
+      if (typeof id !== 'string' || !PEER_RE.test(id) || !isUint(i) || !isUint(n) || n < 1 || n > 64 || i >= n) return null;
+      if (typeof s !== 'string' || s.length < 1 || s.length > 600) return null;
+      return { t, ...base, id, i, n, s };
+    }
     default:
       return null;
   }

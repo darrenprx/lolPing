@@ -1,5 +1,8 @@
 import type { TagRgb } from './roomColors';
 import type { MemberStatus } from './roomProtocol';
+import type { MediaStatus } from './roomMedia';
+
+export type RoomAudience = { mode: 'all' | 'self' | 'selected'; peers: string[] };
 
 export type TransportStatus = 'off' | 'starting' | 'ok' | 'unavailable';
 export type MemberPath = 'lan' | 'internet' | 'connecting' | 'unreachable';
@@ -25,6 +28,9 @@ export interface RoomMember {
   /** Muted by us, for this session. */
   muted: boolean;
   self: boolean;
+  /** Signed pairwise encryption capability, absent on older peers. */
+  direct?: boolean;
+  media?: MediaStatus;
 }
 
 export interface RoomStateCore {
@@ -42,11 +48,14 @@ export interface RoomStateCore {
    * or old packets replayed. Only a hint: such packets never add a member.
    */
   clockSkew: boolean;
+  audience?: RoomAudience;
 }
 
 /** What the settings window shows: the room plus this machine's display numbers. */
 export interface RoomState extends RoomStateCore {
   displays: { number: number; width: number; height: number; primary: boolean }[];
+  turnConfigured?: boolean;
+  mediaSecretsAvailable?: boolean;
 }
 
 export type JoinResult = { ok: true } | { ok: false; error: 'invalid' | 'mistyped' | 'failed' };
