@@ -263,8 +263,10 @@ class Hooks {
 };
 }
 int runHooks(Output& out) {
+  const char* allowXwayland = std::getenv("LOLPING_ALLOW_XWAYLAND");
   const char* session = std::getenv("XDG_SESSION_TYPE");
-  if ((session && std::strcmp(session, "wayland") == 0) || std::getenv("WAYLAND_DISPLAY")) {
+  if ((!allowXwayland || std::strcmp(allowXwayland, "1") != 0) &&
+      ((session && std::strcmp(session, "wayland") == 0) || std::getenv("WAYLAND_DISPLAY"))) {
     out.error("noAccess", "Linux requires an X11 login session; XWayland cannot capture input from native Wayland apps.");
     return 3;
   }

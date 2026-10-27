@@ -77,6 +77,7 @@ import { MacBackend, RELEASES_API } from './updateMac';
 import { WinBackend } from './updateWin';
 import { Updater } from './updater';
 import { setLinuxAutostart } from './linuxAutostart';
+import { linuxX11RelaunchArgs } from './linuxX11Args';
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 /** How many foreground app names the rules card is offered. */
@@ -85,6 +86,11 @@ const SCREEN_RECORDING_PANE = 'x-apple.systempreferences:com.apple.preference.se
 
 // X11 uses root-window pixels. Keep Electron in the same coordinate space on every monitor.
 if (IS_LINUX) {
+  const relaunch = linuxX11RelaunchArgs(process.argv, process.env);
+  if (relaunch) {
+    spawn(process.execPath, relaunch, { stdio: 'inherit', detached: true }).unref();
+    app.exit(0);
+  }
   app.commandLine.appendSwitch('ozone-platform', 'x11');
   app.commandLine.appendSwitch('force-device-scale-factor', '1');
 }
