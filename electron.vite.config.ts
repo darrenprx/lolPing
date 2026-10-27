@@ -7,6 +7,7 @@ import { teammateCsp } from './tools/teammateCsp';
 export default defineConfig({
   main: {
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: { index: resolve('src/main/index.ts'), bridge: resolve('src/main/mcp/bridge.ts') },
         output: { format: 'cjs', entryFileNames: '[name].js' },
@@ -20,6 +21,7 @@ export default defineConfig({
   },
   preload: {
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: { overlay: resolve('src/preload/overlay.ts'), settings: resolve('src/preload/settings.ts'), text: resolve('src/preload/text.ts'), panel: resolve('src/preload/panel.ts'), teammate: resolve('src/preload/teammate.ts') },
         output: { format: 'cjs', entryFileNames: '[name].js' },
@@ -31,6 +33,7 @@ export default defineConfig({
     publicDir: resolve('assets'),
     plugins: [react(), pruneAssets(), teammateCsp()],
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         input: {
           overlay: resolve('src/renderer/overlay/index.html'),

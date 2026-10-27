@@ -211,8 +211,7 @@ const probe = (url: string, label: string): Promise<string | null> =>
 /** Like probe for a file that is too big to load just to check it: the emote animations come to about 50 MB. */
 async function probeHead(url: string, label: string): Promise<string | null> {
   try {
-    const res = await fetch(url);
-    void res.body?.cancel(); // the headers are enough
+    const res = await fetch(url, { method: 'HEAD' });
     return res.ok ? null : label;
   } catch {
     return label;
@@ -231,7 +230,7 @@ const soundEntries = [
   ...allSoundNames().map((name) => ({ key: name, url: soundUrl(name) })),
   ...EMOTE_CATALOG.filter((e) => e.hasSound).map((e) => ({ key: `emote:${e.slug}`, url: emoteSoundUrl(e.slug) })),
 ];
-// About lists a missing file by its place in assets/ ("sounds/x.wav", "emotes/y.ogg"), not by the URL this page used.
+// About lists a missing file by its place in assets/ ("sounds/x.flac", "emotes/y.ogg"), not by the URL this page used.
 const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');
 
 // The same startup warm the sounds and sheets get: without it, the first ornamented emote pays for the glow

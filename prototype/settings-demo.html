@@ -245,7 +245,7 @@ const PREV = [['Danger','pingwheel_retreatrender','SRP_12'],['Push','push','SRP_
   ['Assist Me','assist_me','ComeHere'],['Need Vision','need_vision','SRP_7'],['Enemy Missing','enemy_missing','MIA'],['Enemy Vision','enemy_vision','AreaIsWarded'],['Generic','generic_ping','Base']];
 const pv = document.getElementById('previews');
 PREV.forEach(([n, ic, snd]) => {
-  fetch(S + snd + '.wav').then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).then(x => bufs[snd] = x);
+  fetch(S + snd + '.flac').then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).then(x => bufs[snd] = x);
   const b = document.createElement('button'); b.innerHTML = `<img src="${T + ic}.png" alt="">${n}`;
   b.onclick = () => { ctx.resume(); const s = ctx.createBufferSource(); s.buffer = bufs[snd]; s.connect(ctx.destination); s.start(); };
   pv.appendChild(b);

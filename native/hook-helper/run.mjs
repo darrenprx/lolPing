@@ -18,6 +18,7 @@ if (action !== 'build' && action !== 'test') {
 // The explicit .\ matters: cmd may be set to not search the current directory for commands.
 if (win) run('cmd.exe', ['/d', '/c', '.\\build.cmd']);
 else run('sh', ['build.sh']);
-if (action === 'test') run(join(here, 'build', win ? 'helper_tests.exe' : 'helper_tests'), []);
-if (action === 'test') run(join(here, 'build', win ? 'context_tests.exe' : 'context_tests'), []);
+if (action === 'test') {
+  for (const name of ['helper_tests', 'context_tests', 'output-scenario', 'decision-scenario']) run(join(here, 'build', win ? `${name}.exe` : name), []);
+}
 if (action === 'test' && process.platform === 'darwin') run(join(here, 'build', 'hooks_mac_tests'), []);

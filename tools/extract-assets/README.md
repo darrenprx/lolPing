@@ -12,6 +12,19 @@ py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League o
 2. Pulls `hud_global_events.bnk` (event graph) and `hud_global_audio.bnk` (embedded WEM media).
 3. Follows each `Play_sfx_hud_base_Pings_*` event (FNV-1 32-bit id of the lower-cased name) → action → layer container → sounds.
 4. Decodes Wwise Vorbis with vgmstream, then mixes multi-layer events with ffmpeg (`amix` + `alimiter` at −1 dB).
+5. Stores the resulting 16-bit PCM losslessly in `assets/sounds/<name>.flac`, preserving channels, sample rate and duration.
+   FLAC compression level 12 changes encoding effort. Metadata padding is omitted. Web Audio decodes each sound before playback.
+
+To compare the committed FLAC files against the original WAV assets through Electron's Web Audio decoder, run:
+
+```sh
+node tools/performance/audio-assets.mjs f24a51e5a11c2b31dab72d89a571cc4025ad3c98
+```
+
+The scenario reads the original WAV bytes from Git and checks every decoded sample at 44.1 kHz and 48 kHz,
+including channels, length and sample rate. It reports encoded bytes and six alternating decode-time samples for each
+format, then removes its temporary data. It uses the installed Electron binary; ffmpeg and a League install are needed
+for extraction only. A different comparison revision must contain the original WAV files.
 
 ## Textures
 
