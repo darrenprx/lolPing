@@ -106,6 +106,7 @@
       "category": "Utility",
       "artifactName": "lolPing-${version}-${arch}.${ext}",
       "extraResources": [{ "from": "native/hook-helper/build/hook-helper", "to": "hook-helper" }],
+      "executableArgs": ["--ozone-platform=x11", "--force-device-scale-factor=1"],
       "desktop": { "entry": { "StartupWMClass": "lolping" } },
       "maintainer": "lolPing contributors",
       "syncDesktopName": true
