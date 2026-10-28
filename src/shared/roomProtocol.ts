@@ -1,6 +1,7 @@
 import { ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
+import { parseShotBody, SHOT_ID_RE, type ShotBody } from './roomShots';
 
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
@@ -27,6 +28,8 @@ interface Base {
   ts: number;
 }
 export interface PresenceMsg extends Base {
+  shots?: true;
+  shotReceive?: false;
   t: 'presence';
   proto: number;
   app: string;
@@ -43,6 +46,7 @@ export interface PresenceMsg extends Base {
   pk?: string;
 }
 export interface PingMsg extends Base {
+  batch?: string;
   t: 'ping';
   ping: PingId;
   /** Display number: 1 = primary. */
@@ -53,6 +57,7 @@ export interface PingMsg extends Base {
 }
 /** Added in 0.5.0: older apps drop it as an unknown type. Position as in PingMsg. */
 export interface EmoteMsg extends Base {
+  batch?: string;
   t: 'emote';
   /** A bundled slug (possibly one only a newer app has) or 'c:' + hash of an imported emote. */
   e: EmoteRef;
@@ -111,7 +116,8 @@ export interface ChunkMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg;
+export type RoomShotMessage = ShotBody & Base;
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg | RoomShotMessage;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -178,6 +184,11 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const { t, peer, seq, ts } = raw;
   if (typeof peer !== 'string' || !/^[0-9a-f]{16}$/.test(peer) || !isUint(seq) || !isUint(ts)) return null;
   const base = { peer, seq, ts };
+  if (t === 'shot' || t === 'shotParts' || t === 'shotWant') {
+    const shot = parseShotBody(raw);
+    return shot ? { ...base, ...shot } : null;
+  }
+  const batch = typeof raw.batch === 'string' && SHOT_ID_RE.test(raw.batch) ? { batch: raw.batch } : {};
   switch (t) {
     case 'presence': {
       const { proto, app, name, color, rgb, status, em, nf, pk } = raw;
@@ -186,6 +197,8 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       const presence: PresenceMsg = {
         t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
         em: emList(em), nf: nfList(nf), ...(typeof pk === 'string' && PK_RE.test(pk) ? { pk } : {}),
+        ...(raw.shots === true ? { shots: true as const } : {}),
+        ...(raw.shotReceive === false ? { shotReceive: false as const } : {}),
       };
       // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
       return isTagRgb(rgb) ? { ...presence, rgb } : presence;
@@ -194,7 +207,7 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       const { ping, d, x, y } = raw;
       if (!isPingId(ping) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
-      return { t, ...base, ping, d: d as number, x, y };
+      return { t, ...base, ping, d: d as number, x, y, ...batch };
     }
     case 'emote': {
       const { e, fx, d, x, y } = raw;
@@ -202,7 +215,7 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isUnit(x) || !isUnit(y)) return null;
       // A malformed effect is dropped rather than the whole emote, the way a malformed tag colour is: the sender's
       // moment still plays, as the plain pop.
-      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}) };
+      return { t, ...base, e, d: d as number, x, y, ...batch, ...(isEmoteFx(fx) ? { fx } : {}) };
     }
     case 'text': {
       const { text, d, x, y } = raw;

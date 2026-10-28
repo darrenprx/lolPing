@@ -6,6 +6,14 @@ import type { AskFailure } from './teammate/askMachine';
 import type { ConnectAppId } from './teammate/connectApps';
 
 export type Lang = 'en' | 'zh-CN';
+export const startupFailureText = {
+  en: { title: 'lolPing could not start',
+    permission: 'Windows denied the sandbox access to the installation. Automatic permission repair failed. Try starting lolPing once as administrator',
+    message: 'Startup failed. See the log below. On Windows, Diagnostic-Start.cmd in the installation folder can collect a diagnostic ZIP. Log:' },
+  'zh-CN': { title: 'lolPing 启动失败',
+    permission: 'Windows 阻止沙箱读取安装目录，自动权限修复失败。请尝试以管理员身份启动一次 lolPing',
+    message: '启动失败，请查看以下日志。Windows 可运行安装目录中的 Diagnostic-Start.cmd 收集诊断 ZIP。日志：' },
+};
 /** The language setting: 'auto' follows the system display language. */
 export type LanguagePref = 'auto' | Lang;
 export const LANGUAGE_PREFS: readonly LanguagePref[] = ['auto', 'en', 'zh-CN'];
@@ -438,6 +446,20 @@ const enMateFirstRun = {
 };
 
 const en = {
+  shots: {
+    title: 'Marker screenshots', send: 'Send screenshots with markers', receive: 'Show room screenshots', advanced: 'Crop size and sending limits',
+    description: 'Share a crop around room pings and emotes. Nearby consecutive marks update one card. Screenshots go only to this room.',
+    placement: 'Screenshot position', corner: 'Bottom right', spot: 'Near the marker',
+    width: 'Initial crop width (DIP)', height: 'Initial crop height (DIP)', merge: 'Group gap (seconds)',
+    window: 'Count window (seconds)', maximum: 'Maximum marks', cooldown: 'Cooldown (seconds)', lifetime: 'Card duration (seconds)',
+    limit: 'Marker sending is cooling down', wait: (n: number) => `You can send again in ${n}s.`,
+    blocked: 'You are sending signals too frequently. Please try again later.',
+    ready: 'Marker screenshots', loading: 'Receiving screenshot…', capture: 'Could not capture this area. The marker was sent.',
+    large: 'Screenshot exceeds the image limit. The marker was sent.', timeout: 'Image transfer timed out. New markers still work.',
+    open: 'Click to enlarge', close: 'Close', fit: 'Fit', actual: '100%', previous: 'Previous display', next: 'Next display',
+    count: (n: number) => `${n} marks`, screen: (n: number) => `Display ${n}`,
+    unsupported: 'Some members cannot receive screenshots. They still see markers.',
+  },
   lang: 'en' as Lang,
   on: 'On',
   off: 'Off',
@@ -589,6 +611,13 @@ const en = {
   roomColorCustom: 'Custom colour',
   roomColorCustomHint: 'The last swatch picks any colour; dark ones are lightened so your name stays readable',
   roomJoinTitle: 'Join a room',
+  roomList: {
+    title: 'Your rooms', description: 'Recently joined rooms, saved on this computer. Up to 20 rooms.',
+    empty: 'Join or create a room to save it here. You can return to it with one click.',
+    current: 'Current room', switch: 'Switch', rename: 'Rename', forget: 'Remove',
+    save: 'Save', cancel: 'Cancel', name: 'Room name (optional)', error: 'Couldn’t update the list. Try again.',
+    saved: 'Saved', lastJoined: (time: string) => `Last joined ${time}`,
+  },
   roomJoinDesc: 'Paste the code a friend sent you, or create a room and share yours',
   roomNetworkHint: 'The first time, Windows asks whether lolPing may use your network: allow it, and make sure your Wi‑Fi is set to Private.',
   roomJoin: 'Join',
@@ -854,6 +883,20 @@ const en = {
 export type Strings = typeof en;
 
 const zh: Strings = {
+  shots: {
+    title: '标记截图', send: '发标记时附带截图', receive: '显示房间截图', advanced: '截图范围与发送限制',
+    description: '向当前房间分享信号和表情附近的截图。连续标记会更新同一张卡片。截图只发送到当前房间。',
+    placement: '截图显示位置', corner: '右下角', spot: '标记位置附近',
+    width: '初始截图宽度（逻辑像素）', height: '初始截图高度（逻辑像素）', merge: '连续合并间隔（秒）',
+    window: '次数统计窗口（秒）', maximum: '最多标记次数', cooldown: '冷却时间（秒）', lifetime: '卡片显示时间（秒）',
+    limit: '标记发送已进入冷却', wait: (n: number) => `${n} 秒后可再次发送。`,
+    blocked: '你发送信号过于频繁，请稍后再试',
+    ready: '标记截图', loading: '正在接收截图…', capture: '未能截取该区域，标记已正常发送。',
+    large: '截图超过图片大小限制，标记已正常发送。', timeout: '截图接收超时，可继续收发新标记。',
+    open: '点击放大', close: '关闭', fit: '适应窗口', actual: '原始尺寸', previous: '上一个显示器', next: '下一个显示器',
+    count: (n: number) => `${n} 次标记`, screen: (n: number) => `显示器 ${n}`,
+    unsupported: '部分成员暂不能接收截图，仍可看到普通标记。',
+  },
   lang: 'zh-CN',
   on: '开',
   off: '关',
@@ -999,6 +1042,13 @@ const zh: Strings = {
   roomColorCustom: '自定义颜色',
   roomColorCustomHint: '最后一个色卡可以选任意颜色；颜色过深会自动提亮，保证名字看得清',
   roomJoinTitle: '加入房间',
+  roomList: {
+    title: '房间列表', description: '最近加入的房间保存在本机，最多 20 个。可直接加入或切换。',
+    empty: '加入或创建房间后，会自动记在这里，下次可以一键加入。',
+    current: '当前房间', switch: '切换', rename: '重命名', forget: '移除',
+    save: '保存', cancel: '取消', name: '房间名称（可选）', error: '更新列表失败，请重试。',
+    saved: '已保存', lastJoined: (time: string) => `最近加入 ${time}`,
+  },
   roomJoinDesc: '粘贴朋友发来的房间码，或创建房间并分享你的房间码',
   roomNetworkHint: '第一次使用时，Windows 会询问是否允许 lolPing 使用网络：请允许，并确认你的 Wi‑Fi 设置为“专用网络”。',
   roomJoin: '加入',

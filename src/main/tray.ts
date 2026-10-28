@@ -80,6 +80,7 @@ export class AppTray {
   private readonly icons: Record<Exclude<TrayMode, 'noAccess'>, NativeImage>;
   private mode: TrayMode = 'on';
   private enabled = true;
+  private markerCooldown = 0;
   private room: TrayRoom = { code: null, count: 0, muted: false };
   private update: TrayUpdate = null;
   private roomsShown = true;
@@ -136,6 +137,12 @@ export class AppTray {
     this.render();
   }
 
+  setMarkerCooldown(seconds: number): void {
+    if (this.destroyed || seconds === this.markerCooldown) return;
+    this.markerCooldown = seconds;
+    this.render();
+  }
+
   /** Shows or hides the Room submenu: hidden while the Rooms feature is off. */
   setRoomsShown(on: boolean): void {
     if (this.destroyed || on === this.roomsShown) return;
@@ -179,7 +186,8 @@ export class AppTray {
     const noAccess = this.mode === 'noAccess';
     this.tray.setImage(this.icons[this.mode === 'noAccess' ? 'failed' : this.mode]);
     const t = this.text;
-    this.tray.setToolTip(failed ? t.trayTipFailed : noAccess ? t.trayTipNoAccess : t.trayTip(this.enabled));
+    this.tray.setToolTip(failed ? t.trayTipFailed : noAccess ? t.trayTipNoAccess
+      : this.markerCooldown > 0 ? t.shots.wait(this.markerCooldown) : t.trayTip(this.enabled));
     const items: MenuItemConstructorOptions[] = [];
     const updateItem = this.updateItem();
     if (updateItem) items.push(updateItem, { type: 'separator' });

@@ -77,6 +77,10 @@ import { MacBackend, RELEASES_API } from './updateMac';
 import { WinBackend } from './updateWin';
 import { Updater } from './updater';
 import { setLinuxAutostart } from './linuxAutostart';
+import { RoomShotsRuntime } from './roomShotsRuntime';
+import { writeDiagnostic } from './diagnostics';
+import { failStartup, startupComplete } from './startupDiagnostics';
+import { rememberRoomJoins } from './savedRooms';
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 /** How many foreground app names the rules card is offered. */
@@ -93,11 +97,12 @@ registerAppScheme();
 app.setAppUserModelId('com.lolping.app');
 
 if (!app.requestSingleInstanceLock()) {
+  writeDiagnostic('second-instance-exit');
   app.quit();
 } else {
   app.on('second-instance', () => openSettingsWindow());
   app.on('activate', () => openSettingsWindow()); // macOS: opened again from Finder or Launchpad while running
-  void app.whenReady().then(start);
+  void app.whenReady().then(start).catch(failStartup);
 }
 
 /** The OS account name: the default name under this machine's pings in a room. */
@@ -202,6 +207,7 @@ function setMacMenu(): void {
 }
 
 function start(): void {
+  writeDiagnostic('startup-initialize');
   const library = new EmoteLibrary(join(settingsDir(), 'emotes'));
   const cache = new EmoteCache(join(settingsDir(), 'emote-cache'), Date.now);
   void cache.present();
@@ -215,6 +221,7 @@ function start(): void {
   }
   const store = new SettingsStore(settingsDir(), undefined, PLATFORM, { name: osUserName(), color: randomInt(8) });
   let settings = store.load();
+  writeDiagnostic('settings-loaded', { firstRun: store.firstRun, problems: store.problems.length });
   // An imported emote whose still is gone is dropped; normalising the shorter list repairs the wheel slots that used it.
   const kept = library.present(settings.customEmotes);
   if (kept.length !== settings.customEmotes.length) settings = store.update({ customEmotes: kept });
@@ -226,6 +233,7 @@ function start(): void {
   let textOpen = false;
   let wordsOpen = false; // the teammate's words box has the keyboard: the helper stays suspended, as for the text box
   let mate: Mate | null = null; // the teammate, while its feature is on
+  let roomShots: RoomShotsRuntime | null = null;
   let mateFailed = false; // it couldn't start: its ask key stays off for this session
   /** The settings as the helper and overlays use them: without the teammate once it failed to start. */
   const effective = (s: Settings): Settings => (mateFailed ? { ...s, features: { ...s.features, teammate: false } } : s);
@@ -240,7 +248,13 @@ function start(): void {
       }),
   );
   overlays.start();
+  writeDiagnostic('overlays-initialized');
   const bridge = new InputBridge({ command: helperExePath() });
+  const staleOwners = new Set<string>();
+  const staleWatch = (owner: string, on: boolean): void => {
+    if (on) staleOwners.add(owner); else staleOwners.delete(owner);
+    bridge.send({ type: 'staleWatch', on: staleOwners.size > 0 });
+  };
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
@@ -290,6 +304,8 @@ function start(): void {
     profile: () => ({
       name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom), limit: settings.incomingPingLimit,
       nf: roomFeaturesOff(settings),
+      ...(PLATFORM === 'win' ? { shots: featureOn(settings, 'rooms'), receiveShots: settings.roomShots.receive,
+        markerLimits: settings.roomShots } : {}),
     }),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
@@ -368,7 +384,8 @@ function start(): void {
   };
 
   const helperStatus = (): HelperStatus => (accessTimer ? 'noAccess' : bridge.status);
-  const status = (): AppStatus => ({ enabled, helper: helperStatus(), staleAccess });
+  const status = (): AppStatus => ({ enabled, helper: helperStatus(), staleAccess,
+    ...(roomShots?.remaining ? { markerCooldownMs: roomShots.remaining } : {}) });
   const trayMode = (): TrayMode => {
     const h = helperStatus();
     if (h === 'failed' || h === 'noAccess') return h;
@@ -434,6 +451,31 @@ function start(): void {
   room.on('state', pushRoom);
   // The vote widget and the roster live in their own windows that never take focus.
   const panels = new PanelWindows();
+  let captureDepth = 0;
+  const excludeCaptures = (on: boolean): void => {
+    overlays.setCaptureExcluded(on);
+    mate?.windows.setCaptureExcluded(on);
+    roomShots?.windows.setCaptureExcluded(on);
+    settingsWindow()?.setContentProtection(on);
+    textWindow()?.setContentProtection(on);
+  };
+  const captureLease = (): (() => void) => {
+    if (++captureDepth === 1) {
+      try { excludeCaptures(true); }
+      catch (err) { captureDepth--; excludeCaptures(false); throw err; }
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      if (--captureDepth === 0) excludeCaptures(false);
+    };
+  };
+  if (PLATFORM === 'win') roomShots = new RoomShotsRuntime({
+    room, overlays, settings: () => settings, enabled: () => enabled, lang: () => resolveLang(settings.language, app.getLocale()),
+    lease: captureLease, helperWatch: (on) => staleWatch('shots', on), statusChanged: pushStatus,
+    cooldown: (_ms, displayId) => { overlays.markerBlocked(text().shots.blocked, displayId); pushStatus(); },
+  });
   // The room keys (Alt+T and the panel key) are the helper's only while a room is active, so they reach other apps otherwise.
   let live = liveKeys(settings, { active: false }, enabled);
   const sendConfig = (): void => {
@@ -447,19 +489,19 @@ function start(): void {
     if (next.text !== live.text || next.panel !== live.panel) sendConfig();
   });
   overlays.on('displays', pushRoom);
-  room.on('remotePing', (p) => overlays.spawnRemote(p));
+  room.on('remotePing', (p) => overlays.spawnRemote({ ...p, ...(roomShots?.remote(p) ? { silent: true } : {}) }));
   overlays.on('shared', (p: SharedPing) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
-    if (shared) room.sendPing(p.id, shared);
+    if (shared) room.sendPing(p.id, { ...shared, ...(p.batch ? { batch: p.batch } : {}) });
   });
   room.on('remoteEmote', (p) => {
-    if (featureOn(settings, 'emotes')) overlays.spawnRemoteEmote(p);
+    if (featureOn(settings, 'emotes')) overlays.spawnRemoteEmote({ ...p, ...(roomShots?.remote(p) ? { silent: true } : {}) });
   });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     // The effect rides on the message, so friends see the one its sender picked even before they have the image.
     const fx = settings.customEmotes.find((c) => c.id === p.ref)?.fx;
-    if (shared) room.sendEmote(p.ref, shared, fx);
+    if (shared) room.sendEmote(p.ref, { ...shared, ...(p.batch ? { batch: p.batch } : {}) }, fx);
   });
   // This session's room lines: members' text and alive lines while the text feature is on, and our own.
   const history = new RoomHistory(() => refreshRoster());
@@ -550,7 +592,7 @@ function start(): void {
     }
   };
   syncRoomVotes();
-  room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
+  rememberRoomJoins(room, store, Date.now);
   room.on('toast', (n: RoomToast) => {
     const t = text();
     const code = room.state().code ?? '';
@@ -568,6 +610,7 @@ function start(): void {
 
   function pushStatus(): void {
     if (quitting) return;
+    tray.setMarkerCooldown(Math.ceil((roomShots?.remaining ?? 0) / 1000));
     tray.set(trayMode(), enabled);
     settingsWindow()?.webContents.send(SETTINGS_CH.statusChanged, status());
   }
@@ -708,7 +751,11 @@ function start(): void {
       if (capturing || textOpen || wordsOpen) syncSuspended();
       panels.hideRoster(); // a restarted helper lost the panel key's up, so a shown roster would stay up
       mate?.stale.helperReady();
-    } else if (ev.type === 'scroll') mate?.stale.scroll({ x: ev.x, y: ev.y });
+      roomShots?.helperReady();
+    } else if (ev.type === 'scroll') {
+      mate?.stale.scroll({ x: ev.x, y: ev.y });
+      roomShots?.scroll({ x: ev.x, y: ev.y });
+    }
     else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
     else if (ev.type === 'triggerUp') {
       // Only the key that asks sends the spots held so far; the emote key's up, or the ping key's outside it, doesn't.
@@ -716,6 +763,7 @@ function start(): void {
     } else overlays.handle(ev);
   });
   bridge.on('status', (s: HelperStatus) => {
+    writeDiagnostic('input-helper-status', { status: s });
     // A helper that is starting or has stopped can no longer send the cancel that dismisses a wheel left on screen.
     if (s !== 'running') {
       overlays.cancelWheel();
@@ -731,7 +779,10 @@ function start(): void {
     pushStatus();
     if (s === 'failed') overlays.toast(text().toastHelperStopped, text().toastHelperStoppedBody);
   });
-  bridge.on('log', (line: string) => console.log('[helper]', line));
+  bridge.on('log', (line: string) => {
+    console.log('[helper]', line);
+    writeDiagnostic('input-helper-log', { message: line });
+  });
 
   // The teammate: built when its feature is switched on, taken down when it is switched off or the app quits.
   let wordsSpots: Spot[] | null = null;
@@ -918,6 +969,7 @@ function start(): void {
     /** The bridge's pipe once lolPing listens on it; agents run only then. */
     let pipe: string | null = null;
     const controller = new AskController({
+      captureLease,
       agents: {
         runner: agents,
         bridge: {
@@ -978,7 +1030,7 @@ function start(): void {
       front: (signal) => context.front(signal),
       busy: () => context.busy,
       ownPid: process.pid, // the teammate's windows and Settings belong to the main process
-      helper: (on) => bridge.send({ type: 'staleWatch', on }),
+      helper: (on) => staleWatch('mate', on),
       own: (at) => {
         const dip = overlays.toDip(at);
         return dip !== null && (windows.contains(dip) || overShownWindow(dip, [settingsWindow(), textWindow()]));
@@ -1028,6 +1080,7 @@ function start(): void {
       }
       try {
         mate = createMate();
+        if (captureDepth > 0) mate.windows.setCaptureExcluded(true);
       } catch (err) {
         console.warn('[teammate] could not start:', err);
         mateFailed = true;
@@ -1074,6 +1127,7 @@ function start(): void {
   store.on('change', (s: Settings) => {
     const previous = settings;
     settings = s;
+    roomShots?.reconfigure();
     sendConfig();
     syncRoomText();
     syncRoomVotes();
@@ -1091,6 +1145,7 @@ function start(): void {
       || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
       || featureOn(s, 'roomText') !== featureOn(previous, 'roomText')
       || featureOn(s, 'roomVotes') !== featureOn(previous, 'roomVotes')
+      || s.roomShots.receive !== previous.roomShots.receive
     ) room.profileChanged();
     if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
       if (!featureOn(s, 'rooms')) room.leave();
@@ -1225,7 +1280,7 @@ function start(): void {
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
-  if (settings.rejoinRoom && settings.lastRoomCode && featureOn(settings, 'rooms')) void room.join(settings.lastRoomCode);
+  if (settings.rejoinRoom && settings.lastRoomCode && featureOn(settings, 'rooms')) void room.join(formatRoomCode(settings.lastRoomCode));
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
     if (store.firstRun || !trusted()) openSettingsWindow();
@@ -1235,6 +1290,7 @@ function start(): void {
   }
 
   updater?.start();
+  startupComplete();
 
   app.on('window-all-closed', () => {
     /* stay running: the overlays are the app */
@@ -1248,10 +1304,11 @@ function start(): void {
     transfer.stop();
     stopWaitingForAccess();
     const mateStopped = stopMate();
+    const roomShotsStopped = roomShots?.stop();
     tray.destroy();
     panels.destroy();
     overlays.destroy();
-    void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed(), mateStopped])
+    void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed(), mateStopped, roomShotsStopped])
       .then(() => app.exit(0));
   });
 }

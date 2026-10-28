@@ -11,6 +11,26 @@ import type { OverlaySettings, RoomTextStyle, Settings } from './settings';
 import type { Rect } from './teammate/coords';
 import type { UpdateState } from './update';
 import type { VoteView } from './voteTally';
+import type { ShotMeta } from './roomShots';
+import type { SavedRoomEdit } from './savedRooms';
+
+export const SHOT_CH = { state: 'shot:state', action: 'shot:action', ready: 'shot:ready' } as const;
+export interface ShotImageView {
+  meta: ShotMeta;
+  data: string | null;
+  status: 'loading' | 'ready' | 'capture' | 'large' | 'timeout';
+}
+export interface ShotViewState {
+  view: 'card' | 'viewer';
+  key: string;
+  name: string;
+  lang: Lang;
+  images: ShotImageView[];
+}
+export interface ShotApi {
+  on(cb: (s: ShotViewState) => void): () => void;
+  act(action: 'open' | 'close' | 'enter' | 'leave'): void;
+}
 
 export interface Point {
   x: number;
@@ -30,7 +50,7 @@ export interface OverlayEvents {
   /** `wheel` names the wheel the gesture belongs to; missing means 'ping' (the site demo leaves it out). */
   'wheel:open': Point & { wheel?: WheelKind };
   'wheel:move': Point & { wheel?: WheelKind };
-  'wheel:release': Point & { wheel?: WheelKind };
+  'wheel:release': Point & { wheel?: WheelKind; managed?: boolean };
   'wheel:cancel': null;
   /** `tag` marks a ping from another room member. `keep`: our own ping that stays until 'ping:unkeep' or our next one. */
   'ping:spawn': Point & { id: PingId; tag?: PingTag; keep?: boolean } & MateMark;
@@ -40,9 +60,10 @@ export interface OverlayEvents {
    * `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen.
    * `keep`: the teammate's emote stays until mate:clear or mate:fade.
    */
-  'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag; ticket?: string; keep?: boolean };
+  'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag; ticket?: string; keep?: boolean; silent?: boolean };
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
+  'marker:blocked': { text: string };
   /** `owner` is 'self' or a room member: each owner has at most 3 lines on screen. */
   'text:spawn': Point & { text: string; owner: string; style: RoomTextStyle; tag?: PingTag };
   /** Removes every teammate ping and emote at once. */
@@ -87,7 +108,7 @@ export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'ping:unkeep', 'emote:spawn', 'emote:clear',
-  'toast:show', 'text:spawn', 'mate:clear', 'mate:fade', 'mate:ticket', 'mate:said', 'mate:glow',
+  'toast:show', 'marker:blocked', 'text:spawn', 'mate:clear', 'mate:fade', 'mate:ticket', 'mate:said', 'mate:glow',
 ];
 
 /** Larger than any screen in CSS px: a box or a point past these is not one the overlay should draw. */
@@ -205,6 +226,7 @@ export const OVERLAY_EMOTED = 'overlay:emoted';
 export const OVERLAY_IDLE = 'overlay:idle';
 
 export interface AppStatus {
+  markerCooldownMs?: number;
   enabled: boolean;
   helper: HelperStatus;
   /**
@@ -284,6 +306,7 @@ export interface SettingsApi {
   createRoom(): Promise<void>;
   /** Accepts a code or any text containing one. */
   joinRoom(text: string): Promise<JoinResult>;
+  editSavedRoom(edit: SavedRoomEdit): Promise<boolean>;
   leaveRoom(): Promise<void>;
   muteMember(peer: string, on: boolean): Promise<void>;
   /** The room code on the clipboard, if there is one. The clipboard is read only when this is called. */

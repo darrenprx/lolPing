@@ -10,13 +10,15 @@ import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
 import type { Platform } from './platform';
 import { isTagColor, isTagRgb, readableTagRgb, type TagRgb } from './roomColors';
-import { parseRoomCode } from './roomCode';
+import { formatRoomCode, parseRoomCode } from './roomCode';
 import { sanitizeName } from './roomProtocol';
 import { isVersion } from './update';
 import type { PingTag } from './ipc';
 import { intentFor } from './teammate/intents';
 import { DEFAULT_TEAMMATE, normalizeTeammate, type TeammateSettings } from './teammate/settings';
 import { isValidWheel } from './wheelLayout';
+import { DEFAULT_ROOM_SHOTS, normalizeRoomShots, type RoomShotSettings } from './roomShots';
+import { normalizeSavedRooms, type SavedRoom } from './savedRooms';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
 export type TriggerKey = NamedTrigger | { vk: number };
@@ -70,6 +72,7 @@ export interface Settings {
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
   lastRoomCode: string | null;
+  savedRooms: SavedRoom[];
   roomMuted: boolean;
   /** Held with a click-drag to open the emote wheel; 'off' turns the emote wheel off. Never the same key as `trigger`, and a custom key or Caps Lock is never the pause shortcut's key either. */
   emoteTrigger: EmoteTriggerKey;
@@ -92,6 +95,7 @@ export interface Settings {
   features: Features;
   /** How room text appears here: a bubble at the spot the sender pointed at, or a line scrolling across the top. */
   roomTextStyle: RoomTextStyle;
+  roomShots: RoomShotSettings;
   /** The AI teammate: its ask key, profiles and history. Used only while features.teammate is on. */
   teammate: TeammateSettings;
 }
@@ -130,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   allowInternet: true,
   rejoinRoom: true,
   lastRoomCode: null,
+  savedRooms: [],
   roomMuted: false,
   emoteTrigger: 'ctrl',
   emoteClick: false,
@@ -143,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   updateNotifiedVersion: null,
   features: { ...DEFAULT_FEATURES },
   roomTextStyle: 'spot',
+  roomShots: { ...DEFAULT_ROOM_SHOTS },
   teammate: { ...DEFAULT_TEAMMATE },
 };
 
@@ -295,7 +301,8 @@ const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.alt, vk: 0x59 }; // Alt+Y when 
 
 function roomCode(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const parsed = parseRoomCode(raw);
+  const text = raw.trim();
+  const parsed = parseRoomCode(text.length === 10 ? formatRoomCode(text) : text);
   return parsed.ok ? parsed.code : null;
 }
 
@@ -362,6 +369,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
+    savedRooms: normalizeSavedRooms(r.savedRooms, r.lastRoomCode),
     roomMuted: bool(r.roomMuted, 'roomMuted'),
     emoteTrigger: triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote,
     emoteClick: bool(r.emoteClick, 'emoteClick'),
@@ -376,6 +384,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     // The teammate isn't built for Linux, so a settings file carried over from another system can't switch it on.
     features: platform === 'linux' ? { ...normalizeFeatures(r.features), teammate: false } : normalizeFeatures(r.features),
     roomTextStyle: r.roomTextStyle === 'danmaku' ? 'danmaku' : 'spot',
+    roomShots: platform === 'win' ? normalizeRoomShots(r.roomShots)
+      : { ...normalizeRoomShots(r.roomShots), enabled: false, receive: false },
     teammate: normalizeTeammate(r.teammate, { platform, trigger: pingTrigger, emoteTrigger: emote }),
   };
 }
@@ -387,11 +397,12 @@ export function mergeSettings(current: Settings, patch: Partial<Settings>, platf
 /**
  * A patch from the settings window, before it is merged. Imported emotes are left out: they change only through importing
  * and removing, which check the files behind them. `updateNotifiedVersion` is the update checker's own note (which version
- * it already announced), so the window can't set it either. Anything that isn't an object changes nothing.
+ * it already announced), and saved rooms use narrow rename/forget commands instead of bulk replacement.
+ * Anything that isn't an object changes nothing.
  */
 export function rendererPatch(raw: unknown): Partial<Settings> {
   if (!isObj(raw)) return {};
-  const { customEmotes: _emotes, updateNotifiedVersion: _notified, ...patch } = raw;
+  const { customEmotes: _emotes, updateNotifiedVersion: _notified, savedRooms: _rooms, ...patch } = raw;
   return patch as Partial<Settings>;
 }
 

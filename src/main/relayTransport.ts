@@ -12,8 +12,8 @@ export interface RelayTransportOptions {
   random?: () => number;
 }
 
-/** A sealed packet (≤ 1200 bytes) in base64. */
-const MAX_CONTENT = 1600;
+/** Format-two attachment packets may use 24 KiB; format-one packets are still capped at 1200 bytes. */
+const MAX_CONTENT = 32_768;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 /** Longest a stop waits for the relays to take the bye RoomManager sent just before. */
 const DRAIN_MS = 500;
@@ -123,7 +123,9 @@ export class RelayTransport extends EventEmitter implements Transport {
 
   private onEvent(e: NostrEvent): void {
     if (e.content.length > MAX_CONTENT || !BASE64.test(e.content)) return;
-    this.emit('packet', `net:${e.pubkey}`, Buffer.from(e.content, 'base64'));
+    const packet = Buffer.from(e.content, 'base64');
+    if (packet[0] !== 2 && packet.length > 1200) return;
+    this.emit('packet', `net:${e.pubkey}`, packet);
   }
 
   private setStatus(s: TransportStatus): void {

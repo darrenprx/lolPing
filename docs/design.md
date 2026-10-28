@@ -286,6 +286,24 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 
 ## 9. Error handling
 
+The package entry is a small CommonJS bootstrap, emitted from `src/main/bootstrap.cjs` by the main Vite build.
+It writes a startup record before loading application bundles. `startupDiagnostics` installs explicit main-process,
+window, preload, renderer and child-process failure listeners before `index` loads. Startup promise failures show a
+bilingual error with the log path and exit; closing helper stdin releases hooks. Routine helper events are not logged.
+Structured technical logs stay under the local application-data folder (temporary-folder fallback), keep ten sessions
+and rotate at 2 MiB. They never receive settings, room packets, screenshots or AI requests. Logging is best effort.
+Windows builds additionally ship a PowerShell 5.1 launcher outside ASAR. It can capture launch errors before JavaScript,
+exit codes, resource hashes, Chromium stderr/logs and matching Application events in a local ZIP. An optional separate
+launcher passes `--disable-gpu` for one run. No network host is added.
+
+On installed Windows builds the bootstrap first calls the existing context helper with `--ensure-install-access`.
+This mode runs before COM, capture or input work. It derives its installation from its own resources directory and
+checks `icudtl.dat` for a package-specific SID without an ALL APPLICATION PACKAGES read grant. Only that case adds
+an inheritable read/execute ACE to the installation via Windows ACL APIs. Ownership, existing ACEs and sandboxing
+are preserved. Reparse points are rejected before a grant, explicit package-read denials are not overridden, and
+the original DACL and result enter the startup log. Permission failures show a bilingual startup error instead of
+reaching Electron's fatal native access check. No standalone repair step or installer permission hook is required.
+
 | Failure | Behaviour |
 |---|---|
 | Helper crashes or exits | Restart with backoff. After 3 in 60 s: stop, warning tray icon, toast, pinging paused until re-enabled. |
@@ -346,6 +364,17 @@ The Linux port is an X11 backend. Setup, limits and testing are in [linux.md](li
 - Electron is forced to scale factor 1 to match X11 root coordinates. There is no updater; updates are manual. Autostart uses an XDG `.desktop` file.
 
 ## 12. Rooms (v0.3.0, internet in v0.4.0)
+
+The settings page keeps a local `savedRooms` list (20 entries) in the existing settings store. `rememberRoomJoins`
+records only the manager's successful `saveCode` event, including tray joins, creation and startup rejoin; leave
+clears only `lastRoomCode`. Old settings migrate their last code once, while an explicit empty list stays empty.
+`savedRooms.ts` validates checksums, canonicalizes codes, deduplicates by newest join, bounds names and timestamps,
+and keeps labels when a room is rejoined. Stored canonical all-letter codes are parsed with the PING prefix, as
+are list joins and startup rejoin, so they are not mistaken for ordinary words by the free-text code parser.
+The renderer uses a narrow rename/forget IPC; a stale general settings patch cannot replace the list. Switches
+reuse the existing join path, show current/joining state and disable duplicate joins until the room settles.
+IPC failures restore the controls and show an inline error. Removing a record does not leave the current room.
+There is no discovery broadcast, public room directory, new host, peer protocol change or availability claim.
 
 - **Model:** a room is a code, `PING-XXXXX-XXXXX` (Crockford base32, 9 random characters + a Luhn mod 32 check character, `src/shared/roomCode.ts`). Parsing ranks candidates and never glues neighbouring words onto a code; clipboard reads are strict. Every finished ping (wheel or trigger+click, never a settings preview) goes to every member; up to 16 people, yourself included. 16 is set by relay intake: 16 senders at the relay ping cap are 80 events/s steady and 160 in a burst, under `RelayPool`'s 200/s. A larger room needs relay measurements (`tools/relay-probe`) first.
 - **Crypto (`src/main/roomCrypto.ts`):** scrypt(code) → HKDF → AES-256-GCM. Each packet is `[0x01][nonce][ciphertext+tag]`, at most 1200 bytes. Keys never leave the main process.
@@ -547,3 +576,13 @@ Accessibility walks and screen reads can block for seconds on a hung app and can
 ### Privacy
 
 Nothing is captured until the user asks. An ask sends the images and text above to the provider of the routed profile, and to no one else; a coding agent gets them through the local bridge and sends them on to its own provider. Keys, Your instructions and history stay on the computer, encrypted with `safeStorage`. The new hosts are the providers the user sets up, a PDF the user is viewing in a browser (only with web PDFs on), and whatever an agent reaches. Both READMEs' privacy notes say so.
+
+## 17. Local Windows room screenshots
+
+This local extension is Windows-gated and keeps the upstream package version and protocol generation. `roomShots.ts` owns bounded defaults, crop growth and marker admission. `RoomShotController` groups accepted gestures before drawing/sending, debounces captures and rejects stale generations. `RoomShotCapture` reuses the native context helper independently of the AI teammate. A shared capture lease excludes overlay, screenshot and teammate windows during concurrent captures.
+
+Pings and emotes carry an optional batch ID. Presence advertises screenshot support and receive preference. Signed, encrypted `shot`, `shotParts` and `shotWant` messages use format 2 (24,576 bytes maximum); format 1 stays capped at 1200 bytes and old apps ignore image packets. The packet format must match its decoded message type. Metadata is accepted only for a previously accepted marker batch. Image traffic has independent budgets: LAN uses one 600-byte part per packet; relays bundle up to 16 parts and retain normal ping capacity. `ShotTransfer` bounds queues, revisions, assembly, retransmission and expiry. JPEG headers and the signed content hash are checked before decoding.
+
+`ShotWindows` uses small non-focusing cards and a viewer opened only by an explicit click. Cards merge revisions, retain a readable image during replacement, ignore dismissed groups and recreate crashed renderers on a later update. Other desktop input passes through; only the card and the explicitly opened viewer accept clicks. The sender cooldown line is click-through, retriggerable and never stacked. All strings are bilingual in i18n.ts; screenshot settings normalize old and malformed files.
+
+No host is added and no image is sent to an AI provider. Only cropped JPEG files are written temporarily. Cancellation, room changes and exit stop helper work and clean allowlisted image files without following reparse points. Unknown files are preserved. The local Chinese feature guide documents defaults, error recovery and offline/native/field acceptance boundaries. `tools/room-shots-smoke` renders the real pages in hidden Windows windows using synthetic image fixtures and encrypted in-memory peers; it never captures the desktop or operates physical input.

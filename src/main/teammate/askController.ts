@@ -50,6 +50,7 @@ type Point = { x: number; y: number };
 type Timer = ReturnType<typeof setTimeout>;
 
 export interface AskDeps {
+  captureLease?: () => () => void;
   settings: () => Settings;
   /** False while lolPing is paused or the teammate is going down: agents' unprompted calls draw nothing then. */
   enabled: () => boolean;
@@ -1115,14 +1116,16 @@ export class AskController extends EventEmitter {
   ): Promise<Capture> {
     const { rect, dir, signal } = to;
     if (!rect) throw new ContextError('capture', 'no display under the spot');
+    const release = this.deps.captureLease?.();
     try {
       this.excluded += 1;
-      if (this.excluded === 1) this.exclude(true);
+      if (!release && this.excluded === 1) this.exclude(true);
       await this.files.makeDir(dir);
       return await this.deps.context.capture({ display: rect, spots, dir, ...framing }, signal);
     } finally {
       this.excluded -= 1;
-      if (this.excluded === 0) this.exclude(false);
+      if (!release && this.excluded === 0) this.exclude(false);
+      release?.();
     }
   }
 

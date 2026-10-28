@@ -5,11 +5,12 @@ import {
 
 /** Every room packet: format byte, nonce, AES-256-GCM ciphertext and tag. Larger packets are never sent or read. */
 export const MAX_PACKET = 1200;
+/** Format two is exclusively for screenshot attachments; ordinary packets keep their 1200-byte limit. */
+export const MAX_SHOT_PACKET = 24_576;
 const FORMAT = 0x01;
 const NONCE = 12;
 const TAG = 16;
 const OVERHEAD = 1 + NONCE + TAG;
-const AAD = Buffer.from([FORMAT]);
 
 export interface RoomKeys {
   /** Encrypts every room message. Never leaves the main process. */
@@ -31,21 +32,38 @@ export function deriveRoomKeys(canonical: string): Promise<RoomKeys> {
 }
 
 export function seal(key: Buffer, plain: Uint8Array): Buffer {
-  if (plain.length + OVERHEAD > MAX_PACKET) throw new Error('room message too large');
+  return sealFormat(key, plain, FORMAT, MAX_PACKET);
+}
+
+export function sealShot(key: Buffer, plain: Uint8Array): Buffer {
+  return sealFormat(key, plain, 2, MAX_SHOT_PACKET);
+}
+
+function sealFormat(key: Buffer, plain: Uint8Array, format: number, limit: number): Buffer {
+  if (plain.length + OVERHEAD > limit) throw new Error('room message too large');
+  const aad = Buffer.from([format]);
   const nonce = randomBytes(NONCE);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(AAD);
+  cipher.setAAD(aad);
   const body = Buffer.concat([cipher.update(plain), cipher.final()]);
-  return Buffer.concat([AAD, nonce, body, cipher.getAuthTag()]);
+  return Buffer.concat([aad, nonce, body, cipher.getAuthTag()]);
 }
 
 /** The plaintext, or null for anything that isn't a packet sealed with this key. */
 export function open(key: Buffer, packet: Uint8Array): Buffer | null {
-  if (packet.length < OVERHEAD || packet.length > MAX_PACKET || packet[0] !== FORMAT) return null;
+  return openFormat(key, packet, FORMAT, MAX_PACKET);
+}
+
+export function openShot(key: Buffer, packet: Uint8Array): Buffer | null {
+  return openFormat(key, packet, 2, MAX_SHOT_PACKET);
+}
+
+function openFormat(key: Buffer, packet: Uint8Array, format: number, limit: number): Buffer | null {
+  if (packet.length < OVERHEAD || packet.length > limit || packet[0] !== format) return null;
   const buf = Buffer.from(packet.buffer, packet.byteOffset, packet.length);
   try {
     const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(1, 1 + NONCE));
-    decipher.setAAD(AAD);
+    decipher.setAAD(Buffer.from([format]));
     decipher.setAuthTag(buf.subarray(buf.length - TAG));
     return Buffer.concat([decipher.update(buf.subarray(1 + NONCE, buf.length - TAG)), decipher.final()]);
   } catch {

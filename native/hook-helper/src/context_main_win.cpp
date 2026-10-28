@@ -12,6 +12,7 @@
 #include <string>
 
 #include "context.h"
+#include "install_access_win.h"
 
 namespace {
 
@@ -41,7 +42,8 @@ void becomeDpiAware() {
 
 }  // namespace
 
-int wmain() {
+int wmain(int argc, wchar_t* argv[]) {
+  if (argc == 2 && std::wstring(argv[1]) == L"--ensure-install-access") return lp::ensureInstallAccess();
   becomeDpiAware();
   _setmode(_fileno(stdin), _O_BINARY);  // UTF-8 bytes as they are; a 0x1A byte is not end of input
   if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return 1;

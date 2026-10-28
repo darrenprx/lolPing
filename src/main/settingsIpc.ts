@@ -10,6 +10,7 @@ import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
 import { askKeyClashes, panelKeyClashes, patchClashes, rendererPatch } from '../shared/settings';
+import { editSavedRooms } from '../shared/savedRooms';
 import { AGENT_PRESETS } from '../shared/teammate/agents';
 import { CONNECT_APPS, connectSnippet, mcpAddLine, type BridgeCommand } from '../shared/teammate/connectApps';
 import { needsKey } from '../shared/teammate/providers';
@@ -193,6 +194,12 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.roomJoin, (_e, text: unknown): Promise<JoinResult> | JoinResult =>
     typeof text === 'string' ? d.room.join(text) : { ok: false, error: 'invalid' });
   ipcMain.handle(SETTINGS_CH.roomLeave, () => d.room.leave());
+  ipcMain.handle(SETTINGS_CH.roomSavedEdit, (_e, edit: unknown): boolean => {
+    const savedRooms = editSavedRooms(d.store.get().savedRooms, edit);
+    if (!savedRooms) return false;
+    d.store.update({ savedRooms });
+    return true;
+  });
   ipcMain.handle(SETTINGS_CH.roomMute, (_e, peer: unknown, on: unknown) => {
     if (typeof peer === 'string') d.room.mute(peer, on === true);
   });

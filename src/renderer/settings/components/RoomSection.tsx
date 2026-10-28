@@ -17,6 +17,8 @@ import type { Update } from '../useAppState';
 import { useRoomState } from '../useRoomState';
 import { KeyCapture } from './KeyCapture';
 import { SettingRow, SwitchRow } from './rows';
+import { ShotSettings } from './ShotSettings';
+import { SavedRooms } from './SavedRooms';
 
 const { max: LIMIT_MAX } = LIMITS.incomingPingLimit;
 /** The slider runs 1…max+1; its last stop is Unlimited (stored as 0). */
@@ -45,16 +47,22 @@ function JoinCard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const touched = useRef(false);
+  const locked = useRef(false);
   useEffect(() => {
     void api.clipboardRoomCode().then((c) => {
       if (c && !touched.current) setCode(c);
-    });
+    }).catch(() => undefined);
   }, []);
   const join = async () => {
+    if (locked.current || !code.trim()) return;
+    locked.current = true;
     setBusy(true);
-    const r = await api.joinRoom(code);
-    setBusy(false);
-    setError(r.ok ? null : r.error === 'mistyped' ? t.roomMistyped : r.error === 'failed' ? t.roomJoinFailed : t.roomInvalid);
+    setError(null);
+    try {
+      const r = await api.joinRoom(code);
+      setError(r.ok ? null : r.error === 'mistyped' ? t.roomMistyped : r.error === 'failed' ? t.roomJoinFailed : t.roomInvalid);
+    } catch { setError(t.roomJoinFailed); }
+    finally { locked.current = false; setBusy(false); }
   };
   return (
     <div className="card roomJoin">
@@ -65,7 +73,7 @@ function JoinCard() {
         <span className="desc">{t.roomNetworkHint}</span>
       </div>
       <div className="ctl">
-        <Input placeholder="PING-XXXXX-XXXXX" value={code} style={{ width: 190 }}
+        <Input placeholder="PING-XXXXX-XXXXX" value={code} style={{ width: 190 }} disabled={busy}
           onChange={(_, d) => {
             touched.current = true;
             setCode(d.value);
@@ -74,8 +82,14 @@ function JoinCard() {
           onKeyDown={(e) => e.key === 'Enter' && void join()} />
         <Button appearance="primary" disabled={busy || !code.trim()} onClick={() => void join()}>{t.roomJoin}</Button>
         <Button disabled={busy} onClick={() => {
+          if (locked.current) return;
+          locked.current = true;
+          setError(null);
           setBusy(true); // a double click would create a room and replace it at once
-          void api.createRoom().finally(() => setBusy(false));
+          void api.createRoom().catch(() => setError(t.roomJoinFailed)).finally(() => {
+            locked.current = false;
+            setBusy(false);
+          });
         }}>{t.roomCreate}</Button>
       </div>
       {error ? <div className="roomError">{error}</div> : null}
@@ -206,6 +220,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           </label>
         </div>
       </SettingRow>
+      <SavedRooms rooms={s.savedRooms} room={room} />
       {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />
@@ -216,6 +231,8 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
       </SettingRow>
       <SwitchRow icon={<Image24Regular />} title={t.friendEmotes} description={t.friendEmotesDesc}
         checked={s.friendEmotes} onChange={(v) => void update({ friendEmotes: v })} />
+      <ShotSettings settings={s} update={update} />
+      {api.platform === 'win' && room.members.some((m) => !m.self && !m.shots) ? <p className="hint">{t.shots.unsupported}</p> : null}
       <SwitchRow icon={<Globe24Regular />} title={t.roomInternet} description={t.roomInternetDesc}
         checked={s.allowInternet} onChange={(v) => void update({ allowInternet: v })} />
       {featureOn(s, 'roomText') ? (

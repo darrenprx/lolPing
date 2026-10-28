@@ -5,6 +5,8 @@ import { LanTransport } from '../../src/main/lanTransport';
 import { deriveRoomKeys } from '../../src/main/roomCrypto';
 import { RoomManager, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { makeRoomCode } from '../../src/shared/roomCode';
+import { ShotTransfer, shotHash } from '../../src/main/shotTransfer';
+import type { RoomShotMessage } from '../../src/shared/roomProtocol';
 
 // Two rooms on loopback. Loopback carries no broadcast, so each transport is seeded with the other's port.
 const A_PORT = 47_501;
@@ -19,15 +21,15 @@ async function until(cond: () => boolean, ms = 4000): Promise<void> {
   }
 }
 
-function peer(port: number, other: number, name: string) {
+function peer(port: number, other: number, name: string, shots = false) {
   const lan = new LanTransport({ port, bindAddress: '127.0.0.1', broadcast: false, seeds: [{ host: '127.0.0.1', port: other }] });
   const room = new RoomManager({
     transports: [lan],
     now: Date.now,
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
-    appVersion: '0.3.0',
-    profile: () => ({ name, color: 1, rgb: null, limit: 0, nf: [] }),
+    appVersion: shots ? '0.6.0' : '0.3.0',
+    profile: () => ({ name, color: 1, rgb: null, limit: 0, nf: [], ...(shots ? { shots: true } : {}) }),
     resolveTarget: () => ({ displayId: 1, width: 1000, height: 500 }),
     announceEmotes: () => [],
   });
@@ -47,6 +49,28 @@ afterEach(() => {
 });
 
 describe('two rooms over loopback UDP', () => {
+  it('exchanges a signed screenshot attachment through the real UDP sockets and reassembles its bytes', async () => {
+    const a = peer(A_PORT, B_PORT, 'Alice', true), b = peer(B_PORT, A_PORT, 'Bob', true);
+    open = [a, b];
+    await Promise.all([a.room.join(CODE), b.room.join(CODE)]);
+    await until(() => a.room.state().phase === 'active' && b.room.state().phase === 'active');
+    const batch = '1'.repeat(16), data = new Uint8Array(1800).fill(29);
+    let arrived: Uint8Array | null = null;
+    const tx = new ShotTransfer({ now: Date.now, self: () => a.room.self, peers: () => a.room.shotPeers(),
+      send: (peer, body) => a.room.sendShot(peer, body), metadata: () => undefined, completed: () => undefined, failed: () => undefined });
+    const rx = new ShotTransfer({ now: Date.now, self: () => b.room.self, peers: () => b.room.shotPeers(),
+      send: (peer, body) => b.room.sendShot(peer, body), metadata: () => undefined,
+      completed: (_peer, _meta, bytes) => { arrived = bytes; }, failed: () => undefined });
+    a.room.on('shot', (m: RoomShotMessage) => tx.receive(m.peer, m));
+    b.room.on('shot', (m: RoomShotMessage) => rx.receive(m.peer, m));
+    a.room.sendPing('missing', { d: 1, x: 0.5, y: 0.5, batch });
+    await until(() => b.pings.length === 1);
+    tx.publish({ t: 'shot', id: batch, rev: 1, d: 1, x: 0.5, y: 0.5, w: 640, h: 360,
+      bytes: data.length, hash: shotHash(data), status: 'ready', marks: [{ x: 0.5, y: 0.5, n: 1 }] }, data);
+    const timer = setInterval(() => { tx.tick(); rx.tick(); }, 25);
+    try { await until(() => arrived !== null); expect(arrived).toEqual(data); }
+    finally { clearInterval(timer); tx.clear(); rx.clear(); }
+  });
   it('find each other, exchange pings, survive a rebind and see a leave', async () => {
     const a = peer(A_PORT, B_PORT, 'Alice');
     const b = peer(B_PORT, A_PORT, 'Bob');

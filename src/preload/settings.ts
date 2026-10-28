@@ -33,6 +33,7 @@ const api: SettingsApi = {
   onRoom: (cb) => subscribe(SETTINGS_CH.roomChanged, cb),
   createRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomCreate),
   joinRoom: (text) => ipcRenderer.invoke(SETTINGS_CH.roomJoin, text),
+  editSavedRoom: (edit) => ipcRenderer.invoke(SETTINGS_CH.roomSavedEdit, edit),
   leaveRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomLeave),
   muteMember: (peer, on) => ipcRenderer.invoke(SETTINGS_CH.roomMute, peer, on),
   clipboardRoomCode: () => ipcRenderer.invoke(SETTINGS_CH.roomClipboard),

@@ -63,7 +63,7 @@ export class ContextClient {
   }
 
   async capture(
-    req: { display: Rect; area?: Rect; spots: { x: number; y: number }[]; crops?: Rect[]; dir: string },
+    req: { display: Rect; area?: Rect; spots: { x: number; y: number }[]; crops?: Rect[]; dir: string; overview?: number },
     signal: AbortSignal,
   ): Promise<Capture> {
     const r = await this.request((id) => captureCommand(id, req), 'captured', signal);
