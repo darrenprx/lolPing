@@ -21,9 +21,11 @@ import { showToast } from './toast';
 import { TextStage } from './textFx';
 import { Wheel } from './wheel';
 import { centerIcons, emoteItem, pingItem } from './wheelItems';
+import { blockedHint } from './blockedHint';
 
 const pingLayer = document.getElementById('pings') as HTMLElement;
 const toastLayer = document.getElementById('toasts') as HTMLElement;
+const showBlocked = blockedHint(toastLayer);
 const textLayer = document.getElementById('texts') as HTMLElement;
 const pingSvg = document.getElementById('wheel') as unknown as SVGSVGElement;
 
@@ -127,9 +129,9 @@ function dressWheel(ask: boolean): void {
   pingWheel.setCenterLabel(ask ? tag.name : null);
 }
 
-function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag, keep = false): void {
+function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag, keep = false, silent = false): void {
   stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag, keep });
-  if (!settings.emoteSound) return;
+  if (!settings.emoteSound || silent) return;
   if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound) sounds.play(`emote:${art.slug}`, volume());
   if (art.kind === 'custom' && art.sound) void sounds.playUrl(art.sound, volume());
 }
@@ -144,6 +146,7 @@ window.overlay.on('wheel:open', (p) => {
 window.overlay.on('wheel:move', (p) => wheelOf(p).move(p.x, p.y));
 window.overlay.on('wheel:release', (p) => {
   const chosen = wheelOf(p).release(p.x, p.y);
+  if (p.managed) return; // main admits the marker before drawing it, including cooldowns
   if (!chosen) return;
   if (p.wheel === 'emote') {
     emote('self', localArt(chosen.key), chosen.x, chosen.y);
@@ -169,10 +172,11 @@ window.overlay.on('ping:spawn', (p) => {
 window.overlay.on('ping:unkeep', dropKeptPing);
 window.overlay.on('emote:spawn', (p) => {
   if (p.owner === 'mate' && staleMate(p)) return;
-  emote(p.owner, p.art, p.x, p.y, p.tag, p.keep === true);
+  emote(p.owner, p.art, p.x, p.y, p.tag, p.keep === true, p.silent === true);
 });
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
+window.overlay.on('marker:blocked', (t) => showBlocked(t.text));
 window.overlay.on('text:spawn', (t) => texts.spawn(t));
 window.overlay.on('mate:clear', clearMate);
 window.overlay.on('mate:fade', fadeMate);

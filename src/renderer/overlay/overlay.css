@@ -164,3 +164,20 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .toast small { display: block; color: var(--grey-1); font-size: 12px; }
 @keyframes toastIn { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
 @keyframes toastOut { to { transform: translateY(12px); opacity: 0 } }
+/* The sender's rejected gesture: top centre, golden text, no panel and no mouse hit box. */
+.marker-blocked {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  top: 4.5vh;
+  transform: translateX(-50%);
+  opacity: 0;
+  color: #e4c889;
+  font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #000, 0 0 5px #000b;
+  pointer-events: none;
+}

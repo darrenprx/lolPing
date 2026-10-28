@@ -99,6 +99,7 @@ vi.mock('electron', async () => {
 });
 
 vi.mock('../../src/main/paths', () => ({
+  HIDDEN_TEST_RUN: false,
   get IS_MAC() {
     return h.isMac;
   },
@@ -139,7 +140,7 @@ describe('OverlayManager wheels', () => {
     expect(sent(0)).toEqual([
       ['wheel:open', { x: 100, y: 200, wheel: 'emote' }],
       ['wheel:move', { x: 110, y: 210, wheel: 'emote' }],
-      ['wheel:release', { x: 120, y: 220, wheel: 'emote' }],
+      ['wheel:release', { x: 120, y: 220, wheel: 'emote', managed: true }],
     ]);
   });
 

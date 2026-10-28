@@ -5,6 +5,7 @@ export type TransportStatus = 'off' | 'starting' | 'ok' | 'unavailable';
 export type MemberPath = 'lan' | 'internet' | 'connecting' | 'unreachable';
 
 export interface RoomMember {
+  shots?: true;
   peer: string;
   name: string;
   /** Index into TAG_COLORS. Also what an older app shows when `rgb` is set: it never sees the exact colour. */

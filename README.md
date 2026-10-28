@@ -113,6 +113,10 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 2. They copy the code, such as `PING-7KQ4M-2HXTR`, and send it to friends.
 3. Each friend copies it and clicks **Join from clipboard** in the tray menu, or pastes it into the Room page and clicks **Join**.
 
+Settings → Room keeps the 20 most recently joined or created rooms. Choose Join or Switch to return to one,
+rename it for this computer, or remove its local record without leaving the current room. The list survives restart
+and migrates the previous room from older settings. Room codes are not published; this is a local history, not an online directory.
+
 - **Same network:** the first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
 - **Different networks:** with **Allow internet connections** on (the default), friends anywhere join with the same code. Their pings travel through free public [Nostr](https://nostr.com) relays and take a moment longer than on a local network, which is still used whenever it works. Virtual LANs such as ZeroTier or Radmin VPN work too, and Tailscale users simply connect over the internet.
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
@@ -125,6 +129,14 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - **Mute room**, muting one person, and an **Incoming ping, emote and text limit** (up to Unlimited, counted together) keep the spam under control. Pausing lolPing with the shortcut pauses all room content too.
 - A room holds up to 16 people. To remove someone, start a kick vote, or leave and create a new room.
 - **Privacy:** pings, emotes, text, votes, your emote images and names are end-to-end encrypted with a key made from the room code, and text and votes use no new network hosts. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your content, images or name. Turn **Allow internet connections** off to stay on your local network.
+
+### Local Windows extension: marker screenshots
+
+This branch attaches a crop to room pings and emotes. Consecutive marks update one card and expand its area. Defaults: 640 × 360 DIPs, a 1.2-second grouping gap, 5 marks in any 5-second window, and a 10-second cooldown after a rejected sixth attempt. Further attempts retrigger one floating line without extending the cooldown.
+
+Settings → Room selects bottom-right or near-marker cards and adjusts the defaults. Click to enlarge, zoom and pan; Esc closes the viewer. Both computers need this extension for screenshots; older apps still see ordinary markers.
+
+Only the crop goes to the current room over its existing encrypted transports. No AI provider or new host is involved, no screenshot history is kept, and temporary images are cleaned after completion, cancellation or exit. See [the local extension notes](docs/room-shots.zh-CN.md).
 
 ## AI teammate
 
@@ -228,6 +240,15 @@ Pull requests and ideas are welcome. Before you start:
 ## Ping assets
 
 The icons in `assets/textures` and the sounds in `assets/sounds` come from a local League of Legends install. [`tools/extract-assets`](tools/extract-assets) explains how to extract them again after a patch. The emote animations, icons and sounds in `assets/emotes` are © Riot Games too, and `tools/extract-assets --emotes` bakes them from the same install.
+
+## Startup diagnostics
+
+Windows builds check install-directory access before opening windows and automatically add the sandbox's missing read/execute grant when a parent folder has package-specific permissions. No separate repair script is required.
+
+For Windows startup failures, the local diagnostic build includes `Diagnostic-Start.cmd` in the installation folder.
+It creates a diagnostic ZIP after about 12 seconds. Normal startup logs are under `%LOCALAPPDATA%\lolPing\logs`.
+`Diagnostic-Start-NoGPU.cmd` disables GPU acceleration for one diagnostic launch. Reports stay local and settings are preserved.
+See the [Chinese startup diagnostics guide](docs/startup-diagnostics.zh-CN.md) for log events and troubleshooting.
 
 ## License
 

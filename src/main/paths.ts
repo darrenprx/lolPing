@@ -1,13 +1,16 @@
 import { app, type BrowserWindow } from 'electron';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { platformOf, type Platform } from '../shared/platform';
 import { APP_SCHEME } from './appProtocol';
+import { writeDiagnostic } from './diagnostics';
 
-export type Page = 'overlay' | 'settings' | 'text' | 'panel' | 'teammate';
+export type Page = 'overlay' | 'settings' | 'text' | 'panel' | 'teammate' | 'shots';
 
 export const PLATFORM: Platform = platformOf(process.platform);
 export const IS_MAC = PLATFORM === 'mac';
 export const IS_LINUX = PLATFORM === 'linux';
+/** Isolated regression runs may render native windows without showing them; ignored in installed builds. */
+export const HIDDEN_TEST_RUN = !app.isPackaged && process.env.LOLPING_HIDDEN_TEST === '1';
 
 const HELPER_FILE = PLATFORM === 'win' ? 'hook-helper.exe' : 'hook-helper';
 const CONTEXT_HELPER_FILE = PLATFORM === 'win' ? 'context-helper.exe' : 'context-helper';
@@ -33,7 +36,8 @@ export const preloadPath = (name: Page): string => join(__dirname, '../preload',
 export const assetPath = (...parts: string[]): string =>
   app.isPackaged ? join(__dirname, '../renderer', ...parts) : join(app.getAppPath(), 'assets', ...parts);
 
-export const settingsDir = (): string => join(app.getPath('appData'), 'lolPing');
+export const settingsDir = (): string => !app.isPackaged && process.env.LOLPING_TEST_SETTINGS
+  ? resolve(process.env.LOLPING_TEST_SETTINGS) : join(app.getPath('appData'), 'lolPing');
 
 /** Where `page` is served from: the Vite dev server in development, lolping://app in production. `hash` is without the #. */
 export function pageUrl(page: Page, hash = ''): string {
@@ -44,5 +48,6 @@ export function pageUrl(page: Page, hash = ''): string {
 
 /** `hash` (without #) is passed to the page, e.g. the settings section to open at. */
 export function loadPage(win: BrowserWindow, page: Page, hash = ''): Promise<void> {
+  writeDiagnostic('page-request', { window: win.id, page });
   return win.loadURL(pageUrl(page, hash));
 }

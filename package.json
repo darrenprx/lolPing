@@ -9,7 +9,7 @@
   "homepage": "https://github.com/darrenprx/lolPing#readme",
   "repository": { "type": "git", "url": "https://github.com/darrenprx/lolPing.git" },
   "bugs": "https://github.com/darrenprx/lolPing/issues",
-  "main": "out/main/index.js",
+  "main": "out/main/bootstrap.cjs",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -66,6 +66,7 @@
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "build/icon.ico",
+      "extraFiles": [{ "from": "tools/diagnostics", "to": ".", "filter": ["*.cmd", "*.ps1"] }],
       "extraResources": [
         { "from": "native/hook-helper/build/hook-helper.exe", "to": "hook-helper.exe" },
         { "from": "native/hook-helper/build/context-helper.exe", "to": "context-helper.exe" }

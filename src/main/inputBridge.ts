@@ -5,6 +5,7 @@ import {
   HELPER_EXIT_NO_ACCESS, parseHelperLine, serializeCommand, type HelperCommand, type HelperStatus,
 } from '../shared/protocol';
 import { RestartPolicy } from './restartPolicy';
+import { diagnosticError, writeDiagnostic } from './diagnostics';
 
 export interface BridgeOptions {
   command: string;
@@ -43,6 +44,7 @@ export class InputBridge extends EventEmitter {
     if (this.child || this.restartTimer) return;
     this.stopping = false;
     this.setStatus('starting');
+    writeDiagnostic('input-helper-spawn');
     const child = spawn(this.opts.command, this.opts.args ?? [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.child = child;
     let gone = false;
@@ -53,8 +55,14 @@ export class InputBridge extends EventEmitter {
       this.child = null;
       this.onExit(reason, code);
     };
-    child.on('error', (err) => onGone(err.message));
-    child.on('exit', (code) => onGone(`exit code ${code}`, code));
+    child.on('error', (err) => {
+      writeDiagnostic('input-helper-error', diagnosticError(err));
+      onGone(err.message);
+    });
+    child.on('exit', (code, signal) => {
+      writeDiagnostic('input-helper-exit', { code, signal, stopping: this.stopping });
+      onGone(`exit code ${code}`, code);
+    });
     child.stdin?.on('error', () => undefined); // EPIPE after a crash; 'exit' handles it
     if (child.stdout) createInterface({ input: child.stdout }).on('line', (line) => this.onLine(line));
     if (child.stderr) createInterface({ input: child.stderr }).on('line', (line) => this.emit('log', line));

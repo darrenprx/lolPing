@@ -13,6 +13,7 @@ import { SETTINGS_CH } from '../../src/shared/ipc';
 import { MOD } from '../../src/shared/keys';
 import type { AgentProfile, BuiltinProfile } from '../../src/shared/teammate/settings';
 import type { UpdateState } from '../../src/shared/update';
+import { makeRoomCode } from '../../src/shared/roomCode';
 
 const h = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
@@ -59,6 +60,24 @@ function registerWith(update?: SettingsIpcDeps['update']): void {
 }
 
 describe('settings IPC', () => {
+  it('edits one saved room and preserves newer records and the current room', async () => {
+    const first = makeRoomCode(new Uint8Array(9).fill(1)), newer = makeRoomCode(new Uint8Array(9).fill(2));
+    store.update({ lastRoomCode: first, savedRooms: [{ code: newer, label: '', joinedAt: 2 },
+      { code: first, label: '', joinedAt: 1 }] });
+    expect(await call(SETTINGS_CH.roomSavedEdit, { action: 'rename', code: first, label: ' 午间组 ' })).toBe(true);
+    expect(store.get().savedRooms[1].label).toBe('午间组');
+    expect(store.get().savedRooms[0].code).toBe(newer);
+    expect(await call(SETTINGS_CH.roomSavedEdit, { action: 'forget', code: first })).toBe(true);
+    expect(store.get().lastRoomCode).toBe(first);
+    expect(store.get().savedRooms).toHaveLength(1);
+  });
+  it('rejects malformed list edits and ignores stale bulk list settings', async () => {
+    const code = makeRoomCode(new Uint8Array(9).fill(1));
+    store.update({ savedRooms: [{ code, label: 'keep', joinedAt: 1 }] });
+    expect(await call(SETTINGS_CH.roomSavedEdit, { action: 'rename', code, label: null })).toBe(false);
+    await call(SETTINGS_CH.set, { savedRooms: [] });
+    expect(store.get().savedRooms[0].label).toBe('keep');
+  });
   it('refuses to make the text and enable shortcuts identical', async () => {
     const result = await call(SETTINGS_CH.set, { textHotkey: store.get().toggleHotkey });
     expect(result).toMatchObject({ ok: false, error: strings('en').shortcutClash });

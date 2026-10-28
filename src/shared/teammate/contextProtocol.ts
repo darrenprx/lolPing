@@ -116,7 +116,7 @@ const spotsText = (spots: readonly Point[]): string => (
  */
 export function captureCommand(
   id: string,
-  req: { display: Rect; area?: Rect; spots: { x: number; y: number }[]; crops?: Rect[]; dir: string },
+  req: { display: Rect; area?: Rect; spots: { x: number; y: number }[]; crops?: Rect[]; dir: string; overview?: number },
 ): ContextCommand {
   return {
     type: 'capture',
@@ -125,7 +125,7 @@ export function captureCommand(
     ...(req.area ? { area: rectText(req.area) } : {}),
     spots: spotsText(req.spots),
     ...(req.crops ? { crops: req.crops.map(rectText).join(';') } : {}),
-    overview: OVERVIEW_LONG_SIDE,
+    overview: req.overview ?? OVERVIEW_LONG_SIDE,
     zoom: `${ZOOM_SIZE.w},${ZOOM_SIZE.h}`,
     quality: JPEG_QUALITY,
     dir: req.dir,

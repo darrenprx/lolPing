@@ -25,6 +25,7 @@ export function StatusCard({ settings, status }: { settings: Settings; status: A
       <div className="lbl">
         <b style={{ fontSize: 16 }}>{title}</b>
         <span className="desc">{hint}</span>
+        {status.markerCooldownMs ? <span className="desc">{t.shots.wait(Math.ceil(status.markerCooldownMs / 1000))}</span> : null}
       </div>
       <div className="ctl">
         {noAccess && api.platform === 'mac' ? null : failed || noAccess ? (

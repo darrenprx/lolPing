@@ -169,6 +169,28 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.roomJoin .desc + .desc { margin-top: 4px; }
 .roomError { flex-basis: 100%; padding-left: 40px; font-size: 12px; color: #ff9c48; }
 .roomCode { font: 600 20px/28px "Cascadia Mono", Consolas, "SF Mono", monospace; letter-spacing: 1px; user-select: text; }
+.card.savedRooms { display: block; padding: 0; overflow: hidden; }
+.card.savedRooms:hover { background: var(--card); }
+.savedRoomsHead { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
+.savedRoomsEmpty { margin: 0; padding: 0 20px 18px 60px; }
+.savedRoomsList { list-style: none; padding: 0; margin: 0; max-height: 380px; overflow-y: auto; }
+.savedRoom { display: flex; align-items: center; gap: 12px; padding: 13px 20px; border-top: 1px solid var(--stroke); }
+.savedRoom.current { background: color-mix(in srgb, var(--colorBrandBackground) 8%, transparent); }
+.savedRoomLabel { flex: 1; min-width: 0; }
+.savedRoomName { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.savedRoomMeta { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; margin-top: 4px; font-size: 11px; }
+.savedRoomMeta code { font-family: "Cascadia Mono", Consolas, monospace; user-select: text; }
+.savedRoomActions, .savedRoomEditor { display: flex; gap: 6px; align-items: center; }
+.savedRoomActions { flex: none; }
+.savedRoomEditor { width: 100%; }
+.savedRoomEditor > :first-child { flex: 1; min-width: 100px; }
+.savedRooms .roomError { padding: 10px 20px; border-top: 1px solid var(--stroke); }
+@media (max-width: 800px) {
+  .savedRoom { flex-wrap: wrap; gap: 8px; }
+  .savedRoomLabel { flex-basis: 100%; }
+  .savedRoomActions { margin-left: auto; }
+  .savedRoomsHead { gap: 12px; }
+}
 .card.members { display: block; padding: 6px 20px; }
 .card.members:hover { background: var(--card); }
 .member { display: flex; align-items: center; gap: 10px; min-height: 40px; border-bottom: 1px solid var(--stroke); }

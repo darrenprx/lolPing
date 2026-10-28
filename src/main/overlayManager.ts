@@ -13,10 +13,11 @@ import {
   displayAtPhysical, physicalBoxToLocal, physicalToDip, physicalToLocal, type DisplayMap, type LocalPoint,
 } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
-import { IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
+import { HIDDEN_TEST_RUN, IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
 
 /** A ping the user just placed, in overlay-local CSS px: the room shares these. */
 export interface SharedPing {
+  batch?: string;
   id: PingId;
   displayId: number;
   x: number;
@@ -25,6 +26,7 @@ export interface SharedPing {
 
 /** An emote the user just placed, in overlay-local CSS px: the room shares these. */
 export interface SharedEmote {
+  batch?: string;
   ref: EmoteRef;
   displayId: number;
   x: number;
@@ -82,7 +84,7 @@ const mapScale = (d: Display): number => (IS_MAC || IS_LINUX ? 1 : d.scaleFactor
 
 /** Messages that put something new on an overlay. */
 const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>([
-  'wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'text:spawn', 'mate:glow',
+  'wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'marker:blocked', 'text:spawn', 'mate:glow',
 ]);
 
 /** The owner of the teammate's pings and emotes on every overlay. */
@@ -109,6 +111,10 @@ export class OverlayManager extends EventEmitter {
   private captureExcluded = false;
   /** Overlays whose page last said it has nothing on it, parked off their displays (Windows only). */
   private readonly idleWindows = new WeakSet<BrowserWindow>();
+  private admitMarker: (p: LocalPoint) => { allowed: boolean; silent?: boolean; batch?: string } = () => ({ allowed: true });
+
+  /** Runs before a completed user marker is drawn or sent. Previews and AI marks never enter this gate. */
+  setMarkerAdmission(fn: typeof this.admitMarker): void { this.admitMarker = fn; }
 
   /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
   constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
@@ -125,7 +131,9 @@ export class OverlayManager extends EventEmitter {
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
       if (displayId === undefined) return;
-      this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+      const admission = this.admitMarker({ displayId, x: p.x, y: p.y });
+      if (!admission.allowed) return;
+      this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y, ...(admission.batch ? { batch: admission.batch } : {}) } satisfies SharedPing);
       this.unkeepElsewhere(displayId); // the wheel's own overlay already swapped its kept ping for this one
     });
     ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
@@ -133,7 +141,9 @@ export class OverlayManager extends EventEmitter {
       if (!p || !isEmoteRefShape(p.ref) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
       if (displayId === undefined) return;
-      this.emit('sharedEmote', { ref: p.ref, displayId, x: p.x, y: p.y } satisfies SharedEmote);
+      const admission = this.admitMarker({ displayId, x: p.x, y: p.y });
+      if (!admission.allowed) return;
+      this.emit('sharedEmote', { ref: p.ref, displayId, x: p.x, y: p.y, ...(admission.batch ? { batch: admission.batch } : {}) } satisfies SharedEmote);
       // The wheel's own overlay already shows it. Another display may still hold an earlier one of ours.
       this.clearElsewhere(displayId, 'self');
     });
@@ -190,9 +200,25 @@ export class OverlayManager extends EventEmitter {
         if (this.wheelDisplay === null) return;
         const p = physicalToLocal(ev.x, ev.y, this.maps, this.wheelDisplay);
         if (!p) return;
-        this.send(p.displayId, ev.type === 'wheelMove' ? 'wheel:move' : 'wheel:release', { x: p.x, y: p.y, wheel: this.wheelKind });
+        this.send(p.displayId, ev.type === 'wheelMove' ? 'wheel:move' : 'wheel:release', {
+          x: p.x, y: p.y, wheel: this.wheelKind,
+          ...(ev.type === 'wheelRelease' && this.wheelKind !== 'ask' ? { managed: true } : {}),
+        });
         if (ev.type === 'wheelRelease') {
           if (this.wheelKind === 'ask') this.askReleased(p);
+          else {
+            const open = this.wheelAt?.local;
+            if (open) {
+              const slice = pickSlice(p.x - open.x, p.y - open.y, (WHEEL.innerR * this.settings.wheelSizePx) / WHEEL.size);
+              if (slice >= 0 && this.wheelKind === 'emote') {
+                const ref = this.settings.emoteWheel[slice];
+                if (ref) this.placeOwnEmote(ref, open);
+              } else if (slice >= 0) {
+                const id = this.settings.wheel[slice];
+                if (id) this.placeOwnPing(id, open);
+              }
+            }
+          }
           this.wheelDisplay = null;
           this.wheelAt = null;
         }
@@ -207,10 +233,7 @@ export class OverlayManager extends EventEmitter {
           break;
         }
         if (ev.wheel === 'emote') {
-          const ref = this.settings.clickEmoteId;
-          this.send(p.displayId, 'emote:spawn', { owner: 'self', art: this.resolveArt(ref, false), x: p.x, y: p.y });
-          this.clearElsewhere(p.displayId, 'self');
-          this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
+          this.placeOwnEmote(this.settings.clickEmoteId, p);
           break;
         }
         this.placeOwnPing(this.settings.clickPingId, p);
@@ -236,8 +259,8 @@ export class OverlayManager extends EventEmitter {
   }
 
   /** A room member's ping, already mapped onto one of our displays. */
-  spawnRemote(p: { displayId: number; x: number; y: number; id: PingId; tag: PingTag }): void {
-    this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
+  spawnRemote(p: { displayId: number; x: number; y: number; id: PingId; tag: PingTag; silent?: boolean }): void {
+    this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag, ...(p.silent ? { silent: true } : {}) });
   }
 
   /** The ask now running. The teammate's marks sent after this carry it, so an overlay drops any from an older ask. */
@@ -329,12 +352,12 @@ export class OverlayManager extends EventEmitter {
   }
 
   /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
-  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; peer: string; tag: PingTag }): void {
+  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; peer: string; tag: PingTag; silent?: boolean }): void {
     const art = this.resolveArt(p.ref, true);
     // The effect is the sender's choice, so the one on their message wins — over a cached still's plain pop, and over
     // the effect we picked if we happen to have the same image imported.
     const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0 } : art;
-    this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: withFx, x: p.x, y: p.y, tag: p.tag });
+    this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: withFx, x: p.x, y: p.y, tag: p.tag, ...(p.silent ? { silent: true } : {}) });
     this.clearElsewhere(p.displayId, p.peer);
   }
 
@@ -352,6 +375,8 @@ export class OverlayManager extends EventEmitter {
   toast(title: string, body: string): void {
     this.send(screen.getPrimaryDisplay().id, 'toast:show', { title, body });
   }
+
+  markerBlocked(text: string, displayId: number): void { this.send(displayId, 'marker:blocked', { text }); }
 
   destroy(): void {
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
@@ -374,10 +399,22 @@ export class OverlayManager extends EventEmitter {
 
   /** Our own ping placed from here, kept if that setting is on, and shared with the room. */
   private placeOwnPing(id: PingId, p: LocalPoint): void {
+    const admission = this.admitMarker(p);
+    if (!admission.allowed) return;
     const keep = this.settings.keepLastPing ? { keep: true } : {};
-    this.send(p.displayId, 'ping:spawn', { id, x: p.x, y: p.y, ...keep });
+    this.send(p.displayId, 'ping:spawn', { id, x: p.x, y: p.y, ...keep, ...(admission.silent ? { silent: true } : {}) });
     this.unkeepElsewhere(p.displayId);
-    this.emit('shared', { id, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
+    this.emit('shared', { id, displayId: p.displayId, x: p.x, y: p.y, ...(admission.batch ? { batch: admission.batch } : {}) } satisfies SharedPing);
+  }
+
+  private placeOwnEmote(ref: EmoteRef, p: LocalPoint): void {
+    const admission = this.admitMarker(p);
+    if (!admission.allowed) return;
+    this.send(p.displayId, 'emote:spawn', {
+      owner: 'self', art: this.resolveArt(ref, false), x: p.x, y: p.y, ...(admission.silent ? { silent: true } : {}),
+    });
+    this.clearElsewhere(p.displayId, 'self');
+    this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y, ...(admission.batch ? { batch: admission.batch } : {}) } satisfies SharedEmote);
   }
 
   /** The slice is worked out here from the same geometry the wheel draws, so the overlay has nothing to report. */
@@ -487,7 +524,7 @@ export class OverlayManager extends EventEmitter {
     }
     win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
     win.once('ready-to-show', () => {
-      win.showInactive();
+      if (!HIDDEN_TEST_RUN) win.showInactive();
       this.place(win, d); // re-apply: mixed-DPI setups can size the first frame wrong
     });
     void loadPage(win, 'overlay');

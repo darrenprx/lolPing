@@ -83,6 +83,15 @@ describe('RelayTransport', () => {
     last().receive(['EVENT', 'lolping', theirs('AQI')]);
     expect(packets).toEqual([]);
   });
+  it('accepts a larger screenshot envelope through the real signed relay parser while keeping the control cap', () => {
+    relay.start(KEYS); last().open();
+    const imagePacket = Buffer.alloc(14_000, 7); imagePacket[0] = 2;
+    last().receive(['EVENT', 'lolping', theirs(imagePacket.toString('base64'))]);
+    expect(packets).toEqual([[`net:${other.pubkey}`, imagePacket]]);
+    const oversized = Buffer.alloc(24_577); oversized[0] = 2;
+    last().receive(['EVENT', 'lolping', theirs(oversized.toString('base64'))]);
+    expect(packets).toHaveLength(1);
+  });
 
   it('uses a new key pair on every start', () => {
     relay.start(KEYS);
