@@ -231,6 +231,7 @@ Several pings can be on screen at once, and each is independent.
 - **Playback:** each play is a fresh `AudioBufferSource` → `GainNode` (volume from settings). This removed the noticeable delay heard with `HTMLAudioElement` in the prototype.
 - **Autoplay:** Electron's `autoplayPolicy: 'no-user-gesture-required'` keeps the context running without a user gesture.
 - **No double sounds:** only the overlay that renders a ping plays its sound.
+- **Muted custom sounds:** a play at zero volume skips loading and decoding. The first audible play loads the sound normally.
 
 ## 8. Settings
 
