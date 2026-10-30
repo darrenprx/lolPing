@@ -13,6 +13,7 @@ import { MATE_TEXT_MAX, type CardState, type MateAction, type MateLeave } from '
 import { useSurfaceStyles } from './Bubble';
 import { cardButtons, copyText, footerText, PutGuard, putLabel } from './cardText';
 import { dragHandle } from './drag';
+import { DragGrip } from './DragGrip';
 import { contentHeight, HEIGHT_TARGET } from './easedHeight';
 import { renderMarkdown } from './markdown';
 import { reducedMotion, stagger, useMotion } from './motion';
@@ -247,6 +248,7 @@ export function Card({ s, t, act, leaving }: { s: CardState; t: Ui; act: (a: Mat
         {...{ [HEIGHT_TARGET]: height }}
       >
         {s.streaming && <ProgressBar className={st.progress} thickness="medium" shape="square" aria-hidden />}
+        <DragGrip label={t.moveWindow} handlers={drag} />
         <div className={st.head} data-mate-drag {...drag}>
           <NameTag tag={s.tag} thinking={s.streaming} thinkingLabel={t.thinking} />
           <Subtitle2 className={st.title}><span data-mate-text>{s.title}</span></Subtitle2>

@@ -79,9 +79,12 @@ describe('dragHandle', () => {
     const h = dragHandle((d) => sent.push(d));
     const down = event(100, 100);
     h.onPointerDown(down.pointer);
-    h[end](event(110, 120, { handle: down.handle }).pointer);
+    h.onPointerMove(event(110, 120).pointer);
+    h[end](event(0, 0, { handle: down.handle }).pointer);
     h.onPointerMove(event(130, 140).pointer);
-    expect(sent).toEqual([{ phase: 'start', dx: 0, dy: 0 }, { phase: 'end', dx: 10, dy: 20 }]);
+    expect(sent).toEqual([
+      { phase: 'start', dx: 0, dy: 0 }, { phase: 'move', dx: 10, dy: 20 }, { phase: 'end', dx: 10, dy: 20 },
+    ]);
     expect(down.handle.hasAttribute('data-mate-dragging')).toBe(false);
   });
 });

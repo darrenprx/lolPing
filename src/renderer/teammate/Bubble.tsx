@@ -5,6 +5,7 @@ import type { Strings } from '../../shared/i18n';
 import type { BubbleState, MateAction, MateLeave } from '../../shared/teammateIpc';
 import { bubbleButtons, PutGuard, putLabel } from './cardText';
 import { dragHandle } from './drag';
+import { DragGrip } from './DragGrip';
 import { useMotion } from './motion';
 import { NameTag } from './NameTag';
 
@@ -57,6 +58,7 @@ export function Bubble({ s, t, act, leaving }: {
   return (
     <div className={sf.frame}>
       <div className={mergeClasses(sf.surface, st.bubble, m.appear, leave)} data-mate-drag {...drag}>
+        <DragGrip label={t.moveWindow} />
         <div className={st.head}>
           <NameTag tag={s.tag} thinking={s.thinking} thinkingLabel={t.thinking} />
           {s.thread ? (

@@ -21,6 +21,7 @@ export function resolveLang(pref: LanguagePref, locale: string): Lang {
 const enMateUi = {
   more: 'More',
   dismiss: 'Close',
+  moveWindow: 'Drag to move the window',
   thinking: 'Thinking',
   copy: 'Copy',
   copied: 'Copied',
@@ -1123,6 +1124,7 @@ const zh: Strings = {
     ui: {
       more: '更多',
       dismiss: '关闭',
+      moveWindow: '拖动以移动窗口',
       thinking: '思考中',
       copy: '复制',
       copied: '已复制',
