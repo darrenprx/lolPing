@@ -24,7 +24,7 @@ export function NameTag({ tag, thinking, thinkingLabel }: { tag: PingTag; thinki
   const s = useStyles();
   const m = useMotion();
   return (
-    <span className={s.tag} style={{ color: tagColorCss(tag.color, tag.rgb) }}>
+    <span className={s.tag} style={{ color: tagColorCss(tag.color, tag.rgb) }} data-mate-text>
       {tag.name}
       {thinking && (
         <span role="status" aria-label={thinkingLabel}>

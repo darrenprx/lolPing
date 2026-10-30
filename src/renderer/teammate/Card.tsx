@@ -247,9 +247,9 @@ export function Card({ s, t, act, leaving }: { s: CardState; t: Ui; act: (a: Mat
         {...{ [HEIGHT_TARGET]: height }}
       >
         {s.streaming && <ProgressBar className={st.progress} thickness="medium" shape="square" aria-hidden />}
-        <div className={st.head} {...drag}>
+        <div className={st.head} data-mate-drag {...drag}>
           <NameTag tag={s.tag} thinking={s.streaming} thinkingLabel={t.thinking} />
-          <Subtitle2 className={st.title}>{s.title}</Subtitle2>
+          <Subtitle2 className={st.title}><span data-mate-text>{s.title}</span></Subtitle2>
           <Button
             size="small"
             appearance="subtle"

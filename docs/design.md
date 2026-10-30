@@ -492,6 +492,7 @@ Accessibility walks and screen reads can block for seconds on a hung app and can
   - Words box: takes focus; Enter asks; Esc or losing focus cancels. It shows a **New thread** switch when there is a current thread.
   - Consent card and form preview: never take focus (the click-without-focus windows of §14).
   - History: a normal window with search.
+  - The bubble's background and the card's header background drag their window, with grab and grabbing cursors. Text stays selectable; buttons and text fields keep their own input. Background drags prevent text selection.
 - **Stale signals (`src/shared/teammate/stale.ts`, `src/main/teammate/staleWatcher.ts`):** what the teammate pointed at can move. While its pings or bubble are up, main sends the helper `staleWatch {on}` (a separate command, because a `config` cancels a gesture in progress), and the helper reports `scroll {x, y}`, at most one per 100 ms. Main also polls the context helper's `front` every 500 ms. A scroll inside the ask's window, a different window in front, or its title or bounds changing by more than 2 px fades the teammate's pings, emotes, glows and bubble over 600 ms; the card stays. lolPing's own windows (the teammate's, Settings, the Alt+T box) don't count. On Linux the helper doesn't report scrolls, which doesn't matter while the teammate is off there.
 
 ### Threads and history

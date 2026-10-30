@@ -52,14 +52,16 @@ export function Bubble({ s, t, act, leaving }: {
   const put = putLabel(s.put, t);
   const [guard] = useState(() => new PutGuard(() => performance.now()));
   guard.show(put);
-  // The whole bubble drags it out of the way; its buttons still click.
+  // Background space drags the bubble; text stays selectable and buttons still click.
   const [drag] = useState(() => dragHandle((d) => window.mateApi.drag(d)));
   return (
     <div className={sf.frame}>
-      <div className={mergeClasses(sf.surface, st.bubble, m.appear, leave)} {...drag}>
+      <div className={mergeClasses(sf.surface, st.bubble, m.appear, leave)} data-mate-drag {...drag}>
         <div className={st.head}>
           <NameTag tag={s.tag} thinking={s.thinking} thinkingLabel={t.thinking} />
-          {s.thread ? <Caption1 className={st.thread}>↳ {s.thread}</Caption1> : <span className={st.spacer} />}
+          {s.thread ? (
+            <Caption1 className={st.thread}><span data-mate-text>↳ {s.thread}</span></Caption1>
+          ) : <span className={st.spacer} />}
           <Button
             size="small"
             appearance="subtle"
@@ -71,7 +73,9 @@ export function Bubble({ s, t, act, leaving }: {
         {(s.line || s.more || put) && (
           <div className={st.body}>
             {/* Keyed by the line, so a new line settles in instead of swapping in place. */}
-            <Text key={s.line} className={mergeClasses(st.line, m.rise)}>{s.line}</Text>
+            <div className={st.line}>
+              <Text key={s.line} className={m.rise} data-mate-text>{s.line}</Text>
+            </div>
             {bubbleButtons(s.more, put).map((b) => (b === 'more' ? (
               <Button key="more" className={m.pop} size="small" appearance="primary" onClick={() => act({ t: 'more' })}>
                 {t.more}

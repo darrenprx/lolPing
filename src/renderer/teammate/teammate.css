@@ -61,6 +61,23 @@ html[data-view='history'] body {
   overflow: auto;
 }
 
+[data-mate-drag] {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+[data-mate-drag] [data-mate-text] {
+  cursor: text;
+  user-select: text;
+}
+
+[data-mate-dragging],
+[data-mate-dragging] * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
 /* Markdown from the model, already sanitised: text, lists, code and tables. */
 .mate-md {
   font-size: var(--fontSizeBase300);
