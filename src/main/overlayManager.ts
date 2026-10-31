@@ -139,7 +139,8 @@ export class OverlayManager extends EventEmitter {
     });
     ipcMain.on(OVERLAY_IDLE, (event, idle: unknown) => {
       // Screenshot tools on Windows take a shown overlay for a window over the whole display (#127): park an empty one.
-      if (IS_MAC || IS_LINUX || typeof idle !== 'boolean') return;
+      // On macOS, collapse parked idle overlays to 1x1 offscreen to immediately reclaim the fullscreen IOSurface.
+      if (IS_LINUX || typeof idle !== 'boolean') return;
       const displayId = this.displayOf(event.sender);
       const win = displayId === undefined ? undefined : this.windows.get(displayId);
       const d = screen.getAllDisplays().find((x) => x.id === displayId);
@@ -148,7 +149,7 @@ export class OverlayManager extends EventEmitter {
       else this.idleWindows.delete(win);
       if (!idle && !win.isVisible()) win.showInactive(); // it had no free side to park on
       this.place(win, d);
-      if (!idle) win.setAlwaysOnTop(true, 'screen-saver');
+      if (!idle && !IS_MAC) win.setAlwaysOnTop(true, 'screen-saver');
     });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
@@ -494,10 +495,14 @@ export class OverlayManager extends EventEmitter {
     return win;
   }
 
-  /** Over its display, or parked off it while its page has nothing on it (Windows only). */
+  /** Over its display, or parked off it while its page has nothing on it. */
   private place(win: BrowserWindow, d: Display): void {
     if (!this.idleWindows.has(win)) {
       win.setBounds(overlayBounds(d));
+      return;
+    }
+    if (IS_MAC) {
+      win.setBounds({ x: d.bounds.x - 10000, y: d.bounds.y - 10000, width: 1, height: 1 });
       return;
     }
     const others = screen.getAllDisplays().filter((o) => o.id !== d.id).map((o) => o.bounds);
@@ -508,7 +513,17 @@ export class OverlayManager extends EventEmitter {
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
     // A room ping, a toast or a preview can appear with no gesture ahead of it, so the check lives here too.
-    if (RAISING_CHANNELS.has(channel)) this.refreshDisplays();
+    if (RAISING_CHANNELS.has(channel)) {
+      this.refreshDisplays();
+      if (IS_MAC) {
+        const w = this.windows.get(displayId);
+        const d = screen.getAllDisplays().find((x) => x.id === displayId);
+        if (w && !w.isDestroyed() && d && this.idleWindows.has(w)) {
+          this.idleWindows.delete(w);
+          this.place(w, d);
+        }
+      }
+    }
     const w = this.windows.get(displayId);
     if (!w || w.isDestroyed()) return;
     // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.

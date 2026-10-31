@@ -80,6 +80,20 @@ function applySettings(s: OverlaySettings): void {
   const { ping, emote } = centerIcons(s);
   pingWheel.setCenterIcon(ping);
   emoteWheel.setCenterIcon(emote);
+
+  const activeKeys = new Set<string>();
+  activeKeys.add(TICK_SOUND);
+  for (const id of s.wheel) {
+    const def = pingById(id);
+    if (def) activeKeys.add(def.sound);
+  }
+  const clickDef = pingById(s.clickPingId);
+  if (clickDef) activeKeys.add(clickDef.sound);
+  for (const ref of s.emoteWheel) {
+    activeKeys.add(`emote:${ref}`);
+  }
+  for (const k of activeKeys) void sounds.ensureDecoded(k);
+  sounds.evictUnused(activeKeys);
 }
 applySettings(settings);
 
@@ -138,6 +152,7 @@ const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emot
 
 window.overlay.on('overlay:settings', applySettings);
 window.overlay.on('wheel:open', (p) => {
+  sounds.resume();
   if (p.wheel !== 'emote') dressWheel(p.wheel === 'ask');
   wheelOf(p).open(p.x, p.y);
 });
@@ -163,11 +178,13 @@ window.overlay.on('wheel:cancel', () => {
   emoteWheel.cancel();
 });
 window.overlay.on('ping:spawn', (p) => {
+  sounds.resume();
   if (p.owner === 'mate' && staleMate(p)) return;
   ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag, p.keep === true, p);
 });
 window.overlay.on('ping:unkeep', dropKeptPing);
 window.overlay.on('emote:spawn', (p) => {
+  sounds.resume();
   if (p.owner === 'mate' && staleMate(p)) return;
   emote(p.owner, p.art, p.x, p.y, p.tag, p.keep === true);
 });

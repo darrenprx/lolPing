@@ -64,13 +64,15 @@ export class PanelWindows extends EventEmitter {
     this.push(slot);
   }
 
+  destroyWindows(): void {
+    for (const view of ['roster', 'vote'] as const) {
+      this.hide(view);
+    }
+  }
+
   destroy(): void {
     ipcMain.removeListener(PANEL_CH.action, this.onAction);
-    for (const view of ['roster', 'vote'] as const) {
-      const w = this.slots[view].win;
-      this.slots[view] = emptySlot();
-      if (w && !w.isDestroyed()) w.destroy();
-    }
+    this.destroyWindows();
   }
 
   private show(view: View, rect: Rect, state: PanelState): void {
@@ -88,9 +90,11 @@ export class PanelWindows extends EventEmitter {
     const slot = this.slots[view];
     slot.shown = false;
     if (!slot.win || slot.win.isDestroyed()) return;
-    // The window is reused: clear what it drew, so the next show can't flash this vote's card before its own.
-    if (view === 'vote' && slot.state) slot.win.webContents.send(PANEL_CH.state, { ...slot.state, vote: null, voteOver: false });
-    slot.win.hide();
+    const w = slot.win;
+    slot.win = null;
+    slot.loaded = false;
+    slot.state = null;
+    w.destroy();
   }
 
   private push(slot: Slot): void {

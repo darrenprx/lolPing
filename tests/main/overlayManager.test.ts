@@ -706,19 +706,33 @@ describe('OverlayManager idle windows', () => {
     expect(h.windows[0].bounds).toEqual(overDisplay);
   });
 
-  it('leaves the overlays over their displays on macOS and Linux', async () => {
-    for (const platform of ['mac', 'linux'] as const) {
-      h.windows.length = 0;
-      h.handlers.clear();
-      h.isMac = platform === 'mac';
-      h.isLinux = platform === 'linux';
-      vi.resetModules();
-      const { OverlayManager } = await import('../../src/main/overlayManager');
-      new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
-      shownAtStart();
-      idle(0, true);
-      expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
-    }
+  it('leaves the overlays over their displays on Linux', async () => {
+    h.windows.length = 0;
+    h.handlers.clear();
+    h.isMac = false;
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    shownAtStart();
+    idle(0, true);
+    expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
+  });
+
+  it('collapses empty overlays to 1x1 offscreen on macOS', async () => {
+    h.windows.length = 0;
+    h.handlers.clear();
+    h.isMac = true;
+    h.isLinux = false;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const m = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    m.start();
+    shownAtStart();
+    idle(0, true);
+    expect(h.windows[0].bounds).toEqual({ x: -10000, y: -10000, width: 1, height: 1 });
+    m.spawnRemote({ id: 'danger', displayId: 1, x: 100, y: 100, tag: { name: 'P', color: 0 } });
+    expect(h.windows[0].bounds).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
   });
 });
 
