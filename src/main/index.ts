@@ -89,6 +89,10 @@ if (IS_LINUX) {
   app.commandLine.appendSwitch('force-device-scale-factor', '1');
 }
 
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=64');
+app.commandLine.appendSwitch('renderer-process-limit', '2');
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,TranslateUI');
+
 registerAppScheme();
 app.setAppUserModelId('com.lolping.app');
 
@@ -486,6 +490,7 @@ function start(): void {
       history.clear();
       memberNames.clear();
       closeTextWindow(); // its text and commands only make sense in a room, and a kick leaves it open otherwise
+      panels.destroyWindows();
     }
     for (const m of s.members) memberNames.set(m.peer, m.name);
   });
@@ -1093,7 +1098,10 @@ function start(): void {
       || featureOn(s, 'roomVotes') !== featureOn(previous, 'roomVotes')
     ) room.profileChanged();
     if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
-      if (!featureOn(s, 'rooms')) room.leave();
+      if (!featureOn(s, 'rooms')) {
+        room.leave();
+        panels.destroyWindows();
+      }
       tray.setRoomsShown(featureOn(s, 'rooms'));
     }
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
@@ -1226,11 +1234,12 @@ function start(): void {
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
   if (settings.rejoinRoom && settings.lastRoomCode && featureOn(settings, 'rooms')) void room.join(settings.lastRoomCode);
+  const isHiddenLaunch = process.argv.includes('--hidden') || (IS_MAC && Boolean(app.getLoginItemSettings?.().wasOpenedAtLogin));
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
-    if (store.firstRun || !trusted()) openSettingsWindow();
+    if (!isHiddenLaunch && (store.firstRun || !trusted())) openSettingsWindow();
     else overlays.toast(text().toastMenuBar, text().toastMenuBarBody);
-  } else if (!process.argv.includes('--hidden')) {
+  } else if (!isHiddenLaunch) {
     openSettingsWindow();
   }
 

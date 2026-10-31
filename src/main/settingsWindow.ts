@@ -155,6 +155,9 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     }
   };
   nativeTheme.on('updated', onTheme);
+  w.on('close', () => {
+    showInDock(false);
+  });
   w.on('closed', () => {
     nativeTheme.off('updated', onTheme);
     win = null;
