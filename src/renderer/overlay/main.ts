@@ -16,6 +16,7 @@ import { EmoteStage } from './emoteStage';
 import { GlowStage } from './glowFx';
 import { IdleWatch } from './idleWatch';
 import { spawnPing } from './pingFx';
+import { removeMark } from './markLifetime';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
 import { TextStage } from './textFx';
@@ -65,7 +66,7 @@ function localArt(ref: EmoteRef): EmoteArt {
 let keptPing: HTMLElement | null = null;
 
 function dropKeptPing(): void {
-  keptPing?.remove();
+  if (keptPing) removeMark(keptPing);
   keptPing = null;
 }
 
@@ -103,7 +104,7 @@ const mateMarks = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement
 
 function clearMate(): void {
   glows.clear();
-  for (const el of mateMarks()) el.remove();
+  for (const el of mateMarks()) removeMark(el);
   stage.clear('mate');
 }
 
@@ -112,7 +113,7 @@ function fadeMate(): void {
   const marks = mateMarks();
   for (const el of marks) el.classList.add('mate-fade');
   setTimeout(() => {
-    for (const el of marks) el.remove();
+    for (const el of marks) removeMark(el);
     if (mateMarks().length === 0) stage.clear('mate'); // lets go of the faded kept emote; a newer one stays
   }, MATE_FADE_MS);
 }

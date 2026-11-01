@@ -133,7 +133,45 @@ async function run(): Promise<void> {
       throw new Error('an expired toast removed its replacement');
     }
     await waitFor(win, 'document.querySelector("#pings").childElementCount === 0 && document.querySelector("#toasts").childElementCount === 0');
-    if (await win.webContents.executeJavaScript('window.performanceScenario().timers !== 0')) throw new Error('effect timers survived expiry');
+    // The empty overlay reports idle after its own grace period.
+    await waitFor(win, 'window.performanceScenario().timers === 0');
+    const glow = { box: { x: 20, y: 20, w: 100, h: 24 }, color: 0, rgb: null, delay: 0 };
+    for (let n = 0; n < 20; n++) win.webContents.send('mate:glow', glow);
+    await waitFor(win, 'document.querySelectorAll(".mate-glow").length === 20');
+    win.webContents.send('mate:clear', null);
+    for (let n = 0; n < 100; n++) {
+      win.webContents.send('ping:spawn', { id: 'visioncleared', x: 200, y: 200, owner: 'mate', silent: true });
+      win.webContents.send('mate:clear', null);
+    }
+    win.webContents.send('ping:spawn', { id: 'danger', x: 200, y: 200, keep: true, silent: true, label: 'clear complete' });
+    await waitFor(win, 'document.querySelector("#pings .label")?.textContent === "clear complete"');
+    if (await win.webContents.executeJavaScript('window.performanceScenario().timers !== 0')) {
+      throw new Error('cleared teammate marks retained expiry timers');
+    }
+    win.webContents.send('ping:unkeep', null);
+    win.webContents.send('mate:glow', glow);
+    await waitFor(win, 'document.querySelectorAll(".mate-glow").length === 1');
+    win.webContents.send('ping:spawn', { id: 'visioncleared', x: 200, y: 200, owner: 'mate', silent: true, label: 'fading' });
+    win.webContents.send('mate:fade', null);
+    win.webContents.send('ping:spawn', { id: 'danger', x: 200, y: 200, owner: 'mate', keep: true, silent: true, label: 'replacement' });
+    await waitFor(win, 'Array.from(document.querySelectorAll("#pings .label")).some((label) => label.textContent === "replacement")');
+    await waitFor(win, 'document.querySelectorAll("#pings .label").length === 1 && document.querySelectorAll(".mate-glow").length === 0');
+    if (!await win.webContents.executeJavaScript('document.querySelector("#pings .label")?.textContent === "replacement" && window.performanceScenario().timers === 0')) {
+      throw new Error('teammate fade retained an expiry timer or removed its replacement');
+    }
+    win.webContents.send('mate:clear', null);
+    await waitFor(win, 'document.querySelector("#pings").childElementCount === 0 && window.performanceScenario().timers === 0');
+    win.webContents.send('mate:glow', glow);
+    await waitFor(win, 'document.querySelectorAll(".mate-glow").length === 1');
+    for (let n = 0; n < 100; n++) {
+      win.webContents.send('ping:spawn', { id: 'danger', x: 200, y: 200, silent: true, label: String(n) });
+    }
+    await waitFor(win, 'document.querySelector("#pings .ping:last-child .label")?.textContent === "99"');
+    if (!await win.webContents.executeJavaScript('document.querySelectorAll(".mate-glow").length === 0 && window.performanceScenario().timers === 60')) {
+      throw new Error('capacity eviction retained a field outline expiry');
+    }
+    await waitFor(win, 'document.querySelector("#pings").childElementCount === 0 && window.performanceScenario().timers === 0');
+    console.log(JSON.stringify({ scenario: 'teammate clear, fade and capacity eviction', window: i, cleared: 120, timers: 0 }));
   }
   const headCount = requests.filter((request) => request.startsWith('HEAD ')).length;
   if (!measureOnly && headCount !== images.length * 2) throw new Error(`expected ${images.length * 2} probes, got ${headCount}`);

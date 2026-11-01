@@ -1,5 +1,6 @@
 import type { MateGlow } from '../../shared/ipc';
 import { tagColorCss } from '../../shared/roomColors';
+import { expireMark } from './markLifetime';
 
 /** How long a field's outline stays: it fades over this time, or holds still for it with reduced motion (the CSS). */
 export const GLOW_MS = 900;
@@ -15,7 +16,7 @@ export function spawnGlow(layer: HTMLElement, g: MateGlow): void {
   el.style.height = `${g.box.h}px`;
   el.style.setProperty('--glow', tagColorCss(g.color, g.rgb));
   layer.append(el);
-  setTimeout(() => el.remove(), GLOW_MS);
+  expireMark(el, GLOW_MS);
 }
 
 /** The glows of one display's overlay. A fill's later fields wait their delay; clear() drops those still waiting. */
