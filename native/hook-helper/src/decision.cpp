@@ -48,11 +48,10 @@ Emit panelEmit(bool show) {
 }  // namespace
 
 uint32_t Decision::mods() const {
-  uint32_t m = 0;
-  for (uint32_t vk = 0; vk < 256; ++vk) {
-    if (keyDown_[vk]) m |= modBit(vk);
-  }
-  return m;
+  return ((keyDown_[kVkCtrl] || keyDown_[kVkLCtrl] || keyDown_[kVkRCtrl]) ? ModCtrl : 0) |
+         ((keyDown_[kVkAlt] || keyDown_[kVkLAlt] || keyDown_[kVkRAlt]) ? ModAlt : 0) |
+         ((keyDown_[kVkShift] || keyDown_[kVkLShift] || keyDown_[kVkRShift]) ? ModShift : 0) |
+         ((keyDown_[kVkLWin] || keyDown_[kVkRWin]) ? ModWin : 0);
 }
 
 Decision::Spec Decision::spec(WheelKind k) const {

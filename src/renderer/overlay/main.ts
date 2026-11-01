@@ -16,6 +16,7 @@ import { EmoteStage } from './emoteStage';
 import { GlowStage } from './glowFx';
 import { IdleWatch } from './idleWatch';
 import { spawnPing } from './pingFx';
+import { removeMark } from './markLifetime';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
 import { TextStage } from './textFx';
@@ -65,7 +66,7 @@ function localArt(ref: EmoteRef): EmoteArt {
 let keptPing: HTMLElement | null = null;
 
 function dropKeptPing(): void {
-  keptPing?.remove();
+  if (keptPing) removeMark(keptPing);
   keptPing = null;
 }
 
@@ -103,7 +104,7 @@ const mateMarks = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement
 
 function clearMate(): void {
   glows.clear();
-  for (const el of mateMarks()) el.remove();
+  for (const el of mateMarks()) removeMark(el);
   stage.clear('mate');
 }
 
@@ -112,7 +113,7 @@ function fadeMate(): void {
   const marks = mateMarks();
   for (const el of marks) el.classList.add('mate-fade');
   setTimeout(() => {
-    for (const el of marks) el.remove();
+    for (const el of marks) removeMark(el);
     if (mateMarks().length === 0) stage.clear('mate'); // lets go of the faded kept emote; a newer one stays
   }, MATE_FADE_MS);
 }
@@ -211,8 +212,7 @@ const probe = (url: string, label: string): Promise<string | null> =>
 /** Like probe for a file that is too big to load just to check it: the emote animations come to about 50 MB. */
 async function probeHead(url: string, label: string): Promise<string | null> {
   try {
-    const res = await fetch(url);
-    void res.body?.cancel(); // the headers are enough
+    const res = await fetch(url, { method: 'HEAD' });
     return res.ok ? null : label;
   } catch {
     return label;
@@ -231,7 +231,7 @@ const soundEntries = [
   ...allSoundNames().map((name) => ({ key: name, url: soundUrl(name) })),
   ...EMOTE_CATALOG.filter((e) => e.hasSound).map((e) => ({ key: `emote:${e.slug}`, url: emoteSoundUrl(e.slug) })),
 ];
-// About lists a missing file by its place in assets/ ("sounds/x.wav", "emotes/y.ogg"), not by the URL this page used.
+// About lists a missing file by its place in assets/ ("sounds/x.flac", "emotes/y.ogg"), not by the URL this page used.
 const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');
 
 // The same startup warm the sounds and sheets get: without it, the first ornamented emote pays for the glow
