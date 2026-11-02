@@ -87,8 +87,8 @@ function setup(w: BrowserWindow): void {
     if (win === w) win = null;
     for (const cb of goneListeners) cb();
   });
-  // Keep macOS IME candidate pop-ups above the text box.
-  w.setAlwaysOnTop(true, IS_MAC ? 'status' : 'screen-saver');
+  // Keep macOS IME candidate pop-ups above the text box while it stays above ordinary windows.
+  w.setAlwaysOnTop(true, IS_MAC ? 'floating' : 'screen-saver');
   let focused = false;
   w.on('focus', () => {
     focused = true;

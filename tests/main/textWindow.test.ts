@@ -59,7 +59,7 @@ afterEach(() => {
 async function openTextBox(): Promise<void> {
   const { openTextWindow, closeTextWindow } = await import('../../src/main/textWindow');
   openTextWindow({ x: 100, y: 100 }, { placeholder: '', hint: '', unknown: '', votesOff: '' });
-  expect(h.levels).toEqual([h.isMac ? 'status' : 'screen-saver']);
+  expect(h.levels).toEqual([h.isMac ? 'floating' : 'screen-saver']);
   closeTextWindow();
 }
 
