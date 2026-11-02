@@ -87,7 +87,8 @@ function setup(w: BrowserWindow): void {
     if (win === w) win = null;
     for (const cb of goneListeners) cb();
   });
-  w.setAlwaysOnTop(true, 'screen-saver'); // above the overlay and a game's borderless window
+  // Keep macOS IME candidate pop-ups above the text box while it stays above ordinary windows.
+  w.setAlwaysOnTop(true, IS_MAC ? 'floating' : 'screen-saver');
   let focused = false;
   w.on('focus', () => {
     focused = true;
