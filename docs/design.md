@@ -82,6 +82,7 @@ The extraction scripts live in `tools/extract-assets/`, together with a README. 
 │  ├─ InputBridge     spawns/supervises hook-helper.exe, JSON lines    │
 │  ├─ OverlayManager  one transparent overlay window per display       │
 │  ├─ SettingsStore   %APPDATA%\lolPing\settings.json, pushes changes  │
+│  │                  (a portable build: data\ next to the .exe)       │
 │  ├─ Tray            enable/disable, settings, quit, status icon      │
 │  └─ SettingsWindow  React + Fluent UI v9, Mica backdrop              │
 │ overlay renderer (per display): wheel + ping animations + Web Audio  │
@@ -190,6 +191,7 @@ All coordinates are **physical screen pixels**.
 - **Coordinates:** `screen.screenToDipPoint({x,y})` converts physical pixels to DIP, then the display's DIP origin is subtracted to get overlay-local CSS pixels. Wheel moves are converted relative to the *wheel's* display, even when the cursor crosses onto another monitor.
 - **Toggle feedback:** tray icon state (normal or dimmed), the tray menu checkbox, and a small Fluent toast saying "Pings on" or "Pings off".
 - **Startup:** "Launch at Windows startup" uses `app.setLoginItemSettings` with the argument `--hidden`. A manual launch opens the settings window; a `--hidden` launch stays in the tray.
+- **Portable build (`src/main/portable.ts`):** electron-builder's `portable` target makes `lolPing-<version>-portable.exe`, a launcher that unpacks the app to a temp folder and sets `PORTABLE_EXECUTABLE_DIR` to the folder it was started from. An unpacked copy is portable too when a `portable.txt` sits next to its executable. In either case the settings folder is `data\` next to the executable, and `userData` and `sessionData` are moved there before the single-instance lock, so the MCP pipe name, the token and Chromium's data follow, an installed and a portable copy run side by side, and two copies of one portable folder don't. A portable build has no updater (electron-updater would install the downloaded setup) and no launch-at-startup (its path moves with the folder); the settings page hides that switch (`AppStatus.portable`) and the About section says so. A development build is never portable.
 
 ## 7. Overlay renderer
 
