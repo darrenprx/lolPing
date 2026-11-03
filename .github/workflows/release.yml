@@ -40,14 +40,16 @@ jobs:
       - run: npm run test:helper
       - run: npm test
       - run: npm run dist
-      - name: Upload the installer and its update files
+      - name: Upload the installer, the portable build and the update files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         # latest.yml and the blockmap are what electron-updater in an installed lolPing reads to find and fetch this version.
+        # The portable .exe is not in latest.yml: a portable copy never updates itself.
         run: |
           gh release upload "$GITHUB_REF_NAME" \
             "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe" \
+            "release/lolPing-${GITHUB_REF_NAME#v}-portable.exe" \
             "release/latest.yml" \
             "release/lolPing-Setup-${GITHUB_REF_NAME#v}.exe.blockmap" \
             --clobber

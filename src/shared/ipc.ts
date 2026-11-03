@@ -212,6 +212,8 @@ export interface AppStatus {
    * left by an update (ad-hoc signatures change every build): it has to be removed and added again.
    */
   staleAccess?: boolean;
+  /** A portable build: data lives next to the executable, and there is no self-update or launch-at-startup. */
+  portable?: boolean;
 }
 
 export interface About {

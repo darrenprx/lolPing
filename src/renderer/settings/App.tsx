@@ -282,8 +282,10 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <FeaturesSection settings={s} update={update} />
 
         <div className="section" id="app">{t.navApp}</div>
-        <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
-          checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        {status.portable ? null : ( // a portable build can't register itself: its path moves with the folder
+          <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
+            checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        )}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
             style={{ minWidth: 170 }}
