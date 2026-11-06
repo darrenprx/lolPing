@@ -6,8 +6,9 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { featureOn } from '../../../shared/features';
 import type { Strings } from '../../../shared/i18n';
-import { hotkeyParts, vkLabel } from '../../../shared/keys';
+import { hotkeyLabel, hotkeyParts, vkLabel } from '../../../shared/keys';
 import type { RoomMember, RoomState } from '../../../shared/room';
+import { ROOM_CHAT_HOTKEY } from '../../../shared/roomChat';
 import { TAG_COLORS, readableTagRgb, tagColorCss, tagHex, tagRgbFromHex } from '../../../shared/roomColors';
 import { clampNameInput } from '../../../shared/roomProtocol';
 import { LIMITS, type RoomTextStyle, type Settings } from '../../../shared/settings';
@@ -228,6 +229,9 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
               }}>
               {TEXT_STYLES.map((v) => <Option key={v} value={v} text={textStyleLabel(t, v)}>{textStyleLabel(t, v)}</Option>)}
             </Dropdown>
+          </SettingRow>
+          <SettingRow icon={<Chat24Regular />} title={t.roomChatShortcut} description={t.roomChatShortcutDesc}>
+            <span className="value">{hotkeyLabel(ROOM_CHAT_HOTKEY, api.platform)}</span>
           </SettingRow>
           <SettingRow icon={<Keyboard24Regular />} title={t.textShortcut} description={t.textShortcutDesc}>
             <KeyCapture parts={hotkeyParts(s.textHotkey, api.platform)} requireModifier error={textKeyError}

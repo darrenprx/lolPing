@@ -139,6 +139,26 @@ export interface TextApi {
   strings(): Promise<TextBoxText | null>;
 }
 
+export const CHAT_CH = { get: 'chat:get', state: 'chat:state', submit: 'chat:submit', draft: 'chat:draft', hide: 'chat:hide' } as const;
+
+/** The desktop chat reads the same session history as the room panel. */
+export interface RoomChatState {
+  lang: Lang;
+  code: string;
+  members: number;
+  history: readonly HistoryLine[];
+  /** Used only for a page's first state or a different room, never to replace the page's current draft. */
+  draft?: string;
+}
+
+export interface RoomChatApi {
+  get(): Promise<RoomChatState | null>;
+  on(cb: (state: RoomChatState) => void): () => void;
+  submit(text: string): Promise<TextAnswer>;
+  draft(text: string): void;
+  hide(): void;
+}
+
 export const PANEL_CH = { state: 'panel:state', action: 'panel:action' } as const;
 
 /** Everything a panel window draws. The roster and the vote widget get the same shape, so one message feeds either. */

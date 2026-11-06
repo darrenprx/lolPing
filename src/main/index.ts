@@ -9,7 +9,7 @@ import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import {
-  SETTINGS_CH, type About, type AppStatus, type PanelAction, type PanelState, type TeammateHistoryOp,
+  SETTINGS_CH, type About, type AppStatus, type PanelAction, type PanelState, type TeammateHistoryOp, type TextAnswer,
 } from '../shared/ipc';
 import { announcedEmoteHashes } from '../shared/emotes';
 import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
@@ -19,6 +19,7 @@ import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import type { VoteKind } from '../shared/roomProtocol';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
+import { ROOM_CHAT_HOTKEY, roomChatShortcutFree } from '../shared/roomChat';
 import { sameTagRgb, tagWire } from '../shared/roomColors';
 import { askKeyHeld, asksOnPing, overlaySettings, soundLevel, type Settings } from '../shared/settings';
 import type { Spot } from '../shared/teammate/askMachine';
@@ -45,6 +46,7 @@ import {
 } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomHistory } from './roomHistory';
+import { RoomChatWindow } from './roomChatWindow';
 import { PanelWindows } from './panelWindows';
 import { MAX_MEMBERS, RoomManager, type RoomToast } from './roomManager';
 import { postLine, startRoomText, type RoomTextDeps } from './roomText';
@@ -224,6 +226,7 @@ function start(): void {
   let quitting = false; // read by pushStatus: once true, the tray and overlays are gone
   let capturing = false; // the settings page is listening for a key, so the helper must stay suspended
   let textOpen = false;
+  let chatFocused = false;
   let wordsOpen = false; // the teammate's words box has the keyboard: the helper stays suspended, as for the text box
   let mate: Mate | null = null; // the teammate, while its feature is on
   let mateFailed = false; // it couldn't start: its ask key stays off for this session
@@ -434,12 +437,25 @@ function start(): void {
   room.on('state', pushRoom);
   // The vote widget and the roster live in their own windows that never take focus.
   const panels = new PanelWindows();
+  const chat = new RoomChatWindow({
+    state: () => ({
+      lang: resolveLang(settings.language, app.getLocale()), code: room.state().code ?? '',
+      members: room.state().members.length, history: history.lines(),
+    }),
+    submit: (raw, at) => submitRoomText(raw, at, false),
+    focused: (on) => { chatFocused = on; syncSuspended(); },
+    shortcutFailed: () => overlays.toast(text().hotkeyTaken(hotkeyLabel(ROOM_CHAT_HOTKEY, PLATFORM)), text().roomChatKeyTaken),
+  });
+  const syncChat = (): void => chat.sync(
+    !quitting && live.text && !capturing && !textOpen && !wordsOpen, roomChatShortcutFree(settings),
+  );
   // The room keys (Alt+T and the panel key) are the helper's only while a room is active, so they reach other apps otherwise.
   let live = liveKeys(settings, { active: false }, enabled);
   const sendConfig = (): void => {
     live = liveKeys(settings, { active: room.state().phase === 'active' }, enabled);
     // The helper stops reporting a held panel key once it is off, so the roster would stay up: hide it here.
     if (!live.panel) panels.hideRoster();
+    syncChat();
     bridge.send(configCommand(effective(settings), enabled, live));
   };
   room.on('state', () => {
@@ -484,6 +500,7 @@ function start(): void {
     const s = room.state();
     if (s.phase === 'idle') {
       history.clear();
+      chat.clearDraft();
       memberNames.clear();
       closeTextWindow(); // its text and commands only make sense in a room, and a kick leaves it open otherwise
     }
@@ -494,9 +511,10 @@ function start(): void {
     vote, voteOver, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
     volume: soundLevel(settings),
   });
-  /** An open roster follows the room and its history; a hidden one ignores this. */
+  /** Open room views follow the room and its history; hidden ones ignore this. */
   function refreshRoster(): void {
     panels.update(panelState('roster', null));
+    chat.update();
   }
   room.on('state', refreshRoster);
   panels.on('action', (a: PanelAction) => {
@@ -631,7 +649,10 @@ function start(): void {
     pushStatus();
   }
 
-  const syncSuspended = (): void => bridge.send({ type: 'suspend', on: capturing || textOpen || wordsOpen });
+  const syncSuspended = (): void => {
+    bridge.send({ type: 'suspend', on: capturing || textOpen || wordsOpen || chatFocused });
+    syncChat();
+  };
   /** A screen point (DIPs) as our own lines and the room see it: its display, the point inside it, and the shared form. */
   const ownSpot = (at: { x: number; y: number }) => {
     const display = screen.getDisplayNearestPoint(at);
@@ -640,11 +661,11 @@ function start(): void {
     return { displayId: display.id, x, y, shared: toShared(overlays.numbered(), display.id, x, y) };
   };
   const ownTag = () => ({ name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom) });
-  /** Shows our own text where the box was opened, and sends it to the room. */
-  const sendOwnText = (message: string, at: { x: number; y: number }): void => {
+  /** Chat keeps our line in history without a desktop bubble; the quick text box still places one at its spot. */
+  const sendOwnText = (message: string, at: { x: number; y: number }, overlay: boolean): void => {
     const { shared, ...spot } = ownSpot(at);
-    postLine(lineDeps, { kind: 'text', owner: 'self', tag: ownTag(), ...spot, text: message });
-    if (shared) room.sendText(message, shared);
+    postLine(lineDeps, { kind: 'text', owner: 'self', tag: ownTag(), ...spot, text: message }, { overlay });
+    if (shared) room.sendText(message, shared, { overlay });
   };
   /** "<name> - Alive" for the member whose name tag was clicked in the panel, shown here and sent to the room. */
   const sendOwnAlive = (peer: string, at: { x: number; y: number }): void => {
@@ -654,11 +675,12 @@ function start(): void {
     postLine(lineDeps, { kind: 'alive', owner: 'self', tag: ownTag(), ...spot, text: text().aliveLine(who.name) });
     if (shared) room.sendAlive(peer, shared);
   };
-  registerTextWindow((raw, at) => {
+  const submitRoomText = (raw: string, at: { x: number; y: number }, overlay = true): TextAnswer => {
+    if (!live.text) return 'unknown';
     const input = parseTextInput(raw);
     switch (input.kind) {
       case 'text':
-        sendOwnText(input.text, at);
+        sendOwnText(input.text, at, overlay);
         return 'sent';
       case 'unknown':
         return 'unknown';
@@ -676,7 +698,8 @@ function start(): void {
       default:
         return 'sent'; // nothing usable was typed: just close
     }
-  });
+  };
+  registerTextWindow(submitRoomText);
   onTextWindowGone(() => {
     textOpen = false;
     syncSuspended();
@@ -705,7 +728,7 @@ function start(): void {
       else if (live.panel) panels.showRoster(screen.getCursorScreenPoint(), panelState('roster', null));
     } else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
-      if (capturing || textOpen || wordsOpen) syncSuspended();
+      if (capturing || textOpen || wordsOpen || chatFocused) syncSuspended();
       panels.hideRoster(); // a restarted helper lost the panel key's up, so a shown roster would stay up
       mate?.stale.helperReady();
     } else if (ev.type === 'scroll') mate?.stale.scroll({ x: ev.x, y: ev.y });
@@ -1078,6 +1101,7 @@ function start(): void {
     syncRoomText();
     syncRoomVotes();
     syncMate();
+    refreshRoster();
     const h = s.teammate.history;
     const was = previous.teammate.history;
     if (mate && (h.keepDays !== was.keepDays || h.maxThreads !== was.maxThreads)) {
@@ -1250,6 +1274,7 @@ function start(): void {
     const mateStopped = stopMate();
     tray.destroy();
     panels.destroy();
+    chat.destroy();
     overlays.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed(), mateStopped])
       .then(() => app.exit(0));

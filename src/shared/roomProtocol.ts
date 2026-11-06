@@ -66,6 +66,8 @@ export interface EmoteMsg extends Base {
 export interface TextMsg extends Base {
   t: 'text';
   text: string;
+  /** Chat-window messages only enter history. Older apps ignore this flag and still show a bubble. */
+  overlay?: false;
   d: number;
   x: number;
   y: number;
@@ -205,11 +207,11 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}) };
     }
     case 'text': {
-      const { text, d, x, y } = raw;
+      const { text, overlay, d, x, y } = raw;
       if (typeof text !== 'string' || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
       const safe = sanitizeText(text);
-      return safe ? { t, ...base, text: safe, d: d as number, x, y } : null;
+      return safe ? { t, ...base, text: safe, d: d as number, x, y, ...(overlay === false ? { overlay } : {}) } : null;
     }
     case 'alive': {
       const { who, d, x, y } = raw;

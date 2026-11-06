@@ -51,6 +51,15 @@ describe('startRoomText', () => {
     ]);
   });
 
+  it('keeps a friend\'s chat message in history without showing a desktop bubble', () => {
+    const { room, shown, history } = setup();
+    room.emit('remoteText', spoken({ overlay: false }));
+    expect(shown).toEqual([]);
+    expect(history.lines()).toEqual([
+      { at: 1234, kind: 'text', tag: { name: 'Alex', color: 2, rgb: [10, 20, 30] }, text: 'push mid' },
+    ]);
+  });
+
   it('writes an alive line with the clicked member\'s name under the clicker\'s tag', () => {
     const { room, shown, history } = setup();
     room.emit('remoteText', spoken({ kind: 'alive', text: undefined, who: 'kim' }));
@@ -102,6 +111,15 @@ describe('postLine', () => {
       kind: 'text', owner: 'self', tag: { name: 'Sam', color: 0, rgb: null }, displayId: 3, x: 5, y: 6, text: 'gg',
     });
     expect(shown).toEqual([{ displayId: 3, x: 5, y: 6, text: 'gg', owner: 'self', tag: { name: 'Sam', color: 0, rgb: null } }]);
+    expect(history.lines()).toEqual([{ at: 1234, kind: 'text', tag: { name: 'Sam', color: 0, rgb: null }, text: 'gg' }]);
+  });
+
+  it('keeps a chat send in history without spawning a desktop bubble', () => {
+    const { deps, shown, history } = setup();
+    postLine(deps, {
+      kind: 'text', owner: 'self', tag: { name: 'Sam', color: 0, rgb: null }, displayId: 3, x: 5, y: 6, text: 'gg',
+    }, { overlay: false });
+    expect(shown).toEqual([]);
     expect(history.lines()).toEqual([{ at: 1234, kind: 'text', tag: { name: 'Sam', color: 0, rgb: null }, text: 'gg' }]);
   });
 

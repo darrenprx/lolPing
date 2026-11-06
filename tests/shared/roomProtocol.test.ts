@@ -49,6 +49,15 @@ describe('text messages', () => {
     expect(validateMessage({ ...text, text: '  Go\u202e mid\u0000  ' })).toEqual({ ...text, text: 'Go mid' });
   });
 
+  it('round-trips a history-only chat flag and leaves legacy text unchanged', () => {
+    const chat: TextMsg = { ...text, overlay: false };
+    expect(decodeMessage(encodeMessage(chat))).toEqual(chat);
+    expect(decodeMessage(encodeMessage(text))).toEqual(text);
+    for (const overlay of [undefined, true, null, 0, 'false', {}, []]) {
+      expect(validateMessage({ ...text, overlay })).toEqual(text);
+    }
+  });
+
   it.each([
     ['empty text', { ...text, text: '' }],
     ['blank text', { ...text, text: '   ' }],
@@ -77,7 +86,7 @@ describe('room text, alive lines, votes and ballots', () => {
 
   it('keeps a worst-case text packet under the sealed packet cap', () => {
     const key = Buffer.alloc(32, 7);
-    const worst: TextMsg = { ...text, text: '😀'.repeat(120), d: 16, x: 0.1234, y: 0.5678 };
+    const worst: TextMsg = { ...text, text: '😀'.repeat(120), overlay: false, d: 16, x: 0.1234, y: 0.5678 };
     const packet = seal(key, encodeMessage(worst));
     expect(packet.length).toBeLessThanOrEqual(MAX_PACKET);
     expect(decodeMessage(open(key, packet) ?? new Uint8Array())).toEqual(worst);

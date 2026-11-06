@@ -83,6 +83,8 @@ export interface RemoteText {
   x: number;
   y: number;
   text?: string;
+  /** Absent for legacy spot text; false for messages sent from the chat window. */
+  overlay?: false;
   who?: string;
 }
 
@@ -240,8 +242,8 @@ export class RoomManager extends EventEmitter {
     this.sendShared({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}) });
   }
 
-  sendText(text: string, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'text', text, ...shared });
+  sendText(text: string, shared: { d: number; x: number; y: number }, options: { overlay?: boolean } = {}): void {
+    this.sendShared({ t: 'text', text, ...shared, ...(options.overlay === false ? { overlay: false } : {}) });
   }
 
   /** `who` is the member whose name the line shows; the receivers write the words themselves. */
@@ -565,7 +567,10 @@ export class RoomManager extends EventEmitter {
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
     else if (msg.t === 'emote') this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, fx: msg.fx, peer: m.peer, tag } satisfies RemoteEmote);
     else if (msg.t === 'text') {
-      this.emit('remoteText', { kind: 'text', peer: m.peer, tag, displayId: target.displayId, x, y, text: msg.text } satisfies RemoteText);
+      this.emit('remoteText', {
+        kind: 'text', peer: m.peer, tag, displayId: target.displayId, x, y, text: msg.text,
+        ...(msg.overlay === false ? { overlay: false } : {}),
+      } satisfies RemoteText);
     } else if (msg.t === 'alive') {
       this.emit('remoteText', { kind: 'alive', peer: m.peer, tag, displayId: target.displayId, x, y, who: msg.who } satisfies RemoteText);
     }

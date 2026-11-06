@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'" />
+    <title>lolPing</title>
+    <link rel="stylesheet" href="./chat.css" />
+  </head>
+  <body>
+    <main id="chat">
+      <header>
+        <span id="title"></span>
+        <span id="room"></span>
+        <button id="hide" type="button">×</button>
+      </header>
+      <section id="messages" class="lol-scroll" role="log" aria-live="polite" aria-relevant="additions text"></section>
+      <form id="compose">
+        <div class="input-row">
+          <input id="message" type="text" autocomplete="off" spellcheck="false" />
+          <span id="count" hidden></span>
+          <button id="send" type="submit"></button>
+        </div>
+        <small id="hint" role="status"></small>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

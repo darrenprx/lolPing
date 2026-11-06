@@ -25,10 +25,14 @@ export interface RoomLine {
   text: string;
 }
 
-/** Shows a line and keeps it in the history: the one path for a member's lines and for ours. */
-export function postLine(deps: Pick<RoomTextDeps, 'show' | 'history' | 'now'>, line: RoomLine): void {
+/** Keeps a line in history and optionally shows it on the desktop; chat sends need no extra bubble. */
+export function postLine(
+  deps: Pick<RoomTextDeps, 'show' | 'history' | 'now'>, line: RoomLine, options: { overlay?: boolean } = {},
+): void {
   const { kind, tag, text } = line;
-  deps.show({ displayId: line.displayId, x: line.x, y: line.y, text, owner: line.owner, ...(tag ? { tag } : {}) });
+  if (options.overlay !== false) {
+    deps.show({ displayId: line.displayId, x: line.x, y: line.y, text, owner: line.owner, ...(tag ? { tag } : {}) });
+  }
   deps.history.push({ at: deps.now(), kind, tag: tag && { name: tag.name, color: tag.color, rgb: tag.rgb }, text });
 }
 
@@ -37,7 +41,7 @@ export function startRoomText(deps: RoomTextDeps): () => void {
   const onText = (p: RemoteText): void => {
     const common = { owner: p.peer, tag: p.tag, displayId: p.displayId, x: p.x, y: p.y };
     if (p.kind === 'text') {
-      if (p.text !== undefined) postLine(deps, { ...common, kind: 'text', text: p.text });
+      if (p.text !== undefined) postLine(deps, { ...common, kind: 'text', text: p.text }, { overlay: p.overlay });
       return;
     }
     // The line is written here, in our language, with the name of the member they clicked.

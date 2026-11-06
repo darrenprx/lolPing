@@ -5,6 +5,9 @@ import {
 import {
   MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RemoteText, type RoomToast,
 } from '../../src/main/roomManager';
+import { RoomHistory } from '../../src/main/roomHistory';
+import { startRoomText, type RoomTextDeps } from '../../src/main/roomText';
+import { strings } from '../../src/shared/i18n';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import type { TagRgb } from '../../src/shared/roomColors';
 import {
@@ -1075,6 +1078,53 @@ describe('room text and votes', () => {
     expect(texts).toHaveLength(1); // only the first of three in one second
   });
 
+  it('carries the history-only flag to the receiving text handler without changing legacy text', () => {
+    alex.text({ overlay: false });
+    alex.text();
+    expect(texts).toMatchObject([
+      { kind: 'text', text: 'push mid', overlay: false },
+      { kind: 'text', text: 'push mid' },
+    ]);
+    expect(texts[1]).not.toHaveProperty('overlay');
+  });
+
+  it('delivers chat through the encrypted room path into history without a desktop bubble', () => {
+    const history = new RoomHistory();
+    const shown: Parameters<RoomTextDeps['show']>[0][] = [];
+    const stop = startRoomText({ room, history, show: (line) => shown.push(line), now: Date.now, text: () => strings('en') });
+    try {
+      lan.sent = [];
+      room.sendText('chat only', { d: 1, x: 0.5, y: 0.25 }, { overlay: false });
+      const chat = sentMessages('lan:a')[0];
+      expect(chat).toMatchObject({ t: 'text', text: 'chat only', overlay: false });
+      if (chat.t !== 'text') throw new Error('Expected a text message');
+      alex.text({ text: chat.text, overlay: chat.overlay, d: chat.d, x: chat.x, y: chat.y });
+      expect(history.lines()).toMatchObject([{ kind: 'text', text: 'chat only', tag: { name: 'Alex' } }]);
+      expect(shown).toEqual([]);
+      alex.text({ text: 'spot text' });
+      expect(shown).toMatchObject([{ text: 'spot text' }]);
+      expect(history.lines().map((line) => line.text)).toEqual(['chat only', 'spot text']);
+    } finally {
+      stop();
+    }
+  });
+
+  it('keeps history-only chat behind the same pause, mute and rate limits as spot text', () => {
+    room.setStatusFlags({ paused: true, roomMuted: false });
+    alex.text({ overlay: false });
+    room.setStatusFlags({ paused: false, roomMuted: true });
+    alex.text({ overlay: false });
+    room.setStatusFlags({ paused: false, roomMuted: false });
+    room.muteMember(alex.peer, true);
+    alex.text({ overlay: false });
+    expect(texts).toEqual([]);
+    room.muteMember(alex.peer, false);
+    profile.limit = 1;
+    alex.text({ overlay: false });
+    alex.text({ overlay: false });
+    expect(texts).toHaveLength(1);
+  });
+
   it('drops alive about someone who is not in the room, and a member that needs an update', () => {
     alex.alive({ who: '9999999999999999' });
     expect(texts).toHaveLength(0);
@@ -1182,6 +1232,9 @@ describe('room text and votes', () => {
     room.sendBallot('0a1b2c3d', false);
     expect(sentMessages('lan:b').map((m) => m.t)).toEqual(['text', 'alive', 'vote', 'ballot']);
     expect(sentMessages('lan:b')[2]).toMatchObject({ kind: 'kick', target: old.peer });
+    room.sendText('chat only', { d: 1, x: 0.1, y: 0.2 }, { overlay: false });
+    expect(sentMessages('lan:b').at(-1)).toMatchObject({ t: 'text', text: 'chat only', overlay: false });
+    expect(sentMessages('lan:b')[0]).not.toHaveProperty('overlay');
     await vi.advanceTimersByTimeAsync(2000);
     old.presence({ app: '0.5.1' });
     expect(room.state().members.map((m) => m.peer)).toContain(old.peer);
