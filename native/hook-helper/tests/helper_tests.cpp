@@ -982,6 +982,31 @@ static void test_custom_key_drag_types_nothing() {
   CHECK(r.swallow && r.injects.empty());
 }
 
+// A custom trigger key pressed with a modifier held is another program's shortcut (Cmd+V on macOS, #141): it passes
+// at once, so letting go of the modifier first can't turn it into a plain V.
+static void test_custom_key_with_a_modifier_held_passes_as_a_shortcut() {
+  for (const uint32_t mod : {WIN, CTRL}) {
+    Decision d = withTrigger(Trigger::CustomVk, KEY_V);
+    CHECK(!d.onEvent(kd(mod)).swallow);
+    Result r = d.onEvent(kd(KEY_V));
+    CHECK(!r.swallow && r.injects.empty());
+    CHECK(!d.onEvent(kd(KEY_V)).swallow);  // its auto-repeat passes too
+    CHECK(!d.onEvent(ku(mod)).swallow);    // the modifier comes up first
+    r = d.onEvent(ku(KEY_V));
+    CHECK(!r.swallow && r.injects.empty());
+    // A shortcut's key isn't a held trigger: a drag while Cmd+V is down belongs to the app.
+    d.onEvent(kd(mod));
+    d.onEvent(kd(KEY_V));
+    CHECK(!d.onEvent(md(Btn::Left, 0, 0)).swallow);
+    CHECK(d.onEvent(mv(0, 40)).emits.empty());
+    d.onEvent(mu(Btn::Left, 0, 40));
+    d.onEvent(ku(KEY_V));
+    d.onEvent(ku(mod));
+    CHECK(d.onEvent(kd(KEY_V)).swallow);  // a press of its own is the trigger again
+    CHECK(d.onEvent(md(Btn::Left, 0, 0)).swallow);
+  }
+}
+
 // Caps Lock is not held back: a replayed tap would toggle it.
 static void test_caps_lock_is_not_tapped_through() {
   Decision d = withTrigger(Trigger::CapsLock);
@@ -2012,6 +2037,7 @@ int main() {
   test_custom_key_rollover_keeps_typed_order();
   test_custom_key_flushes_before_modifier();
   test_custom_key_drag_types_nothing();
+  test_custom_key_with_a_modifier_held_passes_as_a_shortcut();
   test_caps_lock_is_not_tapped_through();
   test_mouse4_trigger_drags_with_side_button();
   test_ctrl_drag_opens_emote_wheel();

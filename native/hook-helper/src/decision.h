@@ -185,8 +185,11 @@ class Decision {
   // heldBackVk_: the trigger key is down but not sent yet; a drag consumes it, a lone release types it.
   // typedVk_: the held-back key was flushed because another key was pressed (the user is typing):
   // its repeats and its real key-up now pass through to the OS.
+  // shortcutVk_: the trigger key went down with a modifier held (Cmd+V): another program's shortcut, passed at
+  // once and not a held trigger until it comes up.
   uint32_t heldBackVk_ = 0;
   uint32_t typedVk_ = 0;
+  uint32_t shortcutVk_ = 0;
   WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   // Per wheel: a release or click happened while its trigger key was held, so its key-up reports TriggerUp
   // (the teammate sends an ask's spots then). Indexed by WheelKind.

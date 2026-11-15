@@ -88,7 +88,7 @@ bool Decision::held(WheelKind k) const {
       return (mods() & ModWin) != 0;
     case Trigger::CapsLock:
     case Trigger::CustomVk:
-      return keyDown_[keyTriggerVk(k) & 0xFF];
+      return keyDown_[keyTriggerVk(k) & 0xFF] && (keyTriggerVk(k) & 0xFF) != shortcutVk_;
     default:
       return false;
   }
@@ -422,18 +422,24 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     // Caps Lock and custom-key triggers of any wheel would toggle or type: keep them from the OS.
     const auto ownKey = [&](WheelKind k) { return isKeyTrigger(k) && vk == keyTriggerVk(k); };
     // Tap-through: the trigger key was flushed for typing, so its auto-repeats type too.
-    if (vk == typedVk_) {
+    if (vk == typedVk_ || vk == shortcutVk_) {
       swallowKeyUps_.erase(vk);
       return;
     }
     if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote) || ownKey(WheelKind::Ask)) {
+      const auto customKey = [&](WheelKind k) { return spec(k).trigger == Trigger::CustomVk && vk == spec(k).vk; };
+      const bool custom = customKey(WheelKind::Ping) || customKey(WheelKind::Emote) || customKey(WheelKind::Ask);
+      // Held back with Cmd or Ctrl down, a V typed on its own key-up would be a plain v if the modifier came up first.
+      if (custom && !repeat && mods() != 0) {
+        shortcutVk_ = vk;
+        swallowKeyUps_.erase(vk);
+        return;
+      }
       r.swallow = true;
       swallowKeyUps_.insert(vk);
       // Tap-through: hold a custom key back instead of dropping it; onKeyUp types it if no drag used it.
       // Caps Lock keeps the old behaviour: a replayed tap would toggle it.
-      const auto customKey = [&](WheelKind k) { return spec(k).trigger == Trigger::CustomVk && vk == spec(k).vk; };
-      if (!repeat && (customKey(WheelKind::Ping) || customKey(WheelKind::Emote) || customKey(WheelKind::Ask)))
-        heldBackVk_ = vk;
+      if (!repeat && custom) heldBackVk_ = vk;
       return;
     }
   }
@@ -461,6 +467,7 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   }
   // Tap-through: a flushed key's real up passes (its swallow was dropped at the flush), ending typing mode.
   if (vk == typedVk_) typedVk_ = 0;
+  if (vk == shortcutVk_) shortcutVk_ = 0;
   // Tap-through: the key was pressed and released with nothing in between: type it now (down + up).
   // The real up stays swallowed: the OS never saw the real down.
   if (vk == heldBackVk_) {
