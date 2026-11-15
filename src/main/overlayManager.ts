@@ -409,7 +409,9 @@ export class OverlayManager extends EventEmitter {
   private refreshDisplays(): void {
     if (this.maps.length === 0) return;
     const displays = screen.getAllDisplays();
-    const moved = displays.length !== this.maps.length
+    // A page that died (a GPU reset on wake can take it down) leaves a window that draws nothing until it is replaced.
+    const crashed = [...this.windows.values()].some((w) => !w.isDestroyed() && w.webContents.isCrashed());
+    const moved = crashed || displays.length !== this.maps.length
       || displays.some((d) => {
         const m = this.maps.find((map) => map.id === d.id);
         // Without the scale, 4K at 200% and 1080p at 100% look the same: both are 1920x1080 DIPs.
@@ -440,8 +442,8 @@ export class OverlayManager extends EventEmitter {
     this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
     this.emit('displays', this.numberedList);
     for (const [id, win] of this.windows) {
-      if (!displays.some((d) => d.id === id)) {
-        win.destroy();
+      if (!displays.some((d) => d.id === id) || win.isDestroyed() || win.webContents.isCrashed()) {
+        if (!win.isDestroyed()) win.destroy();
         this.windows.delete(id);
       }
     }

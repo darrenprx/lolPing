@@ -48,7 +48,14 @@ vi.mock('electron', async () => {
     x: number;
     bounds: Rect;
     destroyed = false;
-    readonly contents = Object.assign(new Emitter(), { send: vi.fn(), isDestroyed: () => false });
+    readonly contents = Object.assign(new Emitter(), {
+      send: vi.fn(),
+      isDestroyed: () => false,
+      crashed: false,
+      isCrashed(): boolean {
+        return this.crashed;
+      },
+    });
     /** Like Electron, a destroyed window throws on every property read, though its page can still report a load. */
     get webContents(): FakeWindow['contents'] {
       if (this.destroyed) throw new TypeError('Object has been destroyed');
@@ -604,6 +611,15 @@ describe('OverlayManager displays that come and go', () => {
     expect(() => second.contents.emit('did-finish-load')).not.toThrow();
   });
 
+  it('replaces an overlay whose page died before the next wheel, so the wheel shows without a restart', () => {
+    const first = h.windows[0] as unknown as { contents: { crashed: boolean }; destroyed: boolean };
+    first.contents.crashed = true;
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    expect(first.destroyed).toBe(true);
+    expect(h.windows).toHaveLength(3);
+    expect(sent(2)).toEqual([['wheel:open', { x: 100, y: 200, wheel: 'ping' }]]);
+    expect(h.windows[1].webContents.send).not.toHaveBeenCalledWith('wheel:open', expect.anything());
+  });
 });
 
 describe('OverlayManager z-order', () => {
