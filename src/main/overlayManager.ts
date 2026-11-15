@@ -485,7 +485,12 @@ export class OverlayManager extends EventEmitter {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
       win.setHiddenInMissionControl(true); // the overlay isn't a window to the user: keep it out of Mission Control
     }
-    win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
+    // A display can go away while its overlay is loading (screens waking up, #142): the destroyed window then throws
+    // on every read, but its page may still report the load.
+    const wc = win.webContents;
+    wc.on('did-finish-load', () => {
+      if (!wc.isDestroyed()) wc.send('overlay:settings', this.settings);
+    });
     win.once('ready-to-show', () => {
       win.showInactive();
       this.place(win, d); // re-apply: mixed-DPI setups can size the first frame wrong

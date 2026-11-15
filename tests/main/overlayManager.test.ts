@@ -43,11 +43,17 @@ vi.mock('electron', async () => {
   const { EventEmitter: Emitter } = await import('node:events');
   class FakeWindow extends Emitter {
     static fromWebContents(wc: unknown): FakeWindow | null {
-      return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
+      return (h.windows as unknown as FakeWindow[]).find((w) => w.contents === wc) ?? null;
     }
     x: number;
     bounds: Rect;
-    webContents = Object.assign(new Emitter(), { send: vi.fn() });
+    destroyed = false;
+    readonly contents = Object.assign(new Emitter(), { send: vi.fn(), isDestroyed: () => false });
+    /** Like Electron, a destroyed window throws on every property read, though its page can still report a load. */
+    get webContents(): FakeWindow['contents'] {
+      if (this.destroyed) throw new TypeError('Object has been destroyed');
+      return this.contents;
+    }
     constructor(opts: Rect) {
       super();
       this.x = opts.x;
@@ -84,9 +90,11 @@ vi.mock('electron', async () => {
       return this.visible;
     }
     isDestroyed(): boolean {
-      return false;
+      return this.destroyed;
     }
-    destroy(): void {}
+    destroy(): void {
+      this.destroyed = true;
+    }
   }
   const screen = Object.assign(new Emitter(), {
     getAllDisplays: () => h.displays,
@@ -585,6 +593,17 @@ describe('OverlayManager stale display bounds', () => {
     expect(h.windows[0].bounds).toBe(bounds); // untouched: no rebuild happened
     expect(sent(0)).toEqual([['wheel:open', { x: 100, y: 200, wheel: 'ping' }], ['toast:show', { title: 't', body: 'b' }]]);
   });
+});
+
+describe('OverlayManager displays that come and go', () => {
+  it('ignores the load report of an overlay whose display went away while its page was loading (#142)', async () => {
+    const { screen } = await import('electron');
+    const second = h.windows[1] as unknown as { contents: { emit: (e: string) => boolean } };
+    h.displays.splice(1, 1);
+    screen.emit('display-removed');
+    expect(() => second.contents.emit('did-finish-load')).not.toThrow();
+  });
+
 });
 
 describe('OverlayManager z-order', () => {
