@@ -15,6 +15,8 @@ const FAKE = path.resolve('tests/main/fixtures/fakeAgent.mjs');
 const platform = platformOf(process.platform);
 const win = process.platform === 'win32';
 const SLOW = 20_000;
+// taskkill alone can take 10 s on a busy Windows machine (it lists every process first).
+const KILL_SLOW = 60_000;
 
 let dir = '';
 let leftover: number[] = [];
@@ -237,7 +239,7 @@ describe('AgentRunner', () => {
     const size = sizeOf(beat);
     await new Promise((r) => setTimeout(r, 150));
     expect(sizeOf(beat)).toBe(size);
-  }, SLOW);
+  }, KILL_SLOW);
 
   it('gives the latest session id while the agent still runs', async () => {
     await placeholder('claude');
