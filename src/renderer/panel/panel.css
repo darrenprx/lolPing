@@ -14,6 +14,11 @@ h1, p { margin: 0; }
   position: absolute; left: 10px; right: 10px; top: 8px; overflow: hidden; text-align: center; white-space: nowrap;
   text-overflow: ellipsis; font: 700 17px/22px var(--serif); color: #8fdcc0; text-shadow: 0 1px 2px #000;
 }
+/* What the vote is about, when its starter said: one line between the title and the vote slot. */
+.surrender .topic {
+  position: absolute; left: 12px; right: 12px; top: 29px; overflow: hidden; text-align: center; white-space: nowrap;
+  text-overflow: ellipsis; font: 11px/14px var(--sans); color: #f0e6d2; text-shadow: 0 1px 2px #000;
+}
 /* The frame has two black slots: one for the votes, a thinner one for the time. */
 .segments { position: absolute; left: 13px; top: 44px; width: 197px; height: 12px; display: flex; gap: 2px; }
 .segments span { flex: 1; min-width: 0; background: linear-gradient(#45484b, #2d2f31); }

@@ -108,7 +108,13 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
   const status = voteStatus(mine, state.voteOver, t);
   if (status === null) foot.append(answerButton(true, 'yes', MARK.yes, t.voteYes), answerButton(false, 'no', MARK.no, t.voteNo));
   else foot.append(el('span', 'said', status));
-  card.append(el('h1', 'title', voteTitle(v, members, t)), marks('segments', voteBoxes(v, members)), track, foot);
+  card.append(el('h1', 'title', voteTitle(v, members, t)));
+  if (v.topic) {
+    const topic = el('p', 'topic', v.topic);
+    topic.title = v.topic; // cut off with an ellipsis when long: the whole line shows on hover
+    card.append(topic);
+  }
+  card.append(marks('segments', voteBoxes(v, members)), track, foot);
   root.replaceChildren(card);
   countdown = { vote: v, over: state.voteOver, bar };
   if (!ticking) {

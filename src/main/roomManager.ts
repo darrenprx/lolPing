@@ -249,7 +249,7 @@ export class RoomManager extends EventEmitter {
     this.sendShared({ t: 'alive', who, ...shared });
   }
 
-  sendVote(v: { id: string; kind: VoteKind; target?: string }): void {
+  sendVote(v: { id: string; kind: VoteKind; target?: string; q?: string }): void {
     this.sendShared({ t: 'vote', ...v });
   }
 

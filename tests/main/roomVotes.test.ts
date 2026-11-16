@@ -101,6 +101,29 @@ describe('RoomVotes', () => {
     expect(room.ballots).toHaveLength(sent);
   });
 
+  it('sends what our surrender or ready check is about, and shows it', () => {
+    const { room, votes, views } = setup();
+    expect(votes.start('ready', undefined, 'ranked?')).toBe('started');
+    expect(room.votes).toEqual([{ id: OWN, kind: 'ready', q: 'ranked?' }]);
+    expect(views.at(-1)).toMatchObject({ kind: 'ready', topic: 'ranked?' });
+  });
+
+  it("shows the topic of a member's vote, and none for a vote without one", () => {
+    const { room, views } = setup();
+    room.emit('vote', voteFrom('a', { q: '打不过了' }));
+    expect(views.at(-1)).toMatchObject({ starter: 'a', topic: '打不过了' });
+    const { room: other, views: plain } = setup();
+    other.emit('vote', voteFrom('a'));
+    expect(plain.at(-1)).not.toHaveProperty('topic');
+  });
+
+  it('never puts a topic on a kick', () => {
+    const { room, votes, views } = setup();
+    expect(votes.start('kick', 'a', 'bye')).toBe('started');
+    expect(room.votes).toEqual([{ id: OWN, kind: 'kick', target: 'a' }]);
+    expect(views.at(-1)).not.toHaveProperty('topic');
+  });
+
   it('opens a vote a member sends, and our answer is sent once and kept', () => {
     const { room, votes, views } = setup();
     room.emit('vote', voteFrom('a'));

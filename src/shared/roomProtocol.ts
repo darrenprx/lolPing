@@ -8,6 +8,8 @@ export const MAX_NAME = 16;
 /** The first app version that sends and shows room text, alive lines and votes. */
 export const ROOM_CHAT_SINCE = '0.5.2';
 export const MAX_TEXT = 120;
+/** What a surrender or ready check is about: at most this many code points. */
+export const MAX_VOTE_TOPIC = 40;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
 
@@ -86,6 +88,8 @@ export interface VoteMsg extends Base {
   id: string;
   kind: VoteKind;
   target?: string;
+  /** Added in 0.6.1: what a surrender or ready check is about, typed after the command. Older apps ignore it. */
+  q?: string;
 }
 /** Added in 0.5.2: the sender's answer to vote `id`. */
 export interface BallotMsg extends Base {
@@ -131,6 +135,11 @@ export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): 
 /** Plain overlay text that cannot hide, reorder, or break the UI around it. */
 export function sanitizeText(raw: string): string {
   return [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_TEXT).join('').trim();
+}
+
+/** A vote's topic, cleaned like room text and cut to MAX_VOTE_TOPIC code points; '' when nothing is left. */
+export function sanitizeTopic(raw: string): string {
+  return [...sanitizeText(raw)].slice(0, MAX_VOTE_TOPIC).join('').trim();
 }
 
 /** A peer id: 16 lowercase hex digits. */
@@ -218,12 +227,15 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, who, d: d as number, x, y };
     }
     case 'vote': {
-      const { id, kind, target } = raw;
+      const { id, kind, target, q } = raw;
       if (!isVoteId(id) || !VOTE_KINDS.includes(kind as VoteKind)) return null;
       if (kind === 'kick') {
         return typeof target === 'string' && PEER_RE.test(target) ? { t, ...base, id, kind, target } : null;
       }
-      return target === undefined ? { t, ...base, id, kind: kind as VoteKind } : null;
+      if (target !== undefined) return null;
+      // A topic that cleans to nothing is dropped rather than the vote, the way a malformed emote effect is.
+      const topic = typeof q === 'string' ? sanitizeTopic(q.slice(0, 1024)) : '';
+      return { t, ...base, id, kind: kind as VoteKind, ...(topic ? { q: topic } : {}) };
     }
     case 'ballot': {
       const { id, yes } = raw;

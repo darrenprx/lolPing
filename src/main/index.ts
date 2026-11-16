@@ -690,7 +690,7 @@ function start(): void {
         if (!roomVotes) return 'votesOff';
         // Typing the command of the vote that is open means yes.
         if (roomVotes.current()?.kind === input.kind) roomVotes.answer(true);
-        else if (roomVotes.start(input.kind) === 'busy') overlays.toast(text().voteBusy, '');
+        else if (roomVotes.start(input.kind, undefined, input.topic) === 'busy') overlays.toast(text().voteBusy, '');
         return 'sent';
       case 'noff':
         if (!roomVotes) return 'votesOff';

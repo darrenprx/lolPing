@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { countdownRate, readyPhase, readySounds } from '../../src/renderer/panel/readyCheck';
+import { countdownRate, readyDetails, readyPhase, readySounds } from '../../src/renderer/panel/readyCheck';
+import { strings } from '../../src/shared/i18n';
+import type { RoomMember } from '../../src/shared/room';
+import type { VoteView } from '../../src/shared/voteTally';
+
+describe('readyDetails', () => {
+  const alex: RoomMember = {
+    peer: 'bb', name: 'Alex', color: 0, rgb: null, path: 'lan', status: 'on', needsUpdate: false, noEmotes: false,
+    noChat: false, textOff: false, votesOff: false, muted: false, self: false,
+  };
+  const view = (over: Partial<VoteView> = {}): VoteView => ({
+    id: '01234567', kind: 'ready', starter: 'bb', voters: ['bb'], ballots: {}, endsAt: 0, ...over,
+  });
+
+  it('names who started it, with what for when they said', () => {
+    expect(readyDetails(view(), [alex], strings('en'))).toBe('Started by Alex');
+    expect(readyDetails(view({ topic: 'ranked?' }), [alex], strings('en'))).toBe('Alex: ranked?');
+    expect(readyDetails(view({ topic: '排位' }), [alex], strings('zh-CN'))).toBe('Alex：排位');
+  });
+
+  it('still shows the topic once its starter has left', () => {
+    expect(readyDetails(view({ topic: 'ranked?' }), [], strings('en'))).toBe('ranked?');
+    expect(readyDetails(view(), [], strings('en'))).toBe('');
+  });
+});
 
 describe('readyPhase', () => {
   it('counts down until we answer, then shows our answer even after the vote ends', () => {

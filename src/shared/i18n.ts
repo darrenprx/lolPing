@@ -784,7 +784,7 @@ const en = {
   // room text
   aliveLine: (name: string) => `${name} - Alive`,
   textBoxPlaceholder: 'Say something to the room, Enter to send',
-  textBoxHint: 'Commands: /ff /noff /ready',
+  textBoxHint: 'Commands: /ff [topic] /noff /ready [topic]',
   textBoxUnknown: 'Unknown command',
   textBoxVotesOff: 'Votes are off',
 
@@ -802,6 +802,8 @@ const en = {
   voteYouNo: 'You voted no.',
   voteEnded: 'The vote is over.',
   voteStartedBy: (name: string) => `Started by ${name}`,
+  /** The ready check's line under its title when the starter said what it is for. */
+  voteTopicBy: (name: string, topic: string) => `${name}: ${topic}`,
   readyAccepted: 'Accepted',
   readyWaiting: 'Waiting for the others',
   readyDeclined: 'Declined',
@@ -1549,7 +1551,7 @@ const zh: Strings = {
 
   aliveLine: (name) => `${name} - 存活`,
   textBoxPlaceholder: '对房间说点什么，Enter 发送',
-  textBoxHint: '指令：/ff /noff /ready',
+  textBoxHint: '指令：/ff [主题] /noff /ready [主题]',
   textBoxUnknown: '未知指令',
   textBoxVotesOff: '投票已关闭',
 
@@ -1566,6 +1568,7 @@ const zh: Strings = {
   voteYouNo: '你投了反对。',
   voteEnded: '投票已结束。',
   voteStartedBy: (name) => `由 ${name} 发起`,
+  voteTopicBy: (name, topic) => `${name}：${topic}`,
   readyAccepted: '已接受',
   readyWaiting: '正在等待其他人',
   readyDeclined: '已拒绝',
