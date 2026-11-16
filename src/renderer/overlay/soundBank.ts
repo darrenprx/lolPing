@@ -26,6 +26,7 @@ export class SoundBank {
 
   /** Plays the sound at `url`, loading it under that key the first time. A file that won't load plays nothing. */
   async playUrl(url: string, volume01: number): Promise<void> {
+    if (volume01 <= 0) return;
     if (!this.buffers.has(url)) await this.load([{ key: url, url }]);
     this.play(url, volume01);
   }
