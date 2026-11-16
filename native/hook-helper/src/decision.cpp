@@ -1,5 +1,6 @@
 #include "decision.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace lp {
@@ -8,6 +9,20 @@ namespace {
 constexpr uint32_t kVkShift = 0x10, kVkCtrl = 0x11, kVkAlt = 0x12;
 constexpr uint32_t kVkLShift = 0xA0, kVkRShift = 0xA1, kVkLCtrl = 0xA2, kVkRCtrl = 0xA3;
 constexpr uint32_t kVkLAlt = 0xA4, kVkRAlt = 0xA5, kVkLWin = 0x5B, kVkRWin = 0x5C, kVkEsc = 0x1B;
+
+// A process name as the skip list matches it: lower-case, without a trailing ".exe".
+std::string appStem(std::string s) {
+  size_t start = 0;
+  while (start < s.size() && (s[start] == ' ' || s[start] == '\t')) ++start;
+  size_t end = s.size();
+  while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t')) --end;
+  s = s.substr(start, end - start);
+  for (char& ch : s) {
+    if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+  }
+  if (s.size() > 4 && s.compare(s.size() - 4, 4, ".exe") == 0) s.resize(s.size() - 4);
+  return s;
+}
 
 uint32_t modBit(uint32_t vk) {
   switch (vk) {
@@ -231,6 +246,16 @@ Result Decision::setConfig(const Config& c) {
   enabled_ = c.enabled;
   spotWhileHeld_ = {};
   resetDoubleTap();
+  skipStems_.clear();
+  size_t pos = 0;
+  while (pos < c.skipApps.size()) {
+    const size_t comma = c.skipApps.find(',', pos);
+    const std::string stem = appStem(c.skipApps.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos));
+    if (!stem.empty() && std::find(skipStems_.begin(), skipStems_.end(), stem) == skipStems_.end())
+      skipStems_.push_back(stem);
+    if (comma == std::string::npos) break;
+    pos = comma + 1;
+  }
   return r;
 }
 
@@ -261,6 +286,17 @@ Result Decision::setStaleWatch(bool on) {
 }
 
 void Decision::setFullscreenProbe(std::function<bool(int x, int y)> probe) { fullscreenProbe_ = std::move(probe); }
+
+void Decision::setForegroundApp(std::function<std::string()> fg) { foregroundApp_ = std::move(fg); }
+
+// The skip list costs one supplier call per gesture or hotkey press, and none at all while it is empty.
+bool Decision::inSkippedApp() const {
+  if (skipStems_.empty() || !foregroundApp_) return false;
+  const std::string name = foregroundApp_();
+  if (name.empty()) return false;
+  const std::string stem = appStem(name);
+  return std::find(skipStems_.begin(), skipStems_.end(), stem) != skipStems_.end();
+}
 
 Result Decision::releasePanel() {
   Result r;

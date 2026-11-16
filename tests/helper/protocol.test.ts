@@ -34,7 +34,7 @@ describe('hook-helper --simulate', () => {
   it('announces itself first', async () => {
     const events = await simulate([]);
     expect(events[0]).toEqual({ type: 'ready', version: HELPER_VERSION });
-    expect(HELPER_VERSION).toBe(6);
+    expect(HELPER_VERSION).toBe(7);
   });
 
   it('opens and releases the wheel on Alt+drag', async () => {

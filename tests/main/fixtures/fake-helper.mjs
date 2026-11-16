@@ -16,9 +16,17 @@ if (mode === 'noaccess') {
       const cmd = JSON.parse(buf.slice(0, i));
       buf = buf.slice(i + 1);
       if (cmd.type === 'shutdown') process.exit(0);
-      // Echo back what we received so the test can observe it.
-      process.stdout.write(`${JSON.stringify({ type: 'error', message: `got:${cmd.type}` })}\n`);
+      process.stdout.write(`${JSON.stringify(reply(cmd))}\n`);
     }
   });
   process.stdin.on('end', () => process.exit(0));
+}
+
+// 'answer' fills in the helper's app queries; every other command is echoed back so the test can observe it.
+function reply(cmd) {
+  if (mode === 'answer' && cmd.type === 'getForegroundApp') return { type: 'foregroundApp', name: 'Photoshop.exe' };
+  if (mode === 'answer' && cmd.type === 'getAppList') {
+    return { type: 'appList', apps: [{ name: 'GameViewer.exe', desc: '网易UU远程', path: 'C:\\NetEase\\GameViewer.exe', hasIcon: true }] };
+  }
+  return { type: 'error', message: `got:${cmd.type}` };
 }
