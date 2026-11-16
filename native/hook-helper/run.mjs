@@ -21,3 +21,4 @@ else run('sh', ['build.sh']);
 if (action === 'test') run(join(here, 'build', win ? 'helper_tests.exe' : 'helper_tests'), []);
 if (action === 'test') run(join(here, 'build', win ? 'context_tests.exe' : 'context_tests'), []);
 if (action === 'test' && process.platform === 'darwin') run(join(here, 'build', 'hooks_mac_tests'), []);
+if (action === 'test' && process.platform === 'linux') run(join(here, 'build', 'evdev_tests'), []);

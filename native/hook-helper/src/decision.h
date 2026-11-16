@@ -72,6 +72,7 @@ struct Emit {
   WheelKind wheel = WheelKind::Ping;  // point events and TriggerUp: the wheel whose trigger started the gesture
   bool enabled = false;               // Toggled only
   bool show = false;                  // Panel only
+  bool rel = false;                   // point events: x, y are relative to the gesture's press (the Linux evdev backend)
 };
 
 enum class InjectKind { ButtonDown, ButtonUp, KeyDown, KeyUp };
