@@ -221,7 +221,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
         )}
-        <SkipApps apps={s.skipApps} dim={off} update={update} />
+        {PLATFORM !== 'linux' && ( // the Linux helper can't read the foreground app yet, so a list would do nothing
+          <SkipApps apps={s.skipApps} dim={off} update={update} />
+        )}
 
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>
