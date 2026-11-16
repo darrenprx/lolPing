@@ -6,12 +6,34 @@
  */
 export const LINUX_X11_SWITCHES: readonly string[] = ['--ozone-platform=x11', '--force-device-scale-factor=1'];
 
+const OZONE = '--ozone-platform';
+const SCALE = '--force-device-scale-factor';
+
+/** The relaunch for a Linux start under Wayland that is not already on X11, or null to go on as-is. */
+export interface X11Relaunch {
+  /** The AppImage file when run from one: its mount goes away when this process exits. */
+  execPath: string;
+  args: string[];
+}
+
 /**
- * The argument list to re-launch Electron with when a Linux start under Wayland missed `--ozone-platform=x11` on argv,
- * or null when the current process can proceed as-is.
+ * Any other Ozone choice (`wayland`, `auto`, or the split form Chromium ignores) is replaced with ours, so the
+ * relaunched process never sees two.
  */
-export function linuxX11RelaunchArgs(argv: readonly string[], env: Readonly<Record<string, string | undefined>>): string[] | null {
+export function linuxX11Relaunch(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  execPath: string,
+): X11Relaunch | null {
   if (!env.WAYLAND_DISPLAY || env.ELECTRON_RUN_AS_NODE) return null;
-  if (argv.some((a) => a === '--ozone-platform' || a.startsWith('--ozone-platform='))) return null;
-  return [...LINUX_X11_SWITCHES, ...argv.slice(1)];
+  if (argv.includes(`${OZONE}=x11`)) return null;
+  const rest: string[] = [];
+  const args = argv.slice(1);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === OZONE || a === SCALE) { i++; continue; }
+    if (a.startsWith(`${OZONE}=`) || a.startsWith(`${SCALE}=`)) continue;
+    rest.push(a);
+  }
+  return { execPath: env.APPIMAGE || execPath, args: [...LINUX_X11_SWITCHES, ...rest] };
 }

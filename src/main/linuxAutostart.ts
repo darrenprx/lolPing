@@ -1,12 +1,13 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { LINUX_X11_SWITCHES } from './linuxX11Args';
 
 /** Desktop Entry Exec quoting has two escape layers: string values, then command arguments. */
 export function linuxDesktopEntry(executable: string): string {
   if (/[\r\n\0]/.test(executable)) throw new Error('Invalid executable path');
   const quoted = executable.replace(/[%]/g, '%%').replace(/[\\"`$]/g, '\\$&').replace(/\\/g, '\\\\');
-  return `[Desktop Entry]\nType=Application\nName=lolPing\nComment=Desktop ping wheel\nExec="${quoted}" --hidden\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n`;
+  return `[Desktop Entry]\nType=Application\nName=lolPing\nComment=Desktop ping wheel\nExec="${quoted}" ${LINUX_X11_SWITCHES.join(' ')} --hidden\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n`;
 }
 
 export function setLinuxAutostart(
