@@ -1,4 +1,5 @@
-import { ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
+import { ANNOUNCED_MAX, HASH_RE, isCustomRef, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
+import { isLeagueSoundShape } from './leagueSounds';
 import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
@@ -8,6 +9,8 @@ export const MAX_NAME = 16;
 /** The first app version that sends and shows room text, alive lines and votes. */
 export const ROOM_CHAT_SINCE = '0.5.2';
 export const MAX_TEXT = 120;
+/** What a surrender or ready check is about: at most this many code points. */
+export const MAX_VOTE_TOPIC = 40;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
 
@@ -58,6 +61,11 @@ export interface EmoteMsg extends Base {
   e: EmoteRef;
   /** The sender's chosen effect for a custom emote, 0–5; absent is the plain pop. Added in 0.5.2; older apps leave it out. */
   fx?: number;
+  /**
+   * Added in 0.6.1: a bundled League sound for a custom emote, by name ('ping:<id>' or 'emote:<slug>'), which the
+   * receiver plays from its own copy. Older apps leave it out and ignore ours.
+   */
+  snd?: string;
   d: number;
   x: number;
   y: number;
@@ -86,6 +94,8 @@ export interface VoteMsg extends Base {
   id: string;
   kind: VoteKind;
   target?: string;
+  /** Added in 0.6.1: what a surrender or ready check is about, typed after the command. Older apps ignore it. */
+  q?: string;
 }
 /** Added in 0.5.2: the sender's answer to vote `id`. */
 export interface BallotMsg extends Base {
@@ -131,6 +141,11 @@ export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): 
 /** Plain overlay text that cannot hide, reorder, or break the UI around it. */
 export function sanitizeText(raw: string): string {
   return [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_TEXT).join('').trim();
+}
+
+/** A vote's topic, cleaned like room text and cut to MAX_VOTE_TOPIC code points; '' when nothing is left. */
+export function sanitizeTopic(raw: string): string {
+  return [...sanitizeText(raw)].slice(0, MAX_VOTE_TOPIC).join('').trim();
 }
 
 /** A peer id: 16 lowercase hex digits. */
@@ -197,12 +212,14 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, ping, d: d as number, x, y };
     }
     case 'emote': {
-      const { e, fx, d, x, y } = raw;
+      const { e, fx, snd, d, x, y } = raw;
       if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
       // A malformed effect is dropped rather than the whole emote, the way a malformed tag colour is: the sender's
       // moment still plays, as the plain pop.
-      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}) };
+      // The sound follows the same rule, and only a custom emote has one: a bundled emote plays its own.
+      const sound = isCustomRef(e) && isLeagueSoundShape(snd) ? { snd } : {};
+      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}), ...sound };
     }
     case 'text': {
       const { text, d, x, y } = raw;
@@ -218,12 +235,15 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, who, d: d as number, x, y };
     }
     case 'vote': {
-      const { id, kind, target } = raw;
+      const { id, kind, target, q } = raw;
       if (!isVoteId(id) || !VOTE_KINDS.includes(kind as VoteKind)) return null;
       if (kind === 'kick') {
         return typeof target === 'string' && PEER_RE.test(target) ? { t, ...base, id, kind, target } : null;
       }
-      return target === undefined ? { t, ...base, id, kind: kind as VoteKind } : null;
+      if (target !== undefined) return null;
+      // A topic that cleans to nothing is dropped rather than the vote, the way a malformed emote effect is.
+      const topic = typeof q === 'string' ? sanitizeTopic(q.slice(0, 1024)) : '';
+      return { t, ...base, id, kind: kind as VoteKind, ...(topic ? { q: topic } : {}) };
     }
     case 'ballot': {
       const { id, yes } = raw;

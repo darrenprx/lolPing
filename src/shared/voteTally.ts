@@ -15,6 +15,8 @@ export interface VoteView {
   kind: VoteKind;
   starter: string;
   target?: string;
+  /** What a surrender or ready check is about, when its starter said. */
+  topic?: string;
   /** Fixed at the start; the kick target is not among them. */
   voters: readonly string[];
   ballots: Readonly<Record<string, boolean>>;
@@ -39,6 +41,7 @@ interface OpenVote {
   kind: VoteKind;
   starter: string;
   target?: string;
+  topic?: string;
   voters: string[];
   ballots: Record<string, boolean>;
   endsAt: number;
@@ -51,13 +54,13 @@ export class VoteTally {
   constructor(private readonly now: () => number) {}
 
   /** False while another vote is open. The starter's yes counts from the start. */
-  start(v: { id: string; kind: VoteKind; starter: string; target?: string; voters: string[] }): boolean {
+  start(v: { id: string; kind: VoteKind; starter: string; target?: string; topic?: string; voters: string[] }): boolean {
     if (this.open) return false;
     const voters = [...new Set(v.voters)].filter((p) => p !== v.target);
     const ballots: Record<string, boolean> = voters.includes(v.starter) ? { [v.starter]: true } : {};
     this.open = {
       id: v.id, kind: v.kind, starter: v.starter, ...(v.target === undefined ? {} : { target: v.target }),
-      voters, ballots, endsAt: this.now() + VOTE_MS[v.kind],
+      ...(v.topic === undefined ? {} : { topic: v.topic }), voters, ballots, endsAt: this.now() + VOTE_MS[v.kind],
     };
     return true;
   }

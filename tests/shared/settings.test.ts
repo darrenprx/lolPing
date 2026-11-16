@@ -3,9 +3,9 @@ import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from '../../src/shared/emote
 import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
-  askKeyClashes, askKeyHeld, asksOnPing, DEFAULT_SETTINGS, keyboardTriggers, mergeSettings, normalizeSettings,
-  overlaySettings, patchClashes, rendererPatch, sameTrigger, separateAskKey, soundLevel, triggerLabel, triggersClash,
-  type TriggerKey,
+  askKeyClashes, askKeyHeld, asksOnPing, DEFAULT_SETTINGS, keyboardTriggers, MAX_SKIP_APPS, mergeSettings,
+  normalizeSettings, overlaySettings, patchClashes, rendererPatch, resolveSkipApp, sameTrigger, separateAskKey,
+  soundLevel, triggerLabel, triggersClash, type TriggerKey,
 } from '../../src/shared/settings';
 import type { AskTrigger } from '../../src/shared/teammate/settings';
 
@@ -317,6 +317,38 @@ describe('emote settings', () => {
     expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
   });
 
+  it('custom emotes keep a League sound only when this app ships it, and never next to a sound file', () => {
+    const list = normalizeSettings({
+      customEmotes: [
+        { ...entry('a'), leagueSound: 'ping:danger' },
+        { ...entry('b'), leagueSound: 'emote:from_the_future' },
+        { ...entry('c'), leagueSound: 7 },
+        { ...entry('d'), sound: true, leagueSound: 'emote:facepalm' },
+      ],
+    }).customEmotes;
+    expect(list).toEqual([{ ...entry('a'), leagueSound: 'ping:danger' }, entry('b'), entry('c'), { ...entry('d'), sound: true }]);
+  });
+
+  it('skip apps keep their case but match stems without .exe, deduplicated', () => {
+    expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.EXE', 7, null] }).skipApps)
+      .toEqual(['Photoshop', 'IDEA64', 'nope']);
+    expect(normalizeSettings({ skipApps: 'nope' }).skipApps).toEqual([]);
+    expect(DEFAULT_SETTINGS.skipApps).toEqual([]);
+  });
+
+  it('a typed display name becomes the running app it names', () => {
+    const running = [{ name: 'GameViewer.exe', desc: '网易UU远程' }, { name: 'ZCode.exe', desc: 'ZCode' }];
+    expect(resolveSkipApp(' 网易UU远程 ', running)).toBe('GameViewer');
+    expect(resolveSkipApp('zcode.exe', running)).toBe('zcode');
+    expect(resolveSkipApp('Notepad', running)).toBe('Notepad');
+  });
+
+  it('skip apps keep the first 32', () => {
+    const kept = normalizeSettings({ skipApps: Array.from({ length: 40 }, (_, i) => `app${i}`) }).skipApps;
+    expect(kept).toHaveLength(MAX_SKIP_APPS);
+    expect(kept[0]).toBe('app0');
+  });
+
   it('custom emotes keep the first 24', () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ id: `c:${i.toString(16).padStart(32, '0')}`, name: `E${i}`, animated: false }));
     const kept = normalizeSettings({ customEmotes: many }).customEmotes;
@@ -592,6 +624,7 @@ describe('helpers', () => {
       pingSizePx: 110, pingDurationS: 3.2, keepLastPing: false, volume: 70, muted: false, tickSound: true,
       wheelSizePx: 600, wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
+      danmakuSizePx: 22, danmakuSpeed: 1,
       ask: {
         tag: { name: 'AI', color: 3, rgb: null },
         labels: {
@@ -698,6 +731,23 @@ describe('room text settings', () => {
   it('keeps the scrolling style and falls back to the spot for a bad value', () => {
     expect(normalizeSettings({ roomTextStyle: 'danmaku' }).roomTextStyle).toBe('danmaku');
     for (const raw of ['scroll', 1, null, {}]) expect(normalizeSettings({ roomTextStyle: raw }).roomTextStyle).toBe('spot');
+  });
+
+  it("reads an older file's 弹幕 as today's 22 px at 1x", () => {
+    const { danmakuSizePx: _size, danmakuSpeed: _speed, ...old } = DEFAULT_SETTINGS;
+    expect(normalizeSettings(old)).toMatchObject({ danmakuSizePx: 22, danmakuSpeed: 1 });
+  });
+
+  it('keeps the 弹幕 size and speed in range, on their steps', () => {
+    expect(normalizeSettings({ danmakuSizePx: 30, danmakuSpeed: 1.7 })).toMatchObject({ danmakuSizePx: 30, danmakuSpeed: 1.7 });
+    expect(normalizeSettings({ danmakuSizePx: 2, danmakuSpeed: 9 })).toMatchObject({ danmakuSizePx: 14, danmakuSpeed: 2.5 });
+    expect(normalizeSettings({ danmakuSizePx: 99, danmakuSpeed: 0.1 })).toMatchObject({ danmakuSizePx: 40, danmakuSpeed: 0.5 });
+    expect(normalizeSettings({ danmakuSpeed: 1.04 }).danmakuSpeed).toBe(1);
+    expect(normalizeSettings({ danmakuSizePx: '30', danmakuSpeed: null })).toMatchObject({ danmakuSizePx: 22, danmakuSpeed: 1 });
+  });
+
+  it('hands the 弹幕 size and speed to the overlay', () => {
+    expect(overlaySettings(normalizeSettings({ danmakuSizePx: 18, danmakuSpeed: 0.8 }))).toMatchObject({ danmakuSizePx: 18, danmakuSpeed: 0.8 });
   });
 });
 

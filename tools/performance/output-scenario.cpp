@@ -100,7 +100,7 @@ void backpressure(bool measureOnly) {
             << " dropped=" << consumer.output.dropped() << " enqueue_us=" << enqueueUs << '\n';
   if (measureOnly) return;
   compare(lines, {
-    R"({"type":"ready","version":6})",
+    R"({"type":"ready","version":7})",
     R"({"type":"wheelOpen","x":100,"y":100,"wheel":"ping"})",
     R"({"type":"wheelMove","x":8100,"y":100,"wheel":"ping"})",
     R"({"type":"wheelRelease","x":8100,"y":100,"wheel":"ping"})",
@@ -138,7 +138,7 @@ void boundaries() {
   consumer.output.emit(panel);
   consumer.output.emit(point(Kind::WheelMove, 13));
   compare(consumer.finish(), {
-    R"({"type":"ready","version":6})",
+    R"({"type":"ready","version":7})",
     R"({"type":"wheelOpen","x":0,"y":100,"wheel":"ping"})",
     R"({"type":"wheelMove","x":2,"y":100,"wheel":"ping"})",
     R"({"type":"wheelMove","x":4,"y":100,"wheel":"emote"})",
@@ -167,7 +167,7 @@ void capacity() {
   consumer.output.emit(point(Kind::Click, 2));
   consumer.output.emit(point(Kind::WheelRelease, 3));
   compare(consumer.finish(), {
-    R"({"type":"ready","version":6})",
+    R"({"type":"ready","version":7})",
     R"({"type":"wheelOpen","x":1,"y":100,"wheel":"ping"})",
     R"({"type":"cancel"})",
     R"({"type":"click","x":2,"y":100,"wheel":"ping"})",
@@ -192,7 +192,7 @@ void failedWriter() {
   restarted.output.emit(point(Kind::WheelOpen, 5));
   restarted.output.emit(point(Kind::WheelRelease, 6));
   compare(restarted.finish(), {
-    R"({"type":"ready","version":6})",
+    R"({"type":"ready","version":7})",
     R"({"type":"wheelOpen","x":5,"y":100,"wheel":"ping"})",
     R"({"type":"wheelRelease","x":6,"y":100,"wheel":"ping"})",
   }, "replacement output starts with an empty queue");

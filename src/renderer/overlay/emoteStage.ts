@@ -2,6 +2,7 @@ import { EMOTE_DURATION_S, emoteAnimUrl, emoteIconUrl, type EmoteArt } from '../
 import type { PingTag } from '../../shared/ipc';
 import { tagColorCss } from '../../shared/roomColors';
 import { bubble, emoteFxContent, envelope } from '../shared/emoteFx';
+import { EmoteBlobCache } from './emoteBlobCache';
 
 export interface EmoteOptions {
   /** How wide the emote's art appears. */
@@ -42,9 +43,11 @@ function image(cls = ''): HTMLImageElement {
 /** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), each gone after EMOTE_DURATION_S. */
 export class EmoteStage {
   private readonly live = new Map<string, Live>();
-  private readonly blobs = new Map<string, Promise<Blob>>();
+  private readonly blobs: EmoteBlobCache;
 
-  constructor(private readonly layer: HTMLElement, private readonly fetchBlob: (url: string) => Promise<Blob> = fetchImage) {}
+  constructor(private readonly layer: HTMLElement, fetchBlob: (url: string) => Promise<Blob> = fetchImage) {
+    this.blobs = new EmoteBlobCache(fetchBlob);
+  }
 
   /** Shows `art` centred on (x, y), replacing the owner's emote if it has one on screen. */
   spawn(owner: string, art: EmoteArt, x: number, y: number, opts: EmoteOptions): void {
@@ -82,7 +85,7 @@ export class EmoteStage {
 
   /**
    * The baked animation plays once from frame 0, but Chromium gives images with the same URL one shared clock, so each
-   * spawn gets its own object URL (the Blob is fetched once per emote).
+   * spawn gets its own object URL. Evicting a cached Blob leaves those live URLs intact until their emotes end.
    */
   private showBundled(live: Live, slug: string, keep: boolean): void {
     const img = image('sheet');
@@ -106,7 +109,7 @@ export class EmoteStage {
         img.src = emoteIconUrl(slug);
       };
     }
-    this.blob(slug).then(
+    this.blobs.get(emoteAnimUrl(slug)).then(
       (blob) => {
         if (live.gone || swapped) return; // a late blob must not bring the animation back over the still
         live.url = URL.createObjectURL(blob);
@@ -114,19 +117,6 @@ export class EmoteStage {
       },
       placeholder,
     );
-  }
-
-  private blob(slug: string): Promise<Blob> {
-    let blob = this.blobs.get(slug);
-    if (!blob) {
-      blob = this.fetchBlob(emoteAnimUrl(slug));
-      this.blobs.set(slug, blob);
-      const fetched = blob;
-      blob.catch(() => {
-        if (this.blobs.get(slug) === fetched) this.blobs.delete(slug); // try again next time
-      });
-    }
-    return blob;
   }
 
   private end(owner: string, live: Live): void {

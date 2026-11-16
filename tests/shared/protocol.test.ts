@@ -16,6 +16,17 @@ describe('parseHelperLine', () => {
     expect(parseHelperLine('{"type":"textRequested"}')).toEqual({ type: 'textRequested' });
     expect(parseHelperLine('{"type":"panel","show":true}')).toEqual({ type: 'panel', show: true });
     expect(parseHelperLine('{"type":"panel","show":false}')).toEqual({ type: 'panel', show: false });
+    expect(parseHelperLine('{"type":"foregroundApp","name":"Photoshop.exe"}')).toEqual({ type: 'foregroundApp', name: 'Photoshop.exe' });
+    expect(parseHelperLine('{"type":"appList","apps":[{"name":"Photoshop.exe","desc":"Adobe Photoshop","path":"C:\\\\Adobe\\\\Photoshop.exe"},{"name":"chrome","path":"/opt/chrome"}]}'))
+      .toEqual({
+        type: 'appList',
+        apps: [
+          { name: 'Photoshop.exe', desc: 'Adobe Photoshop', path: 'C:\\Adobe\\Photoshop.exe' },
+          { name: 'chrome', desc: '', path: '/opt/chrome' },
+        ],
+      });
+    expect(parseHelperLine('{"type":"appList","apps":[{"name":"no path"},{"path":"C:\\\\b.exe"},"text",{"name":"","path":"","desc":7}]}'))
+      .toEqual({ type: 'appList', apps: [{ name: '', path: '', desc: '' }] });
     expect(parseHelperLine('{"type":"error","message":"boom"}')).toEqual({ type: 'error', message: 'boom' });
     expect(parseHelperLine('{"type":"error","code":"noAccess","message":"x"}')).toEqual({ type: 'error', code: 'noAccess', message: 'x' });
     expect(parseHelperLine('{"type":"sim","swallow":true,"inject":"down:left"}')).toEqual({ type: 'sim', swallow: true, inject: 'down:left' });
@@ -54,7 +65,8 @@ describe('parseHelperLine', () => {
 
   it('rejects malformed lines', () => {
     for (const line of ['', 'nope', '42', 'null', '{"type":"wheelOpen","x":1}', '{"type":"click","x":1.5,"y":2}',
-      '{"type":"toggled"}', '{"type":"panel"}', '{"type":"panel","show":"yes"}', '{"type":"mystery"}', '{"x":1,"y":2}']) {
+      '{"type":"toggled"}', '{"type":"panel"}', '{"type":"panel","show":"yes"}', '{"type":"foregroundApp"}', '{"type":"appList"}',
+      '{"type":"appList","apps":"x"}', '{"type":"mystery"}', '{"x":1,"y":2}']) {
       expect(parseHelperLine(line), line).toBeNull();
     }
   });
@@ -63,11 +75,16 @@ describe('parseHelperLine', () => {
 describe('commands', () => {
   it('builds a flat config command for named triggers', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
-      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true,
+      type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true, skipApps: '',
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, askTrigger: 'off', askTriggerVk: 0, askClick: false,
       askDoubleTap: false, dragThresholdPx: 8,
       toggleMods: 3, toggleVk: 0x50, textMods: 2, textVk: 0, panelVk: 0, enabled: true,
     });
+  });
+
+  it('sends the skip list as one comma-joined name', () => {
+    expect(configCommand({ ...DEFAULT_SETTINGS, skipApps: ['photoshop', 'idea64'] }, true))
+      .toMatchObject({ skipApps: 'photoshop,idea64' });
   });
 
   it('sends textVk 0 outside a room', () => {

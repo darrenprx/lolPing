@@ -212,6 +212,8 @@ export interface AppStatus {
    * left by an update (ad-hoc signatures change every build): it has to be removed and added again.
    */
   staleAccess?: boolean;
+  /** A portable build: data lives next to the executable, and there is no self-update or launch-at-startup. */
+  portable?: boolean;
 }
 
 export interface About {
@@ -252,6 +254,18 @@ export const TEAMMATE_HISTORY_OPS: readonly TeammateHistoryOp[] = ['open', 'paus
 // with the overlay preload (a sandboxed preload can only require('electron'), never a sibling file).
 export { SETTINGS_CH } from './settingsChannels';
 
+/** One app the exception dropdown offers: its process name, image path and icon. */
+export interface RunningApp {
+  /** The process image's file name, "Photoshop.exe"; what the exception list stores. */
+  name: string;
+  /** The words the system shows for it (the file's description); what a user types, so adding can match it. */
+  desc: string;
+  /** The image's full path; only to fetch the icon. */
+  path: string;
+  /** The icon as a PNG data URL, null where there is none worth showing. */
+  icon: string | null;
+}
+
 /** window.settingsApi in the settings renderer. */
 export interface SettingsApi {
   readonly platform: Platform;
@@ -268,8 +282,10 @@ export interface SettingsApi {
   importEmote(file: EmoteFile): Promise<ImportResult>;
   /** Deletes an imported emote's files and entry; wheel slots that used it fall back. */
   removeEmote(id: EmoteRef): Promise<void>;
-  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes), or takes it away with null. */
+  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes) in place of a League one, or takes either away with null. */
   setEmoteSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundResult>;
+  /** Gives one of our imported emotes a bundled League sound by name, deleting a sound file it had. */
+  setEmoteLeagueSound(id: EmoteRef, ref: string): Promise<void>;
   /** Stores which signature effect the emote plays; undefined puts it back to the plain pop. */
   setEmoteFx(id: EmoteRef, fx: number | undefined): Promise<void>;
   getAbout(): Promise<About>;
@@ -277,6 +293,11 @@ export interface SettingsApi {
   openProjectPage(): Promise<void>;
   retryHelper(): Promise<void>;
   setCapturing(on: boolean): Promise<void>;
+  /** Hides the settings window for three seconds, then names the app that stayed in front, or null when the helper
+   * can't tell. Feeds the app-exception list's capture button. */
+  captureForegroundApp(): Promise<string | null>;
+  /** The apps the user can switch to right now, with icons, [] when the helper can't tell. Feeds the exception list's dropdown. */
+  getAppList(): Promise<RunningApp[]>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
   getRoom(): Promise<RoomState>;

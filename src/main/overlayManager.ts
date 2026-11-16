@@ -5,6 +5,7 @@ import {
   OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { WHEEL, pickSlice } from '../shared/geometry';
+import { leagueSoundKey } from '../shared/leagueSounds';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings, RoomTextStyle } from '../shared/settings';
@@ -329,11 +330,12 @@ export class OverlayManager extends EventEmitter {
   }
 
   /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
-  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; peer: string; tag: PingTag }): void {
+  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; snd?: string; peer: string; tag: PingTag }): void {
     const art = this.resolveArt(p.ref, true);
     // The effect is the sender's choice, so the one on their message wins — over a cached still's plain pop, and over
-    // the effect we picked if we happen to have the same image imported.
-    const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0 } : art;
+    // the effect we picked if we happen to have the same image imported. So is the sound: a name we don't ship plays none.
+    const soundKey = p.snd === undefined ? null : leagueSoundKey(p.snd);
+    const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0, ...(soundKey ? { soundKey } : {}) } : art;
     this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: withFx, x: p.x, y: p.y, tag: p.tag });
     this.clearElsewhere(p.displayId, p.peer);
   }
@@ -409,7 +411,9 @@ export class OverlayManager extends EventEmitter {
   private refreshDisplays(): void {
     if (this.maps.length === 0) return;
     const displays = screen.getAllDisplays();
-    const moved = displays.length !== this.maps.length
+    // A page that died (a GPU reset on wake can take it down) leaves a window that draws nothing until it is replaced.
+    const crashed = [...this.windows.values()].some((w) => !w.isDestroyed() && w.webContents.isCrashed());
+    const moved = crashed || displays.length !== this.maps.length
       || displays.some((d) => {
         const m = this.maps.find((map) => map.id === d.id);
         // Without the scale, 4K at 200% and 1080p at 100% look the same: both are 1920x1080 DIPs.
@@ -440,8 +444,8 @@ export class OverlayManager extends EventEmitter {
     this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
     this.emit('displays', this.numberedList);
     for (const [id, win] of this.windows) {
-      if (!displays.some((d) => d.id === id)) {
-        win.destroy();
+      if (!displays.some((d) => d.id === id) || win.isDestroyed() || win.webContents.isCrashed()) {
+        if (!win.isDestroyed()) win.destroy();
         this.windows.delete(id);
       }
     }
@@ -485,7 +489,12 @@ export class OverlayManager extends EventEmitter {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
       win.setHiddenInMissionControl(true); // the overlay isn't a window to the user: keep it out of Mission Control
     }
-    win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
+    // A display can go away while its overlay is loading (screens waking up, #142): the destroyed window then throws
+    // on every read, but its page may still report the load.
+    const wc = win.webContents;
+    wc.on('did-finish-load', () => {
+      if (!wc.isDestroyed()) wc.send('overlay:settings', this.settings);
+    });
     win.once('ready-to-show', () => {
       win.showInactive();
       this.place(win, d); // re-apply: mixed-DPI setups can size the first frame wrong

@@ -4,7 +4,7 @@ import {
   isTagColor, isTagRgb, nearestTagColor, readableTagRgb, sameTagRgb, TAG_COLORS, tagColorCss, tagHex, tagRgbFromHex, tagWire,
 } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, decodeSigned, encodeMessage, joinSigned, splitSigned, isOlderThan, isVoteId, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
+  clampNameInput, decodeMessage, decodeSigned, encodeMessage, joinSigned, splitSigned, isOlderThan, isVoteId, MAX_TEXT, MAX_VOTE_TOPIC, sanitizeName, sanitizeText, validateMessage,
   type AliveMsg, type BallotMsg, type ChunkMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg,
   type VoteMsg, type WantMsg,
 } from '../../src/shared/roomProtocol';
@@ -103,6 +103,29 @@ describe('room text, alive lines, votes and ballots', () => {
     ]) expect(validateMessage(bad)).toBeNull();
   });
 
+  it('carries what a surrender or ready check is about, cleaned and cut to 40 code points', () => {
+    const about: VoteMsg = { ...ff, q: '打不过了' };
+    expect(decodeMessage(encodeMessage(about))).toEqual(about);
+    expect(validateMessage({ ...ff, kind: 'ready', q: 'ranked?' })).toMatchObject({ kind: 'ready', q: 'ranked?' });
+    const cut = validateMessage({ ...ff, q: '😀'.repeat(60) });
+    expect(cut?.t === 'vote' && [...(cut.q ?? '')]).toHaveLength(MAX_VOTE_TOPIC);
+    expect(validateMessage({ ...ff, q: ' a‮b ' })).toMatchObject({ q: 'ab' });
+  });
+
+  it('keeps the vote and drops a topic that is malformed, blank, or on a kick', () => {
+    expect(validateMessage({ ...ff, q: 7 })).toEqual(ff);
+    expect(validateMessage({ ...ff, q: '​ ' })).toEqual(ff);
+    expect(validateMessage({ ...kick, q: 'bye' })).toEqual(kick);
+  });
+
+  it('keeps a worst-case vote topic packet under the sealed packet cap', () => {
+    const key = Buffer.alloc(32, 7);
+    const worst: VoteMsg = { ...ff, q: '😀'.repeat(MAX_VOTE_TOPIC) };
+    const packet = seal(key, encodeMessage(worst));
+    expect(packet.length).toBeLessThanOrEqual(MAX_PACKET);
+    expect(decodeMessage(open(key, packet) ?? new Uint8Array())).toEqual(worst);
+  });
+
   it('rounds the position of an alive line like a ping', () => {
     expect(decodeMessage(encodeMessage({ ...alive, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
   });
@@ -192,6 +215,21 @@ describe('emote messages', () => {
     const m: EmoteMsg = { ...emote, fx: 5 };
     expect(validateMessage(m)).toEqual(m);
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
+  });
+
+  it('carries a League sound by name on a custom emote, a newer app\'s name included', () => {
+    for (const snd of ['ping:danger', 'emote:facepalm', 'emote:from_the_future']) {
+      const m: EmoteMsg = { ...emote, e: CUSTOM_REF, snd };
+      expect(validateMessage(m)).toEqual(m);
+      expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    }
+  });
+
+  it('drops a malformed sound, or one on a bundled emote, rather than the emote', () => {
+    for (const snd of ['danger', 'ping:../x', 7, null]) {
+      expect(validateMessage({ ...emote, e: CUSTOM_REF, snd })).toEqual({ ...emote, e: CUSTOM_REF });
+    }
+    expect(validateMessage({ ...emote, snd: 'ping:danger' })).toEqual(emote);
   });
 
   it('drops a malformed effect rather than the emote, which then plays the plain pop', () => {

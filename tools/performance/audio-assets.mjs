@@ -87,8 +87,10 @@ if (process.versions.electron) {
     writeFileSync(join(temporary, 'audio.json'), JSON.stringify(records));
     console.log(JSON.stringify({ scenario: 'ping asset bytes', commit, files: records.length, wavBytes, flacBytes }));
     const { default: electron } = await import('electron');
+    const childEnv = { ...process.env };
+    delete childEnv.ELECTRON_RUN_AS_NODE;
     const result = spawnSync(electron, [fileURLToPath(import.meta.url), temporary], {
-      stdio: 'inherit', timeout: 60_000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '' },
+      stdio: 'inherit', timeout: 60_000, env: childEnv,
     });
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;

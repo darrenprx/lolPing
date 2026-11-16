@@ -16,8 +16,10 @@ try {
   mkdirSync(data);
   const entry = join(temporary, 'assets.cjs');
   await build({ entryPoints: ['tools/performance/assets.ts'], outfile: entry, bundle: true, platform: 'node', external: ['electron'] });
+  const childEnv = { ...process.env };
+  delete childEnv.ELECTRON_RUN_AS_NODE;
   const result = spawnSync(electron, [entry, resolve(process.argv[2] ?? '.'), data, ...process.argv.slice(3)], {
-    stdio: 'inherit', timeout: 45_000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '' },
+    stdio: 'inherit', timeout: 45_000, env: childEnv,
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;

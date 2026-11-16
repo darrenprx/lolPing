@@ -1,4 +1,4 @@
-import { Button } from '@fluentui/react-components';
+import { Button, Menu, MenuPopover, MenuTrigger } from '@fluentui/react-components';
 import { DismissRegular } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 import type { EmoteRef } from '../../../shared/emotes';
@@ -22,7 +22,7 @@ const wedgePath = (i: number): string => {
 
 /**
  * One thing that can go on the wheel, a ping or an emote. `badge` is a small tag on its tile; `onRemove` adds an × to it,
- * and `tool` a small button in its bottom corner.
+ * and `tool` a small button in its bottom corner that opens `menu`.
  */
 export interface PoolItem<T extends string> {
   id: T;
@@ -30,7 +30,7 @@ export interface PoolItem<T extends string> {
   name: string;
   badge?: string;
   onRemove?: () => void;
-  tool?: { label: string; icon: ReactElement; on: boolean; onClick: () => void };
+  tool?: { label: string; icon: ReactElement; on: boolean; menu: ReactNode };
 }
 
 interface Props<T extends string> {
@@ -225,10 +225,14 @@ export function WheelEditor<T extends string>({
                     {p.name}
                   </div>
                   {p.tool ? (
-                    <button type="button" className={`weTool${p.tool.on ? ' on' : ''}`} aria-label={p.tool.label} title={p.tool.label}
-                      onClick={p.tool.onClick}>
-                      {p.tool.icon}
-                    </button>
+                    <Menu>
+                      <MenuTrigger disableButtonEnhancement>
+                        <button type="button" className={`weTool${p.tool.on ? ' on' : ''}`} aria-label={p.tool.label} title={p.tool.label}>
+                          {p.tool.icon}
+                        </button>
+                      </MenuTrigger>
+                      <MenuPopover>{p.tool.menu}</MenuPopover>
+                    </Menu>
                   ) : null}
                   {p.onRemove ? (
                     <button type="button" className="weRemove" aria-label={t.removeImage(p.name)} title={t.removeImage(p.name)}

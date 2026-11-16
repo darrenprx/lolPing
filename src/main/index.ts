@@ -30,6 +30,7 @@ import type { HistoryState, MateAction, MateView } from '../shared/teammateIpc';
 import { parseTextInput } from '../shared/textCommands';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
+import { AppIcons } from './appIcons';
 import { resolveTarget, toShared } from './displayNumbers';
 import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
@@ -41,7 +42,8 @@ import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
 import { OverlayManager, type AskClick, type AskRelease, type SharedEmote, type SharedPing } from './overlayManager';
 import {
-  assetPath, buildResourcePath, contextHelperPath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir,
+  assetPath, buildResourcePath, contextHelperPath, helperExePath, IS_LINUX, IS_MAC, IS_PORTABLE, PLATFORM, PORTABLE_DATA_DIR,
+  settingsDir,
 } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomHistory } from './roomHistory';
@@ -91,6 +93,15 @@ if (IS_LINUX) {
 
 registerAppScheme();
 app.setAppUserModelId('com.lolping.app');
+
+// A portable build keeps everything Electron would put in appData (the MCP socket and token, session data, logs) beside its
+// executable too. Set before the single-instance lock, which lives in userData: an installed and a portable lolPing can then
+// run side by side, and two copies of the same portable folder can't.
+if (PORTABLE_DATA_DIR !== null) {
+  mkdirSync(PORTABLE_DATA_DIR, { recursive: true });
+  app.setPath('userData', PORTABLE_DATA_DIR);
+  app.setPath('sessionData', join(PORTABLE_DATA_DIR, 'session'));
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -241,11 +252,23 @@ function start(): void {
   );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
+  // An image file's own icon where the platform can read one (Windows); anywhere else this settles null. The small
+  // size is native 16px: what the dropdown shows, without a blurry downscale from 32. ApplicationFrameHost.exe has
+  // no icon of its own, so its icon is the system's default program icon - the copy an icon-less exe embeds.
+  // macOS: app.getFileIcon hands back the same generic tile for every bundle (observed on macOS 26), so the icon
+  // comes from the thumbnail generator instead, which draws the app's real one.
+  const appIcons = new AppIcons(async (path) => {
+    const image = IS_MAC
+      ? await nativeImage.createThumbnailFromPath(path, { width: 32, height: 32 })
+      : await app.getFileIcon(path, { size: 'small' });
+    return image.isEmpty() ? null : image.toDataURL();
+  }, IS_MAC || IS_LINUX ? undefined : join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'ApplicationFrameHost.exe'));
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
-  // Linux packages are updated manually until a Linux release feed is published.
-  const updater = !IS_LINUX && (app.isPackaged || testUrl) ? createUpdater() : null;
+  // Linux packages are updated manually until a Linux release feed is published. A portable build is replaced by hand too:
+  // electron-updater would download the installer and turn it into an installed copy.
+  const updater = !IS_LINUX && !IS_PORTABLE && (app.isPackaged || testUrl) ? createUpdater() : null;
   function createUpdater(): Updater {
     const backend = IS_MAC
       ? new MacBackend({
@@ -368,7 +391,7 @@ function start(): void {
   };
 
   const helperStatus = (): HelperStatus => (accessTimer ? 'noAccess' : bridge.status);
-  const status = (): AppStatus => ({ enabled, helper: helperStatus(), staleAccess });
+  const status = (): AppStatus => ({ enabled, helper: helperStatus(), staleAccess, portable: IS_PORTABLE || undefined });
   const trayMode = (): TrayMode => {
     const h = helperStatus();
     if (h === 'failed' || h === 'noAccess') return h;
@@ -457,9 +480,9 @@ function start(): void {
   });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
-    // The effect rides on the message, so friends see the one its sender picked even before they have the image.
-    const fx = settings.customEmotes.find((c) => c.id === p.ref)?.fx;
-    if (shared) room.sendEmote(p.ref, shared, fx);
+    // The effect and the League sound ride on the message, so friends get the sender's picks even before they have the image.
+    const custom = settings.customEmotes.find((c) => c.id === p.ref);
+    if (shared) room.sendEmote(p.ref, shared, custom?.fx, custom?.leagueSound);
   });
   // This session's room lines: members' text and alive lines while the text feature is on, and our own.
   const history = new RoomHistory(() => refreshRoster());
@@ -578,7 +601,7 @@ function start(): void {
       ...(store.emoteKeyClashed ? [text().problemEmoteKeyClash] : []),
       ...[...overlays.missingAssets].map((a) => text().missingAsset(a)),
     ],
-    limitations: text().limitations,
+    limitations: IS_PORTABLE ? [text().portableNote, ...text().limitations] : text().limitations,
   });
 
   const mateLang = () => resolveLang(settings.language, app.getLocale());
@@ -667,7 +690,7 @@ function start(): void {
         if (!roomVotes) return 'votesOff';
         // Typing the command of the vote that is open means yes.
         if (roomVotes.current()?.kind === input.kind) roomVotes.answer(true);
-        else if (roomVotes.start(input.kind) === 'busy') overlays.toast(text().voteBusy, '');
+        else if (roomVotes.start(input.kind, undefined, input.topic) === 'busy') overlays.toast(text().voteBusy, '');
         return 'sent';
       case 'noff':
         if (!roomVotes) return 'votesOff';
@@ -1105,7 +1128,8 @@ function start(): void {
       room.setInternetAllowed(s.allowInternet);
       pushRoom();
     }
-    if (app.isPackaged && s.launchAtStartup !== previous.launchAtStartup) {
+    // A portable build never registers itself: its path changes with the drive letter, and nothing uninstalls the entry.
+    if (app.isPackaged && !IS_PORTABLE && s.launchAtStartup !== previous.launchAtStartup) {
       // macOS ignores args, and a Mac launch starts in the menu bar anyway.
       if (IS_LINUX) {
         try { setLinuxAutostart(s.launchAtStartup); }
@@ -1130,6 +1154,30 @@ function start(): void {
     setCapturing: (on) => {
       capturing = on;
       syncSuspended();
+    },
+    // The app-exception list: the capture button (the settings window hides, so the app the user wants is the one
+    // left in front) and everything the user can switch to (the dropdown). Icons come from the image file itself
+    // where the platform can read one; otherwise the dropdown shows the name only.
+    appList: async () => {
+      const apps = await bridge.ask({ type: 'getAppList' }, (ev) => (ev.type === 'appList' ? ev.apps : null), []);
+      return Promise.all(apps.map(async (a) => ({ ...a, icon: await appIcons.icon(a.path) })));
+    },
+    captureForegroundApp: async () => {
+      const win = settingsWindow();
+      // Minimizing hands focus to the next top-level window, so the app the user wants is simply in front;
+      // when the answer is in, the window comes back on top.
+      win?.minimize();
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const name = await bridge.ask(
+        { type: 'getForegroundApp' },
+        (ev) => (ev.type === 'foregroundApp' ? ev.name : null),
+        null,
+      );
+      if (win && !win.isDestroyed()) {
+        win.restore();
+        win.focus();
+      }
+      return name;
     },
     openAccessibility: () => {
       if (!IS_MAC) return;

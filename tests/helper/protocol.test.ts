@@ -34,7 +34,7 @@ describe('hook-helper --simulate', () => {
   it('announces itself first', async () => {
     const events = await simulate([]);
     expect(events[0]).toEqual({ type: 'ready', version: HELPER_VERSION });
-    expect(HELPER_VERSION).toBe(6);
+    expect(HELPER_VERSION).toBe(7);
   });
 
   it('opens and releases the wheel on Alt+drag', async () => {
@@ -175,6 +175,13 @@ describe('hook-helper --simulate', () => {
   it('leaves Tab alone while the panel key is off', async () => {
     const events = await simulate([{ ...config, panelVk: 0 }, sim('kdown', { vk: 9 })]);
     expect(events.filter((e) => e.type !== 'ready')).toEqual([{ type: 'sim', swallow: false, inject: '' }]);
+  });
+
+  it('answers the program questions with no programs', async () => {
+    const events = await simulate([{ type: 'getForegroundApp' }, { type: 'getAppList' }]);
+    expect(events.filter((e) => e.type !== 'ready')).toEqual([
+      { type: 'foregroundApp', name: '' }, { type: 'appList', apps: [] },
+    ]);
   });
 
   it('reports invalid commands as errors', async () => {

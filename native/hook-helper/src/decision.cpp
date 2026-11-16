@@ -1,5 +1,6 @@
 #include "decision.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace lp {
@@ -8,6 +9,20 @@ namespace {
 constexpr uint32_t kVkShift = 0x10, kVkCtrl = 0x11, kVkAlt = 0x12;
 constexpr uint32_t kVkLShift = 0xA0, kVkRShift = 0xA1, kVkLCtrl = 0xA2, kVkRCtrl = 0xA3;
 constexpr uint32_t kVkLAlt = 0xA4, kVkRAlt = 0xA5, kVkLWin = 0x5B, kVkRWin = 0x5C, kVkEsc = 0x1B;
+
+// A process name as the skip list matches it: lower-case, without a trailing ".exe".
+std::string appStem(std::string s) {
+  size_t start = 0;
+  while (start < s.size() && (s[start] == ' ' || s[start] == '\t')) ++start;
+  size_t end = s.size();
+  while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t')) --end;
+  s = s.substr(start, end - start);
+  for (char& ch : s) {
+    if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+  }
+  if (s.size() > 4 && s.compare(s.size() - 4, 4, ".exe") == 0) s.resize(s.size() - 4);
+  return s;
+}
 
 uint32_t modBit(uint32_t vk) {
   switch (vk) {
@@ -87,7 +102,7 @@ bool Decision::held(WheelKind k) const {
       return (mods() & ModWin) != 0;
     case Trigger::CapsLock:
     case Trigger::CustomVk:
-      return keyDown_[keyTriggerVk(k) & 0xFF];
+      return keyDown_[keyTriggerVk(k) & 0xFF] && (keyTriggerVk(k) & 0xFF) != shortcutVk_;
     default:
       return false;
   }
@@ -230,6 +245,16 @@ Result Decision::setConfig(const Config& c) {
   enabled_ = c.enabled;
   spotWhileHeld_ = {};
   resetDoubleTap();
+  skipStems_.clear();
+  size_t pos = 0;
+  while (pos < c.skipApps.size()) {
+    const size_t comma = c.skipApps.find(',', pos);
+    const std::string stem = appStem(c.skipApps.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos));
+    if (!stem.empty() && std::find(skipStems_.begin(), skipStems_.end(), stem) == skipStems_.end())
+      skipStems_.push_back(stem);
+    if (comma == std::string::npos) break;
+    pos = comma + 1;
+  }
   return r;
 }
 
@@ -260,6 +285,17 @@ Result Decision::setStaleWatch(bool on) {
 }
 
 void Decision::setFullscreenProbe(std::function<bool(int x, int y)> probe) { fullscreenProbe_ = std::move(probe); }
+
+void Decision::setForegroundApp(std::function<std::string()> fg) { foregroundApp_ = std::move(fg); }
+
+// The skip list costs one supplier call per gesture or hotkey press, and none at all while it is empty.
+bool Decision::inSkippedApp() const {
+  if (skipStems_.empty() || !foregroundApp_) return false;
+  const std::string name = foregroundApp_();
+  if (name.empty()) return false;
+  const std::string stem = appStem(name);
+  return std::find(skipStems_.begin(), skipStems_.end(), stem) != skipStems_.end();
+}
 
 Result Decision::releasePanel() {
   Result r;
@@ -421,18 +457,24 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     // Caps Lock and custom-key triggers of any wheel would toggle or type: keep them from the OS.
     const auto ownKey = [&](WheelKind k) { return isKeyTrigger(k) && vk == keyTriggerVk(k); };
     // Tap-through: the trigger key was flushed for typing, so its auto-repeats type too.
-    if (vk == typedVk_) {
+    if (vk == typedVk_ || vk == shortcutVk_) {
       swallowKeyUps_.erase(vk);
       return;
     }
     if (ownKey(WheelKind::Ping) || ownKey(WheelKind::Emote) || ownKey(WheelKind::Ask)) {
+      const auto customKey = [&](WheelKind k) { return spec(k).trigger == Trigger::CustomVk && vk == spec(k).vk; };
+      const bool custom = customKey(WheelKind::Ping) || customKey(WheelKind::Emote) || customKey(WheelKind::Ask);
+      // Held back with Cmd or Ctrl down, a V typed on its own key-up would be a plain v if the modifier came up first.
+      if (custom && !repeat && mods() != 0) {
+        shortcutVk_ = vk;
+        swallowKeyUps_.erase(vk);
+        return;
+      }
       r.swallow = true;
       swallowKeyUps_.insert(vk);
       // Tap-through: hold a custom key back instead of dropping it; onKeyUp types it if no drag used it.
       // Caps Lock keeps the old behaviour: a replayed tap would toggle it.
-      const auto customKey = [&](WheelKind k) { return spec(k).trigger == Trigger::CustomVk && vk == spec(k).vk; };
-      if (!repeat && (customKey(WheelKind::Ping) || customKey(WheelKind::Emote) || customKey(WheelKind::Ask)))
-        heldBackVk_ = vk;
+      if (!repeat && custom) heldBackVk_ = vk;
       return;
     }
   }
@@ -460,6 +502,7 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   }
   // Tap-through: a flushed key's real up passes (its swallow was dropped at the flush), ending typing mode.
   if (vk == typedVk_) typedVk_ = 0;
+  if (vk == shortcutVk_) shortcutVk_ = 0;
   // Tap-through: the key was pressed and released with nothing in between: type it now (down + up).
   // The real up stays swallowed: the OS never saw the real down.
   if (vk == heldBackVk_) {

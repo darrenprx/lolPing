@@ -8,6 +8,7 @@ import {
   type EmoteRef, type ImportError, type SoundError,
 } from '../shared/emotes';
 import { gifExtent, isAnimatedWebp, sniffImage, webpSize } from '../shared/imageSniff';
+import { leagueSoundKey } from '../shared/leagueSounds';
 import { sanitizeName } from '../shared/roomProtocol';
 import { isFile } from './fileState';
 import { renameWithRetry } from './settingsStore';
@@ -63,7 +64,9 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
   const emote = custom.find((c) => c.id === ref);
   if (emote) {
     const animated = emote.animated && !remote;
-    const sound = emote.sound && !remote ? { sound: customSoundUrl(hash) } : {};
+    const key = emote.leagueSound === undefined ? null : leagueSoundKey(emote.leagueSound);
+    // A room member's sound comes from their message, never from what we stored for the same image.
+    const sound = remote ? {} : emote.sound ? { sound: customSoundUrl(hash) } : key ? { soundKey: key } : {};
     return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound, fx: emote.fx ?? 0 };
   }
   // A friend's cached still has no entry here, so the plain pop is its default; the sender's message can still carry their fx.

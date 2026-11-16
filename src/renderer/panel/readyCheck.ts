@@ -1,5 +1,7 @@
-import { strings } from '../../shared/i18n';
+import { strings, type Strings } from '../../shared/i18n';
 import type { PanelAction, PanelState } from '../../shared/ipc';
+import type { RoomMember } from '../../shared/room';
+import type { VoteView } from '../../shared/voteTally';
 import { canAnswer, el, voteBoxes, voteTitle } from './vote';
 
 /** What the client's ready check is showing: the countdown, our answer, or a vote that ended before we answered. */
@@ -17,6 +19,13 @@ export function readyPhase(mine: boolean | undefined, over: boolean): ReadyPhase
 export function countdownRate(duration: number, currentTime: number, secondsLeft: number): number {
   const rate = (duration - currentTime) / secondsLeft;
   return Number.isFinite(rate) && rate > 0.0625 ? rate : 1;
+}
+
+/** The line under the title while counting down: who started it, and what for when they said. */
+export function readyDetails(v: VoteView, members: readonly RoomMember[], t: Strings): string {
+  const starter = members.find((m) => m.peer === v.starter)?.name;
+  if (v.topic) return starter ? t.voteTopicBy(starter, v.topic) : v.topic;
+  return starter ? t.voteStartedBy(starter) : '';
 }
 
 export type ReadySound = 'intro' | 'countdown' | 'acceptedLoop';
@@ -213,6 +222,8 @@ export function renderReady(root: HTMLElement, state: PanelState, act: (a: Panel
   if (!root.contains(c.root)) root.replaceChildren(c.root);
 
   const phase = readyPhase(mine, state.voteOver);
+  // Cut off with an ellipsis when long: the whole topic shows on hover while it is the line shown.
+  c.details.title = phase === 'accepted' || phase === 'declined' ? '' : (v.topic ?? '');
   if (phase === 'accepted') {
     c.title.textContent = t.readyAccepted;
     c.details.textContent = t.readyWaiting;
@@ -221,8 +232,7 @@ export function renderReady(root: HTMLElement, state: PanelState, act: (a: Panel
     c.details.textContent = '';
   } else {
     c.title.textContent = voteTitle(v, members, t);
-    const starter = members.find((m) => m.peer === v.starter)?.name;
-    c.details.textContent = starter ? t.voteStartedBy(starter) : '';
+    c.details.textContent = readyDetails(v, members, t);
   }
   c.pips.replaceChildren(...voteBoxes(v, members).map((b) => {
     const pip = el('span', b.answer);

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace lp {
@@ -38,6 +39,9 @@ struct Config {
   // Fullscreen apps (games) keep every click. Off here so a config without the field changes nothing;
   // the app's setting defaults it on.
   bool gameCheck = false;
+  // Apps where lolPing stands down entirely, as one comma-separated list of process names ("Photoshop.exe,
+  //idea64"). The stems are matched case-insensitively without the .exe. Empty: no app is skipped.
+  std::string skipApps;
   Trigger emoteTrigger = Trigger::None;  // the emote wheel's
   uint32_t emoteTriggerVk = 0;           // only for Trigger::CustomVk
   bool emoteClick = false;
@@ -105,6 +109,9 @@ class Decision {
   Result tick(uint64_t nowMs);
   // Per platform: does a fullscreen app own the screen under the click at (x, y)? Unset: gameCheck never fires.
   void setFullscreenProbe(std::function<bool(int x, int y)> probe);
+  // Per platform: the foreground app's process image name ("Photoshop.exe"), '' when it can't be read.
+  // Used for the skipped-app stand-down. Unset: nothing is ever skipped.
+  void setForegroundApp(std::function<std::string()> fg);
   // Windows opens the menu bar / Start menu on a lone Alt / Win key-up, so a swallowed press while one is held
   // gets a mask key before that key-up. macOS has no such behaviour: its hook layer turns this off.
   void setMaskMenuKeys(bool on) { maskMenuKeys_ = on; }
@@ -134,7 +141,9 @@ class Decision {
     bool click;   // trigger + click places a ping / emote instead of replaying the click
   };
 
-  bool active() const { return enabled_ && !suspended_; }
+  bool active() const { return enabled_ && !suspended_ && !inSkippedApp(); }
+  // The foreground app's stem is on the skip list. Cheap when no list is set: the supplier is not consulted.
+  bool inSkippedApp() const;
   uint32_t mods() const;
   Spec spec(WheelKind k) const;
   bool held(WheelKind k) const;
@@ -171,6 +180,8 @@ class Decision {
   bool enabled_ = true;
   bool suspended_ = false;
   std::function<bool(int x, int y)> fullscreenProbe_;
+  std::function<std::string()> foregroundApp_;
+  std::vector<std::string> skipStems_;  // cfg_.skipApps split and normalised, refreshed by setConfig
   State state_ = State::Idle;
   std::array<bool, 256> keyDown_{};
   std::set<uint32_t> swallowKeyUps_;
@@ -185,8 +196,11 @@ class Decision {
   // heldBackVk_: the trigger key is down but not sent yet; a drag consumes it, a lone release types it.
   // typedVk_: the held-back key was flushed because another key was pressed (the user is typing):
   // its repeats and its real key-up now pass through to the OS.
+  // shortcutVk_: the trigger key went down with a modifier held (Cmd+V): another program's shortcut, passed at
+  // once and not a held trigger until it comes up.
   uint32_t heldBackVk_ = 0;
   uint32_t typedVk_ = 0;
+  uint32_t shortcutVk_ = 0;
   WheelKind owner_ = WheelKind::Ping;  // the wheel the current gesture belongs to
   // Per wheel: a release or click happened while its trigger key was held, so its key-up reports TriggerUp
   // (the teammate sends an ask's spots then). Indexed by WheelKind.

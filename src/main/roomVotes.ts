@@ -38,7 +38,8 @@ export class RoomVotes {
     d.room.on('state', this.onState);
   }
 
-  start(kind: VoteKind, target?: string): 'started' | 'busy' | 'self' | 'unknown' {
+  /** `topic` is what a surrender or ready check is about; a kick never has one. */
+  start(kind: VoteKind, target?: string, topic?: string): 'started' | 'busy' | 'self' | 'unknown' {
     if (this.tally.view()) return 'busy';
     const { room } = this.d;
     const s = room.state();
@@ -48,8 +49,9 @@ export class RoomVotes {
       if (!target || !s.members.some((m) => m.peer === target)) return 'unknown';
     }
     const id = this.d.randomId();
-    this.begin({ id, kind, starter: room.self, ...(kind === 'kick' ? { target } : {}), voters: this.votersOf(s.members) });
-    room.sendVote(kind === 'kick' && target ? { id, kind, target } : { id, kind });
+    const about = kind !== 'kick' && topic ? { topic } : {};
+    this.begin({ id, kind, starter: room.self, ...(kind === 'kick' ? { target } : about), voters: this.votersOf(s.members) });
+    room.sendVote(kind === 'kick' && target ? { id, kind, target } : { id, kind, ...(about.topic ? { q: about.topic } : {}) });
     this.settle();
     return 'started';
   }
@@ -81,7 +83,7 @@ export class RoomVotes {
     return members.filter((m) => m.self || !(m.noChat || m.votesOff || m.needsUpdate)).map((m) => m.peer);
   }
 
-  private begin(v: { id: string; kind: VoteKind; starter: string; target?: string; voters: string[] }): void {
+  private begin(v: { id: string; kind: VoteKind; starter: string; target?: string; topic?: string; voters: string[] }): void {
     this.clearTimers();
     this.tally.start(v);
     this.checkTimer = setInterval(() => this.settle(), CHECK_MS);
@@ -157,7 +159,7 @@ export class RoomVotes {
     }
     this.begin({
       id: msg.id, kind: msg.kind, starter: msg.peer, ...(msg.target === undefined ? {} : { target: msg.target }),
-      voters: this.votersOf(s.members),
+      ...(msg.q === undefined ? {} : { topic: msg.q }), voters: this.votersOf(s.members),
     });
     this.settle();
   };

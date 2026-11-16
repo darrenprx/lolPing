@@ -21,6 +21,7 @@ import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
 import { RoomSection } from './components/RoomSection';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
+import { SkipApps } from './components/SkipApps';
 import { StatusCard } from './components/StatusCard';
 import { TeammateSection } from './components/TeammateSection';
 import { TriggerPicker } from './components/TriggerPicker';
@@ -220,6 +221,9 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
         )}
+        {PLATFORM !== 'linux' && ( // the Linux helper can't read the foreground app yet, so a list would do nothing
+          <SkipApps apps={s.skipApps} dim={off} update={update} />
+        )}
 
         <div className="section" id="toggle">{t.navToggle}</div>
         <SettingRow icon={<Keyboard24Regular />} title={t.toggleShortcut} description={t.toggleShortcutDesc}>
@@ -267,7 +271,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         {featureOn(s, 'rooms') ? (
           <>
             <div className="section" id="room">{t.navRoom}</div>
-            <RoomSection settings={s} update={update} />
+            <RoomSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
           </>
         ) : null}
 
@@ -282,8 +286,10 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <FeaturesSection settings={s} update={update} />
 
         <div className="section" id="app">{t.navApp}</div>
-        <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
-          checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        {status.portable ? null : ( // a portable build can't register itself: its path moves with the folder
+          <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}
+            checked={s.launchAtStartup} onChange={(v) => void update({ launchAtStartup: v })} />
+        )}
         <SettingRow icon={<LocalLanguage24Regular />} title={t.language} description={t.languageDesc}>
           <Dropdown
             style={{ minWidth: 170 }}

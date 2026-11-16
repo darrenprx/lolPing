@@ -43,11 +43,24 @@ vi.mock('electron', async () => {
   const { EventEmitter: Emitter } = await import('node:events');
   class FakeWindow extends Emitter {
     static fromWebContents(wc: unknown): FakeWindow | null {
-      return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
+      return (h.windows as unknown as FakeWindow[]).find((w) => w.contents === wc) ?? null;
     }
     x: number;
     bounds: Rect;
-    webContents = Object.assign(new Emitter(), { send: vi.fn() });
+    destroyed = false;
+    readonly contents = Object.assign(new Emitter(), {
+      send: vi.fn(),
+      isDestroyed: () => false,
+      crashed: false,
+      isCrashed(): boolean {
+        return this.crashed;
+      },
+    });
+    /** Like Electron, a destroyed window throws on every property read, though its page can still report a load. */
+    get webContents(): FakeWindow['contents'] {
+      if (this.destroyed) throw new TypeError('Object has been destroyed');
+      return this.contents;
+    }
     constructor(opts: Rect) {
       super();
       this.x = opts.x;
@@ -84,9 +97,11 @@ vi.mock('electron', async () => {
       return this.visible;
     }
     isDestroyed(): boolean {
-      return false;
+      return this.destroyed;
     }
-    destroy(): void {}
+    destroy(): void {
+      this.destroyed = true;
+    }
   }
   const screen = Object.assign(new Emitter(), {
     getAllDisplays: () => h.displays,
@@ -469,6 +484,20 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom', fx: 0 } }); // no fx on the message: the sender's plain pop, whatever we stored
   });
 
+  it('plays the League sound on a room member’s custom emote from our own copy, and none for a name we do not ship', () => {
+    const url = `lolping://emotes/${'a'.repeat(32)}.webp`;
+    const cached: EmoteArt = { kind: 'custom', url, animated: false, fx: 0 };
+    resolveArt.mockReturnValue(cached);
+    const from = { displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, peer: 'peer-1', tag: { name: 'Bob', color: 2 } };
+    mgr.spawnRemoteEmote({ ...from, snd: 'emote:facepalm' });
+    mgr.spawnRemoteEmote({ ...from, snd: 'emote:from_the_future' });
+    mgr.spawnRemoteEmote(from);
+    expect(sent(0)[0][1]).toMatchObject({ art: { kind: 'custom', soundKey: 'emote:facepalm' } });
+    expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom' } });
+    expect((sent(0)[1][1] as { art: EmoteArt }).art).not.toHaveProperty('soundKey');
+    expect((sent(0)[2][1] as { art: EmoteArt }).art).not.toHaveProperty('soundKey');
+  });
+
   it('previews in the middle of the main display without sharing', () => {
     const shared = vi.fn();
     mgr.on('sharedEmote', shared);
@@ -584,6 +613,26 @@ describe('OverlayManager stale display bounds', () => {
     mgr.toast('t', 'b');
     expect(h.windows[0].bounds).toBe(bounds); // untouched: no rebuild happened
     expect(sent(0)).toEqual([['wheel:open', { x: 100, y: 200, wheel: 'ping' }], ['toast:show', { title: 't', body: 'b' }]]);
+  });
+});
+
+describe('OverlayManager displays that come and go', () => {
+  it('ignores the load report of an overlay whose display went away while its page was loading (#142)', async () => {
+    const { screen } = await import('electron');
+    const second = h.windows[1] as unknown as { contents: { emit: (e: string) => boolean } };
+    h.displays.splice(1, 1);
+    screen.emit('display-removed');
+    expect(() => second.contents.emit('did-finish-load')).not.toThrow();
+  });
+
+  it('replaces an overlay whose page died before the next wheel, so the wheel shows without a restart', () => {
+    const first = h.windows[0] as unknown as { contents: { crashed: boolean }; destroyed: boolean };
+    first.contents.crashed = true;
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    expect(first.destroyed).toBe(true);
+    expect(h.windows).toHaveLength(3);
+    expect(sent(2)).toEqual([['wheel:open', { x: 100, y: 200, wheel: 'ping' }]]);
+    expect(h.windows[1].webContents.send).not.toHaveBeenCalledWith('wheel:open', expect.anything());
   });
 });
 
