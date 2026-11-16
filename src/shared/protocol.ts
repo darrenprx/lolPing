@@ -19,7 +19,16 @@ export const HELPER_VERSION = 7;
  */
 export type HelperEvent =
   | { type: 'ready'; version: number }
-  | { type: 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click'; x: number; y: number; wheel: WheelKind }
+  | {
+      type: 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click';
+      x: number;
+      y: number;
+      wheel: WheelKind;
+      /** Linux evdev only: x and y are raw mouse counts since the gesture's press, not screen coordinates. */
+      rel?: boolean;
+    }
+  /** Linux evdev only: the helper wants (true) or no longer wants (false) the overlays to see the pointer. */
+  | { type: 'pointer'; want: boolean }
   | { type: 'cancel' }
   | { type: 'toggled'; enabled: boolean }
   | { type: 'textRequested' }
@@ -66,6 +75,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
       return { type: 'textRequested' };
     case 'panel':
       return typeof o.show === 'boolean' ? { type: 'panel', show: o.show } : null;
+    case 'pointer':
+      return typeof o.want === 'boolean' ? { type: 'pointer', want: o.want } : null;
     case 'triggerUp':
       return isWheel(o.wheel) ? { type: 'triggerUp', wheel: o.wheel } : null;
     case 'askWords':
@@ -94,7 +105,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
     default:
       if (typeof o.type === 'string' && POINT_TYPES.has(o.type) && isInt(o.x) && isInt(o.y)) {
         // Anything unknown (including no field, from a version 1 helper) is the ping wheel.
-        return { type: o.type as PointType, x: o.x, y: o.y, wheel: isWheel(o.wheel) ? o.wheel : 'ping' };
+        const point = { type: o.type as PointType, x: o.x, y: o.y, wheel: isWheel(o.wheel) ? o.wheel : 'ping' };
+        return o.rel === true ? { ...point, rel: true } : point;
       }
       return null;
   }

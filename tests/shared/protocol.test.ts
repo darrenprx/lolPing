@@ -63,6 +63,23 @@ describe('parseHelperLine', () => {
     }
   });
 
+  it('reads the rel flag on point events and ignores any other value', () => {
+    for (const type of ['wheelOpen', 'wheelMove', 'wheelRelease', 'click']) {
+      expect(parseHelperLine(`{"type":"${type}","x":-4,"y":9,"wheel":"emote","rel":true}`))
+        .toEqual({ type, x: -4, y: 9, wheel: 'emote', rel: true });
+      expect(parseHelperLine(`{"type":"${type}","x":1,"y":2,"rel":false}`)).toEqual({ type, x: 1, y: 2, wheel: 'ping' });
+      expect(parseHelperLine(`{"type":"${type}","x":1,"y":2,"rel":1}`)).toEqual({ type, x: 1, y: 2, wheel: 'ping' });
+    }
+  });
+
+  it('reads the pointer event', () => {
+    expect(parseHelperLine('{"type":"pointer","want":true}')).toEqual({ type: 'pointer', want: true });
+    expect(parseHelperLine('{"type":"pointer","want":false}')).toEqual({ type: 'pointer', want: false });
+    for (const line of ['{"type":"pointer"}', '{"type":"pointer","want":"yes"}', '{"type":"pointer","want":1}']) {
+      expect(parseHelperLine(line), line).toBeNull();
+    }
+  });
+
   it('rejects malformed lines', () => {
     for (const line of ['', 'nope', '42', 'null', '{"type":"wheelOpen","x":1}', '{"type":"click","x":1.5,"y":2}',
       '{"type":"toggled"}', '{"type":"panel"}', '{"type":"panel","show":"yes"}', '{"type":"foregroundApp"}', '{"type":"appList"}',

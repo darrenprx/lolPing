@@ -32,6 +32,7 @@ const api: SettingsApi = {
   captureForegroundApp: () => ipcRenderer.invoke(SETTINGS_CH.captureApp),
   getAppList: () => ipcRenderer.invoke(SETTINGS_CH.appList),
   openAccessibility: () => ipcRenderer.invoke(SETTINGS_CH.openAccessibility),
+  linuxSetup: () => ipcRenderer.invoke(SETTINGS_CH.linuxSetup),
   getRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomGet),
   onRoom: (cb) => subscribe(SETTINGS_CH.roomChanged, cb),
   createRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomCreate),

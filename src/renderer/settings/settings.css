@@ -147,6 +147,9 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.permission .lbl { padding: 12px 0; }
 .card.permission ol { margin: 6px 0 12px; padding-left: 18px; }
 .card.permission .actions { display: flex; gap: 8px; }
+.card.linuxSetup .lbl { display: flex; flex-direction: column; gap: 8px; }
+.card.linuxSetup .actions { align-items: center; }
+.card.linuxSetup .setupCommand { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 12px ui-monospace, Consolas, monospace; user-select: all; }
 /* Room */
 .swatches { display: flex; gap: 6px; align-items: center; }
 /* display: contents keeps the radiogroup wrapper out of the flex row, so the picker sits beside the palette. */

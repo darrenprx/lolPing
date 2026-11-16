@@ -38,12 +38,14 @@ import { EmoteTransfer } from './emoteTransfer';
 import { isFile } from './fileState';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
+import { manualCommand, runLinuxSetup, SETUP_SCRIPT, stageManualScript } from './linuxSetup';
+import { RelPoints } from './relPoints';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
 import { OverlayManager, type AskClick, type AskRelease, type SharedEmote, type SharedPing } from './overlayManager';
 import {
-  assetPath, buildResourcePath, contextHelperPath, helperExePath, IS_LINUX, IS_MAC, IS_PORTABLE, PLATFORM, PORTABLE_DATA_DIR,
-  settingsDir,
+  assetPath, buildResourcePath, contextHelperPath, helperExePath, IS_LINUX, IS_MAC, IS_PORTABLE, linuxSetupScriptPath, PLATFORM,
+  PORTABLE_DATA_DIR, settingsDir,
 } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomHistory } from './roomHistory';
@@ -374,6 +376,9 @@ function start(): void {
   // the permission instead. `staleAccess`: macOS lists lolPing as allowed, yet the helper still has no access.
   let accessTimer: NodeJS.Timeout | null = null;
   let staleAccess = false;
+  // Linux: the code of the helper's last error, and the by-hand setup command once it said it needs setup.
+  let helperErrorCode: string | undefined;
+  let setupCommand: string | null = null;
   const trusted = (): boolean => !IS_MAC || systemPreferences.isTrustedAccessibilityClient(false);
   const stopWaitingForAccess = (): void => {
     if (accessTimer) clearInterval(accessTimer);
@@ -397,7 +402,13 @@ function start(): void {
   };
 
   const helperStatus = (): HelperStatus => (accessTimer ? 'noAccess' : bridge.status);
-  const status = (): AppStatus => ({ enabled, helper: helperStatus(), staleAccess, portable: IS_PORTABLE || undefined });
+  const status = (): AppStatus => {
+    const helper = helperStatus();
+    return {
+      enabled, helper, staleAccess, portable: IS_PORTABLE || undefined,
+      ...(IS_LINUX && helper === 'noAccess' && helperErrorCode === 'needsSetup' && setupCommand ? { linuxSetup: { command: setupCommand } } : {}),
+    };
+  };
   const trayMode = (): TrayMode => {
     const h = helperStatus();
     if (h === 'failed' || h === 'noAccess') return h;
@@ -726,8 +737,19 @@ function start(): void {
       syncSuspended();
     }
   };
+  // Linux evdev: the helper sends mouse counts instead of screen points while the overlays see the pointer.
+  const relPoints = new RelPoints(Date.now);
+  overlays.on('pointer', (at: { x: number; y: number }) => relPoints.pointerAt(at));
   bridge.on('event', (ev) => {
-    if (ev.type === 'toggled') setEnabled(ev.enabled);
+    if (ev.type === 'pointer') {
+      if (ev.want) relPoints.begin(cursorPhys());
+      else relPoints.end();
+      overlays.setPointerMode(ev.want);
+    } else if ((ev.type === 'wheelOpen' || ev.type === 'wheelMove' || ev.type === 'wheelRelease' || ev.type === 'click') && ev.rel) {
+      const cursor = relPoints.active ? null : cursorPhys();
+      const at = relPoints.resolve(ev) ?? { x: (cursor?.x ?? 0) + ev.x, y: (cursor?.y ?? 0) + ev.y };
+      overlays.handle({ type: ev.type, x: Math.round(at.x), y: Math.round(at.y), wheel: ev.wheel });
+    } else if (ev.type === 'toggled') setEnabled(ev.enabled);
     else if (ev.type === 'textRequested') openText();
     else if (ev.type === 'panel') {
       if (!ev.show) panels.hideRoster();
@@ -738,7 +760,10 @@ function start(): void {
       panels.hideRoster(); // a restarted helper lost the panel key's up, so a shown roster would stay up
       mate?.stale.helperReady();
     } else if (ev.type === 'scroll') mate?.stale.scroll({ x: ev.x, y: ev.y });
-    else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
+    else if (ev.type === 'error') {
+      helperErrorCode = ev.code;
+      console.warn('[helper]', ev.code ?? '', ev.message);
+    }
     else if (ev.type === 'triggerUp') {
       // Only the key that asks sends the spots held so far; the emote key's up, or the ping key's outside it, doesn't.
       if (ev.wheel === 'ask' || (ev.wheel === 'ping' && asksOnPing(settings))) gesture.keyUp();
@@ -746,7 +771,9 @@ function start(): void {
   });
   bridge.on('status', (s: HelperStatus) => {
     // A helper that is starting or has stopped can no longer send the cancel that dismisses a wheel left on screen.
+    if (s === 'starting' || s === 'running') helperErrorCode = undefined;
     if (s !== 'running') {
+      relPoints.end();
       overlays.cancelWheel();
       mate?.controller.cancel('helper');
       gesture.cancel(); // its key-up will never come
@@ -755,6 +782,18 @@ function start(): void {
       // Allowed but still refused is an entry left over from an earlier build. Otherwise wait for the user to allow it.
       if (trusted()) staleAccess = true;
       else waitForAccess();
+      openSettingsWindow();
+    }
+    if (s === 'noAccess' && IS_LINUX && helperErrorCode === 'needsSetup') {
+      // A copy the user can point sudo at: an AppImage's own files are on a mount root can't read.
+      const copy = join(settingsDir(), SETUP_SCRIPT);
+      stageManualScript(linuxSetupScriptPath(), copy).then(
+        () => {
+          setupCommand = manualCommand(copy);
+          pushStatus();
+        },
+        (err: unknown) => console.warn('[setup]', err),
+      );
       openSettingsWindow();
     }
     pushStatus();
@@ -1184,6 +1223,11 @@ function start(): void {
         win.focus();
       }
       return name;
+    },
+    linuxSetup: async () => {
+      const result = await runLinuxSetup(linuxSetupScriptPath());
+      if (result.ok) startHelper();
+      return result;
     },
     openAccessibility: () => {
       if (!IS_MAC) return;

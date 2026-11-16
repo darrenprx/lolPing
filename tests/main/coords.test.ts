@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  besideSpot, physicalBoxToLocal, physicalToDip, physicalToLocal, placeInside, type DisplayMap,
+  besideSpot, localToPhysical, physicalBoxToLocal, physicalToDip, physicalToLocal, placeInside, type DisplayMap,
 } from '../../src/main/coords';
 
 // Ultrawide primary at 100% + a 1080p monitor at 150% to its right + a 1440p monitor at 125% to its left.
@@ -17,6 +17,14 @@ describe('coords', () => {
   it('scales points on a high-DPI display', () => {
     expect(physicalToLocal(3440 + 300, 150, maps)).toEqual({ displayId: 2, x: 200, y: 100 });
     expect(physicalToDip(3440 + 300, 150, maps)).toMatchObject({ x: 3640, y: 100 });
+  });
+
+  it('localToPhysical undoes physicalToLocal on the same display', () => {
+    for (const [x, y] of [[3440 + 300, 150], [-1280, 720], [1000, 500]]) {
+      const l = physicalToLocal(x, y, maps)!;
+      expect(localToPhysical(l.x, l.y, maps, l.displayId)).toEqual({ x, y });
+    }
+    expect(localToPhysical(1, 1, maps, 99)).toBeNull();
   });
 
   it('handles displays with negative origins', () => {

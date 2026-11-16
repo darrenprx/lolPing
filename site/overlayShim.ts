@@ -22,6 +22,9 @@ const api: OverlayApi = {
   reportIdle() {
     // the page is the overlay, so there is no window to hide
   },
+  reportPointer() {
+    // the page gets the mouse itself
+  },
 };
 window.overlay = api;
 

@@ -21,6 +21,7 @@ export const SETTINGS_CH = {
   captureApp: 'app:captureApp',
   appList: 'app:appList',
   openAccessibility: 'app:openAccessibility',
+  linuxSetup: 'app:linuxSetup',
   roomGet: 'room:get',
   roomChanged: 'room:state',
   roomCreate: 'room:create',

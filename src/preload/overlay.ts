@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
+  OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, OVERLAY_POINTER,
+  type OverlayChannel, type OverlayEvents,
 } from '../shared/ipc';
 import type { PingId } from '../shared/pings';
 
@@ -24,6 +25,10 @@ const api = {
   /** Nothing is on this overlay any more (true), or something is again (false). */
   reportIdle(idle: boolean): void {
     ipcRenderer.send(OVERLAY_IDLE, idle);
+  },
+  /** The pointer is here (CSS px in this overlay). Only arrives while the overlay takes mouse events. */
+  reportPointer(x: number, y: number): void {
+    ipcRenderer.send(OVERLAY_POINTER, { x, y });
   },
 };
 

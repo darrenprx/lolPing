@@ -198,6 +198,20 @@ const idle = new IdleWatch(
   () => !pingWheel.isOpen && !emoteWheel.isOpen && layers.every((l) => l.childElementCount === 0),
   (v) => window.overlay.reportIdle(v),
 );
+// While the helper wants the pointer (Linux evdev), main lets this window take mouse events: say where it is, once a frame.
+let pointerAt: { x: number; y: number } | null = null;
+const sendPointer = (e: PointerEvent): void => {
+  const first = pointerAt === null;
+  pointerAt = { x: e.clientX, y: e.clientY };
+  if (!first) return;
+  requestAnimationFrame(() => {
+    if (pointerAt) window.overlay.reportPointer(pointerAt.x, pointerAt.y);
+    pointerAt = null;
+  });
+};
+document.addEventListener('pointermove', sendPointer);
+document.documentElement.addEventListener('pointerenter', sendPointer);
+
 const changes = new MutationObserver(() => idle.check());
 for (const l of layers) changes.observe(l, { childList: true });
 for (const svg of [pingSvg, emoteSvg]) changes.observe(svg, { attributes: true, attributeFilter: ['class'] });

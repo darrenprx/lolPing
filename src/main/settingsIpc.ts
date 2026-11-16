@@ -2,7 +2,7 @@ import { globalShortcut, ipcMain, shell } from 'electron';
 import { isCustomRef, isEmoteFx, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
 import {
-  SETTINGS_CH, TEAMMATE_HISTORY_OPS, type About, type AppStatus, type CheckAgentResult, type CheckKeyResult,
+  SETTINGS_CH, TEAMMATE_HISTORY_OPS, type About, type AppStatus, type CheckAgentResult, type CheckKeyResult, type LinuxSetupResult,
   type RunningApp, type SecretResult, type SetSettingsResult, type TeammateHistoryOp, type TeammateStatus,
   type UsageMonth,
 } from '../shared/ipc';
@@ -42,6 +42,8 @@ export interface SettingsIpcDeps {
   /** The apps the user can switch to, with icons; the app-exception list's dropdown asks. */
   appList(): Promise<RunningApp[]>;
   openAccessibility(): void;
+  /** Linux: sets up access to the input devices (pkexec) and starts the helper again. */
+  linuxSetup(): Promise<LinuxSetupResult>;
   /** Strings in the app's current language. */
   text(): Strings;
   platform: Platform;
@@ -203,6 +205,17 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.captureApp, () => d.captureForegroundApp());
   ipcMain.handle(SETTINGS_CH.appList, () => d.appList());
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
+  // Only while the page can show the card: a window that asks at any other time gets nothing run as root.
+  let setupRunning = false;
+  ipcMain.handle(SETTINGS_CH.linuxSetup, async (): Promise<LinuxSetupResult> => {
+    if (d.platform !== 'linux' || !d.getStatus().linuxSetup || setupRunning) return { ok: false, reason: 'unavailable' };
+    setupRunning = true;
+    try {
+      return await d.linuxSetup();
+    } finally {
+      setupRunning = false;
+    }
+  });
   ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
   ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());
   ipcMain.handle(SETTINGS_CH.roomJoin, (_e, text: unknown): Promise<JoinResult> | JoinResult =>

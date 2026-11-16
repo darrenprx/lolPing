@@ -203,6 +203,8 @@ export const OVERLAY_PINGED = 'overlay:pinged';
 export const OVERLAY_EMOTED = 'overlay:emoted';
 /** overlay renderer → main: true once nothing has been on the overlay for a moment, false when something shows again. */
 export const OVERLAY_IDLE = 'overlay:idle';
+/** overlay renderer → main: {x, y} of the pointer in CSS px, sent only while the overlays take mouse events (Linux evdev). */
+export const OVERLAY_POINTER = 'overlay:pointer';
 
 export interface AppStatus {
   enabled: boolean;
@@ -212,9 +214,19 @@ export interface AppStatus {
    * left by an update (ad-hoc signatures change every build): it has to be removed and added again.
    */
   staleAccess?: boolean;
+  /**
+   * Linux only: the helper can't read /dev/input yet (a Wayland session without access). `command` is the line that
+   * sets that up by hand; the Set up button does the same.
+   */
+  linuxSetup?: { command: string };
   /** A portable build: data lives next to the executable, and there is no self-update or launch-at-startup. */
   portable?: boolean;
 }
+
+/** How the Linux input setup ended. `detail` is the end of the script's own error output. */
+export type LinuxSetupResult =
+  | { ok: true }
+  | { ok: false; reason: 'missing' | 'cancelled' | 'denied' | 'unavailable' | 'failed'; detail?: string };
 
 export interface About {
   version: string;
@@ -300,6 +312,8 @@ export interface SettingsApi {
   getAppList(): Promise<RunningApp[]>;
   /** macOS: asks for Accessibility access and opens that page of System Settings. */
   openAccessibility(): Promise<void>;
+  /** Linux: runs the input setup as root through pkexec and starts the helper again. */
+  linuxSetup(): Promise<LinuxSetupResult>;
   getRoom(): Promise<RoomState>;
   onRoom(cb: (s: RoomState) => void): () => void;
   createRoom(): Promise<void>;
