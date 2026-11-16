@@ -55,6 +55,9 @@ int runSimulate(Output& out) {
       case Command::Kind::Suspend: report(out, d.setSuspended(c.flag), false); break;
       case Command::Kind::StaleWatch: report(out, d.setStaleWatch(c.flag), false); break;
       case Command::Kind::Shutdown: return 0;
+      // The simulator has no programs running: answer so the app doesn't wait out its timeout.
+      case Command::Kind::ForegroundApp: out.foregroundApp(""); break;
+      case Command::Kind::AppList: out.appList({}); break;
       case Command::Kind::SimEvent: report(out, d.onEvent(c.event), true); break;
       case Command::Kind::SimTick: report(out, d.tick(c.timeMs), true); break;
       case Command::Kind::Invalid: out.error("invalid command: " + line); break;

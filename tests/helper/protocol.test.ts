@@ -177,6 +177,13 @@ describe('hook-helper --simulate', () => {
     expect(events.filter((e) => e.type !== 'ready')).toEqual([{ type: 'sim', swallow: false, inject: '' }]);
   });
 
+  it('answers the program questions with no programs', async () => {
+    const events = await simulate([{ type: 'getForegroundApp' }, { type: 'getAppList' }]);
+    expect(events.filter((e) => e.type !== 'ready')).toEqual([
+      { type: 'foregroundApp', name: '' }, { type: 'appList', apps: [] },
+    ]);
+  });
+
   it('reports invalid commands as errors', async () => {
     const events = await simulate([{ type: 'bogus' }]);
     expect(events.some((e) => e.type === 'error')).toBe(true);
