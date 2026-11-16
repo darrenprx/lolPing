@@ -75,30 +75,58 @@ describe('roomTextLayout', () => {
   describe('DanmakuLanes', () => {
     it('gives each simultaneous line its own lane and then none', () => {
       const lanes = new DanmakuLanes(2, () => 0);
-      expect(lanes.take(300, 160)).toBe(0);
-      expect(lanes.take(300, 160)).toBe(1);
-      expect(lanes.take(300, 160)).toBeNull();
+      expect(lanes.take(300, 160, 1920)).toBe(0);
+      expect(lanes.take(300, 160, 1920)).toBe(1);
+      expect(lanes.take(300, 160, 1920)).toBeNull();
     });
 
     it('frees a lane once the line tail plus a 24 px gap has entered the screen', () => {
       let t = 0;
       const lanes = new DanmakuLanes(1, () => t);
-      expect(lanes.take(296, 160)).toBe(0);
+      expect(lanes.take(296, 160, 1920)).toBe(0);
       t = 1999;
-      expect(lanes.take(296, 160)).toBeNull();
+      expect(lanes.take(296, 160, 1920)).toBeNull();
       t = 2000; // (296 + 24) px at 160 px/s
-      expect(lanes.take(296, 160)).toBe(0);
+      expect(lanes.take(296, 160, 1920)).toBe(0);
     });
 
     it('reuses the lowest free lane and says how long until one frees', () => {
       let t = 0;
       const lanes = new DanmakuLanes(2, () => t);
-      lanes.take(136, 160); // busy for 1000 ms
-      lanes.take(456, 160); // busy for 3000 ms
-      expect(lanes.nextFreeMs()).toBe(1000);
+      lanes.take(136, 160, 1920); // busy for 1000 ms
+      lanes.take(456, 160, 1920); // busy for 3000 ms
+      expect(lanes.nextFreeMs(160, 1920)).toBe(1000);
       t = 1500;
-      expect(lanes.nextFreeMs()).toBe(0);
-      expect(lanes.take(100, 160)).toBe(0);
+      expect(lanes.nextFreeMs(160, 1920)).toBe(0);
+      expect(lanes.take(100, 160, 1920)).toBe(0);
+    });
+
+    it('frees a lane sooner for the same line at a higher speed', () => {
+      let t = 0;
+      const lanes = new DanmakuLanes(1, () => t);
+      expect(lanes.take(296, 320, 1920)).toBe(0);
+      t = 1000; // (296 + 24) px at 320 px/s
+      expect(lanes.take(296, 320, 1920)).toBe(0);
+    });
+
+    it('holds a faster line back until it can no longer catch the slower one in front', () => {
+      let t = 0;
+      const lanes = new DanmakuLanes(1, () => t);
+      lanes.take(296, 80, 1920); // tail clear at 4000 ms, gone past the left edge at 27,700 ms
+      t = 4000;
+      expect(lanes.take(296, 320, 1920)).toBeNull();
+      // At 320 px/s the head needs (1920 - 24) / 320 = 5925 ms to reach a gap short of the left edge.
+      expect(lanes.nextFreeMs(320, 1920)).toBeCloseTo(27_700 - 5925 - 4000);
+      t = 27_700 - 5925 + 1;
+      expect(lanes.take(296, 320, 1920)).toBe(0);
+    });
+
+    it('lets a slower line follow a faster one as soon as the tail is clear', () => {
+      let t = 0;
+      const lanes = new DanmakuLanes(1, () => t);
+      lanes.take(296, 320, 1920);
+      t = 1000;
+      expect(lanes.take(296, 80, 1920)).toBe(0);
     });
   });
 });

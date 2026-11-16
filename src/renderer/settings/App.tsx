@@ -271,7 +271,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         {featureOn(s, 'rooms') ? (
           <>
             <div className="section" id="room">{t.navRoom}</div>
-            <RoomSection settings={s} update={update} />
+            <RoomSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
           </>
         ) : null}
 

@@ -94,6 +94,10 @@ export interface Settings {
   features: Features;
   /** How room text appears here: a bubble at the spot the sender pointed at, or a line scrolling across the top. */
   roomTextStyle: RoomTextStyle;
+  /** The 弹幕 style's text size. */
+  danmakuSizePx: number;
+  /** The 弹幕 style's speed, as a multiple of 160 px/s. */
+  danmakuSpeed: number;
   /** The AI teammate: its ask key, profiles and history. Used only while features.teammate is on. */
   teammate: TeammateSettings;
 }
@@ -146,6 +150,8 @@ export const DEFAULT_SETTINGS: Settings = {
   updateNotifiedVersion: null,
   features: { ...DEFAULT_FEATURES },
   roomTextStyle: 'spot',
+  danmakuSizePx: 22,
+  danmakuSpeed: 1,
   teammate: { ...DEFAULT_TEAMMATE },
 };
 
@@ -157,6 +163,8 @@ export const LIMITS = {
   volume: { min: 0, max: 100, step: 1 },
   incomingPingLimit: { min: 0, max: 20, step: 1 },
   emoteSizePx: { min: 80, max: 300, step: 1 },
+  danmakuSizePx: { min: 14, max: 40, step: 1 },
+  danmakuSpeed: { min: 0.5, max: 2.5, step: 0.1 },
 } as const;
 
 type NumKey = keyof typeof LIMITS;
@@ -414,6 +422,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     // The teammate isn't built for Linux, so a settings file carried over from another system can't switch it on.
     features: platform === 'linux' ? { ...normalizeFeatures(r.features), teammate: false } : normalizeFeatures(r.features),
     roomTextStyle: r.roomTextStyle === 'danmaku' ? 'danmaku' : 'spot',
+    danmakuSizePx: num(r.danmakuSizePx, 'danmakuSizePx'),
+    danmakuSpeed: num(r.danmakuSpeed, 'danmakuSpeed'),
     teammate: normalizeTeammate(r.teammate, { platform, trigger: pingTrigger, emoteTrigger: emote }),
   };
 }
@@ -449,7 +459,7 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 export type OverlaySettings = Pick<
   Settings,
   'pingSizePx' | 'pingDurationS' | 'keepLastPing' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
-  | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
+  | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes' | 'danmakuSizePx' | 'danmakuSpeed'
 > & {
   /** The ask wheel: the teammate's name tag, each slice's intent label, and the slices whose intent is off. */
   ask: {
@@ -469,6 +479,7 @@ export const overlaySettings = (s: Settings, lang: Lang = 'en'): OverlaySettings
   wheelSizePx: s.wheelSizePx, wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
+  danmakuSizePx: s.danmakuSizePx, danmakuSpeed: s.danmakuSpeed,
   ask: askWheel(s, lang),
 });
 

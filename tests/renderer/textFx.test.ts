@@ -119,6 +119,25 @@ describe('TextStage', () => {
     expect(layer.children).toHaveLength(0);
   });
 
+  it('draws 弹幕 lines at the size setting, with rows that grow with it', () => {
+    vi.stubGlobal('window', { innerWidth: 1920, innerHeight: 400 }); // a quarter is 100 px: two 43 px rows, or three 34 px ones
+    stage.setDanmaku({ sizePx: 28, speed: 1 });
+    for (const owner of ['a', 'b', 'c']) stage.spawn(line({ style: 'danmaku', owner }));
+    expect(layer.children[0].style.fontSize).toBe('28px');
+    expect(layer.children[0].style.lineHeight).toBe('43px');
+    expect(layer.children.map((c) => c.style.top)).toEqual(['0px', '43px', undefined]);
+    expect(waiting()).toBe(1);
+  });
+
+  it('moves 弹幕 lines at the speed setting, and lines on screen keep theirs', () => {
+    stage.setDanmaku({ sizePx: 22, speed: 2 });
+    stage.spawn(line({ style: 'danmaku', owner: 'a' }));
+    expect(layer.children[0].style['--dur']).toBe(`${((1920 + 296) / 320) * 1000}ms`);
+    stage.setDanmaku({ sizePx: 22, speed: 1 });
+    vi.advanceTimersByTime(((1920 + 296) / 320) * 1000 + 1);
+    expect(layer.children).toHaveLength(0);
+  });
+
   it('drops the oldest 弹幕 line past the cap, and its lane stays reserved for the gap behind it', () => {
     stage.spawn(line({ style: 'danmaku', text: 'on screen' }));
     for (const text of ['w1', 'w2', 'w3']) stage.spawn(line({ style: 'danmaku', text }));

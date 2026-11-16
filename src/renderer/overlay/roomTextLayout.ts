@@ -46,25 +46,47 @@ export class OwnerLimit {
   }
 }
 
-/** The 弹幕 rows. A row is free again once the line in it has moved its whole width past the right edge, plus a gap. */
+interface Lane {
+  /** When the last line's tail plus the gap has come in past the right edge. */
+  clearAt: number;
+  /** When the last line's tail leaves past the left edge. */
+  exitAt: number;
+  speedPxS: number;
+}
+
+/**
+ * The 弹幕 rows. A row is free again once the line in it has moved its whole width past the right edge, plus a gap,
+ * and, for a line faster than that one (the speed setting just changed), once it can no longer catch up with it.
+ */
 export class DanmakuLanes {
-  private readonly freeAt: number[];
+  private readonly lanes: Lane[];
 
   constructor(lanes: number, private readonly now: () => number) {
-    this.freeAt = Array.from({ length: lanes }, () => 0);
+    this.lanes = Array.from({ length: lanes }, () => ({ clearAt: 0, exitAt: 0, speedPxS: 0 }));
   }
 
-  /** The lowest free lane for a line `widthPx` wide, or null when every lane is busy. Lines start at the screen's right edge. */
-  take(widthPx: number, speedPxS: number): number | null {
+  /**
+   * The lowest free lane for a line `widthPx` wide moving at `speedPxS` across a screen `screenPx` wide, or null when
+   * every lane is busy. Lines start at the screen's right edge.
+   */
+  take(widthPx: number, speedPxS: number, screenPx: number): number | null {
     const t = this.now();
-    const lane = this.freeAt.findIndex((at) => at <= t);
+    const lane = this.lanes.findIndex((l) => freeAt(l, speedPxS, screenPx) <= t);
     if (lane < 0) return null;
-    this.freeAt[lane] = t + ((widthPx + LANE_GAP_PX) / speedPxS) * 1000;
+    this.lanes[lane] = {
+      clearAt: t + ((widthPx + LANE_GAP_PX) / speedPxS) * 1000, exitAt: t + ((screenPx + widthPx) / speedPxS) * 1000, speedPxS,
+    };
     return lane;
   }
 
-  /** Milliseconds until some lane is free: 0 when one is now. */
-  nextFreeMs(): number {
-    return Math.max(0, Math.min(...this.freeAt) - this.now());
+  /** Milliseconds until some lane is free for a line at `speedPxS`: 0 when one is now. */
+  nextFreeMs(speedPxS: number, screenPx: number): number {
+    return Math.max(0, Math.min(...this.lanes.map((l) => freeAt(l, speedPxS, screenPx))) - this.now());
   }
+}
+
+/** A faster line's head must still be a gap behind the line in front when that one's tail leaves the screen. */
+function freeAt(lane: Lane, speedPxS: number, screenPx: number): number {
+  if (speedPxS <= lane.speedPxS) return lane.clearAt;
+  return Math.max(lane.clearAt, lane.exitAt - ((screenPx - LANE_GAP_PX) / speedPxS) * 1000);
 }

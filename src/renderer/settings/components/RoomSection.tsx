@@ -1,7 +1,7 @@
 import { Button, Dropdown, Input, Option, Slider, Spinner } from '@fluentui/react-components';
 import {
   ArrowSync24Regular, Chat24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Image24Regular, Keyboard24Regular, Person24Regular,
-  PeopleCommunity24Regular, SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
+  FastForward24Regular, PeopleCommunity24Regular, SpeakerMute24Regular, TextFontSize24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import { featureOn } from '../../../shared/features';
@@ -16,7 +16,7 @@ import { useText } from '../text';
 import type { Update } from '../useAppState';
 import { useRoomState } from '../useRoomState';
 import { KeyCapture } from './KeyCapture';
-import { SettingRow, SwitchRow } from './rows';
+import { SettingRow, SliderRow, SwitchRow } from './rows';
 
 const { max: LIMIT_MAX } = LIMITS.incomingPingLimit;
 /** The slider runs 1…max+1; its last stop is Unlimited (stored as 0). */
@@ -173,7 +173,7 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
 const textStyleLabel = (t: Strings, style: RoomTextStyle): string =>
   style === 'danmaku' ? t.roomTextStyleDanmaku : t.roomTextStyleSpot;
 
-export function RoomSection({ settings: s, update }: { settings: Settings; update: Update }) {
+export function RoomSection({ settings: s, update, lengthUnit }: { settings: Settings; update: Update; lengthUnit: string }) {
   const t = useText();
   const room = useRoomState();
   const [textKeyError, setTextKeyError] = useState<string | null>(null);
@@ -229,6 +229,14 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
               {TEXT_STYLES.map((v) => <Option key={v} value={v} text={textStyleLabel(t, v)}>{textStyleLabel(t, v)}</Option>)}
             </Dropdown>
           </SettingRow>
+          {s.roomTextStyle === 'danmaku' ? (
+            <>
+              <SliderRow limit="danmakuSizePx" icon={<TextFontSize24Regular />} title={t.danmakuSize} value={s.danmakuSizePx}
+                format={(v) => `${v} ${lengthUnit}`} onChange={(v) => void update({ danmakuSizePx: v })} />
+              <SliderRow limit="danmakuSpeed" icon={<FastForward24Regular />} title={t.danmakuSpeed} description={t.danmakuSpeedDesc}
+                value={s.danmakuSpeed} format={(v) => `${v.toFixed(1)}×`} onChange={(v) => void update({ danmakuSpeed: v })} />
+            </>
+          ) : null}
           <SettingRow icon={<Keyboard24Regular />} title={t.textShortcut} description={t.textShortcutDesc}>
             <KeyCapture parts={hotkeyParts(s.textHotkey, api.platform)} requireModifier error={textKeyError}
               onCapture={async (c) => {

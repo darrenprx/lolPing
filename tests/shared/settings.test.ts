@@ -612,6 +612,7 @@ describe('helpers', () => {
       pingSizePx: 110, pingDurationS: 3.2, keepLastPing: false, volume: 70, muted: false, tickSound: true,
       wheelSizePx: 600, wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
+      danmakuSizePx: 22, danmakuSpeed: 1,
       ask: {
         tag: { name: 'AI', color: 3, rgb: null },
         labels: {
@@ -718,6 +719,23 @@ describe('room text settings', () => {
   it('keeps the scrolling style and falls back to the spot for a bad value', () => {
     expect(normalizeSettings({ roomTextStyle: 'danmaku' }).roomTextStyle).toBe('danmaku');
     for (const raw of ['scroll', 1, null, {}]) expect(normalizeSettings({ roomTextStyle: raw }).roomTextStyle).toBe('spot');
+  });
+
+  it("reads an older file's 弹幕 as today's 22 px at 1x", () => {
+    const { danmakuSizePx: _size, danmakuSpeed: _speed, ...old } = DEFAULT_SETTINGS;
+    expect(normalizeSettings(old)).toMatchObject({ danmakuSizePx: 22, danmakuSpeed: 1 });
+  });
+
+  it('keeps the 弹幕 size and speed in range, on their steps', () => {
+    expect(normalizeSettings({ danmakuSizePx: 30, danmakuSpeed: 1.7 })).toMatchObject({ danmakuSizePx: 30, danmakuSpeed: 1.7 });
+    expect(normalizeSettings({ danmakuSizePx: 2, danmakuSpeed: 9 })).toMatchObject({ danmakuSizePx: 14, danmakuSpeed: 2.5 });
+    expect(normalizeSettings({ danmakuSizePx: 99, danmakuSpeed: 0.1 })).toMatchObject({ danmakuSizePx: 40, danmakuSpeed: 0.5 });
+    expect(normalizeSettings({ danmakuSpeed: 1.04 }).danmakuSpeed).toBe(1);
+    expect(normalizeSettings({ danmakuSizePx: '30', danmakuSpeed: null })).toMatchObject({ danmakuSizePx: 22, danmakuSpeed: 1 });
+  });
+
+  it('hands the 弹幕 size and speed to the overlay', () => {
+    expect(overlaySettings(normalizeSettings({ danmakuSizePx: 18, danmakuSpeed: 0.8 }))).toMatchObject({ danmakuSizePx: 18, danmakuSpeed: 0.8 });
   });
 });
 

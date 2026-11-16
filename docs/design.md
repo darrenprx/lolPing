@@ -264,6 +264,8 @@ Several pings can be on screen at once, and each is independent.
 | `textHotkey` | `{mods, vk}`, needs Ctrl, Alt or Win | Alt+T (Alt+Y when Alt+T is taken) |
 | `panelKey` | one key code; modifiers, Esc and the key of another shortcut fall back to Tab | Tab (`0x09`) |
 | `roomTextStyle` | `spot`/`danmaku` | `spot` |
+| `danmakuSizePx` | 14–40, step 1 (v0.6.1) | 22 |
+| `danmakuSpeed` | 0.5–2.5, step 0.1, times 160 px/s (v0.6.1) | 1 |
 
 Changes apply live, with no Save button. Writes are debounced (300 ms) and atomic (write a temp file, then rename).
 
@@ -400,7 +402,7 @@ Friends in a room can type a line, vote, and see who is in the room, in the way 
 
 - `text`, `alive` and `vote` use the sender's ping bucket (relays: 5/s, bursts of 10) and the receiver's per-member incoming limit. They are dropped for a muted member or a muted room, and when the matching feature is off.
 - `ballot` skips the user's incoming limit, so a low limit cannot turn a ballot into a no. It is deduplicated per member and vote id, and accepted at most once every 2 s per member.
-- Text stays on screen for 4 s plus 60 ms per code point, at most 10 s, at most 3 lines per member. In the spot style it sits at the pointed spot. In the 弹幕 style it crosses the top quarter of the display at 160 px/s, in lanes. The style is the receiver's choice (`roomTextStyle`). Timing and lanes are in `src/renderer/overlay/roomTextLayout.ts`.
+- Text stays on screen for 4 s plus 60 ms per code point, at most 10 s, at most 3 lines per member. In the spot style it sits at the pointed spot. In the 弹幕 style it crosses the top quarter of the display at 160 px/s, in lanes. The style is the receiver's choice (`roomTextStyle`), and so are the 弹幕 text size and speed (`danmakuSizePx`, `danmakuSpeed`, v0.6.1, D#119): rows are 34/22 of the text size tall, so a bigger size means fewer lanes, and a change applies to the next line while lines on screen keep theirs. A lane is free once the line in it is a 24 px gap past the right edge, and for a faster line only once its head can no longer catch the slower one before that one leaves the screen. Timing and lanes are in `src/renderer/overlay/roomTextLayout.ts`.
 - The History tab keeps this session's text, alive lines and vote results, at most 200, in memory only (`src/main/roomHistory.ts`). Leaving the room clears it.
 - `src/shared/textCommands.ts` reads the input box: `/ff` and `/surrender` start or join a surrender vote, `/noff` votes no, `/ready` starts a ready check. Words after `/ff` or `/ready` are the vote's topic (`q`); `/noff` with words after it is an unknown command. The surrender widget shows the topic on a line under its title and the ready check in place of "Started by", after the starter's name. Votes started from the panel have no topic. Any other text that starts with `/` is not sent and shows a hint. With votes off, the vote commands answer "votes are off".
 

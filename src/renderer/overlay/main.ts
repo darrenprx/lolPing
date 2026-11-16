@@ -75,6 +75,7 @@ function applySettings(s: OverlaySettings): void {
   if (!s.keepLastPing) dropKeptPing();
   pingWheel.setSize(s.wheelSizePx);
   emoteWheel.setSize(s.wheelSizePx);
+  texts.setDanmaku({ sizePx: s.danmakuSizePx, speed: s.danmakuSpeed });
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map((ref) => emoteItem(ref, s.customEmotes)));
   const { ping, emote } = centerIcons(s);
