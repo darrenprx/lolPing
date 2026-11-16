@@ -109,13 +109,18 @@
       "icon": "build/icon.png",
       "category": "Utility",
       "artifactName": "lolPing-${version}-${arch}.${ext}",
-      "extraResources": [{ "from": "native/hook-helper/build/hook-helper", "to": "hook-helper" }],
+      "extraResources": [
+        { "from": "native/hook-helper/build/hook-helper", "to": "hook-helper" },
+        { "from": "build/linux/linux-input-setup.sh", "to": "linux-input-setup.sh" }
+      ],
       "executableArgs": ["--ozone-platform=x11", "--force-device-scale-factor=1"],
       "desktop": { "entry": { "StartupWMClass": "lolping" } },
       "maintainer": "lolPing contributors",
       "syncDesktopName": true
     },
     "deb": {
+      "afterInstall": "build/linux/deb-postinst.sh",
+      "afterRemove": "build/linux/deb-postrm.sh",
       "depends": [
         "libgtk-3-0",
         "libnss3",
