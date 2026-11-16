@@ -38,7 +38,9 @@ export const assetPath = (...parts: string[]): string =>
  * The data folder of a portable build (a `data` folder next to the executable), or null in an installed build.
  * Decided once, before `app.ready`, from the launcher's environment or a `portable.txt` next to the executable.
  */
-export const PORTABLE_DATA_DIR: string | null = portableDataDir({ env: process.env, execPath: process.execPath, packaged: app.isPackaged });
+export const PORTABLE_DATA_DIR: string | null = portableDataDir({
+  env: process.env, execPath: process.execPath, packaged: app.isPackaged, platform: PLATFORM,
+});
 export const IS_PORTABLE = PORTABLE_DATA_DIR !== null;
 
 /** Settings, emotes and caches: Electron's appData/lolPing for an installed build, the `data` folder beside a portable one. */
