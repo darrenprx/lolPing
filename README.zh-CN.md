@@ -36,6 +36,12 @@
 
 lolPing 面向 64 位 Windows 11。Windows 10 也许可以用，但没有测试过。
 
+#### 便携版（免安装）
+
+改为下载 `lolPing-<version>-portable.exe`，放在任意文件夹（包括 U 盘）里直接运行即可。设置、表情和缓存都保存在 `.exe` 旁边的 `data` 文件夹中，不写 `%APPDATA%`，也不写注册表。和安装版相比有两点不同：它不会自动更新（请到发布页下载新版本并替换 `.exe`，`data` 文件夹会保留），也不能开机启动。便携版 `.exe` 每次启动时会先解压到临时文件夹，因此比安装版慢一两秒打开。
+
+便携版和安装版可以同时运行，各用各的设置。要把一份解压版（`npm run dist` 生成的 `release/win-unpacked` 文件夹）变成便携版，在 `lolPing.exe` 旁边放一个名为 `portable.txt` 的空文件即可。
+
 ### macOS（实验性）
 
 Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 13 或更新版本。它会自动构建和测试，但还没在真实的 Mac 上用过多少。遇到问题请[反馈](https://github.com/darrenprx/lolPing/issues)。
