@@ -5,7 +5,7 @@ This source tree adds a Linux backend to lolPing 0.5.1. It is a local developmen
 ## Requirements
 
 - x86-64 Linux; development and package validation use Ubuntu 24.04.
-- A genuine **X11 desktop session**, with a compositor for transparent overlays. Choose **Ubuntu on Xorg** / an X11 session at login. Running an XWayland window inside a Wayland session is insufficient: it cannot capture native Wayland application input. The helper reports this limitation instead of silently running with partial input.
+- A genuine **X11 desktop session**, with a compositor for transparent overlays. Choose **Ubuntu on Xorg** / an X11 session at login. Running an XWayland window inside a Wayland session is insufficient: it cannot capture native Wayland application input. The helper reports this limitation instead of silently running with partial input (unless `LOLPING_ALLOW_XWAYLAND=1` is set to test over XWayland windows).
 - XInput 2.1, XTest, and the usual Electron desktop libraries. No root privileges or access to `/dev/input` are needed to run the input helper.
 - GNOME needs its AppIndicator extension to display the tray. Ubuntu normally includes this extension. Other desktops need a system tray.
 
@@ -47,7 +47,7 @@ On Ubuntu versions that restrict unprivileged user namespaces, prefer the instal
 - A short trigger + click is replayed to the underlying application unless click-to-ping is enabled. Normal clicks are replayed by the X server itself.
 - Window managers may already own a chord, particularly Alt + drag or Super. The helper logs conflicting grabs. Choose a different trigger, such as Ctrl, Shift or a side button, or change the conflicting desktop shortcut.
 - Caps Lock is not offered: passive X11 grabs cannot reliably prevent its lock state from changing. Automatic fullscreen-game detection is Windows-only; pause manually before games.
-- Linux forces Electron to a scale factor of 1, matching X11 root coordinates. This keeps overlay placement consistent across monitors, but the settings window does not follow desktop HiDPI scaling.
+- Linux forces Electron onto the X11 Ozone platform (`--ozone-platform=x11`) and a scale factor of 1 (`--force-device-scale-factor=1`), matching X11 root coordinates. Packaged desktop entries include these flags and direct launches under `WAYLAND_DISPLAY` re-exec with them before Chromium initializes Ozone, so the main and GPU processes stay on X11. This keeps overlay placement consistent across monitors, but the settings window does not follow desktop HiDPI scaling.
 - Autostart uses `$XDG_CONFIG_HOME/autostart/lolPing.desktop` (normally `~/.config/autostart/`). AppImages use the original AppImage path rather than their temporary mount. Move the AppImage before enabling autostart.
 - Settings are in `$XDG_CONFIG_HOME/lolPing/settings.json` (normally `~/.config/lolPing/settings.json`).
 - Updates are manual for this port. It never calls the Windows installer updater or offers an upstream package for another platform.
