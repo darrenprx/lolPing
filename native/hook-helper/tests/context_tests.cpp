@@ -2,6 +2,7 @@
 // Build and run: npm run test:helper
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -800,11 +801,26 @@ static void test_read_runs_the_fields_search_after_the_text_probe_on_one_thread(
 }
 
 static void test_budget_gives_up_on_a_slow_probe() {
-  const auto start = std::chrono::steady_clock::now();
-  const bool done = runWithBudget([] { std::this_thread::sleep_for(std::chrono::milliseconds(200)); }, 20);
-  const auto took = std::chrono::steady_clock::now() - start;
+  // The probe runs until the test lets it go, so a slow machine can't make it finish inside the budget.
+  struct Gate {
+    std::mutex m;
+    std::condition_variable cv;
+    bool open = false;
+    bool finished = false;
+  };
+  const auto gate = std::make_shared<Gate>();
+  const bool done = runWithBudget([gate] {
+    std::unique_lock<std::mutex> lock(gate->m);
+    gate->cv.wait_for(lock, std::chrono::seconds(10), [&] { return gate->open; });
+    gate->finished = true;
+    gate->cv.notify_all();
+  }, 20);
+  std::unique_lock<std::mutex> lock(gate->m);
   CHECK(!done);
-  CHECK(took < std::chrono::milliseconds(100));
+  CHECK(!gate->finished);
+  gate->open = true;
+  gate->cv.notify_all();
+  gate->cv.wait(lock, [&] { return gate->finished; });
 }
 
 static void test_budget_returns_a_fast_probe() {
