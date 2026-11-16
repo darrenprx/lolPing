@@ -317,6 +317,18 @@ describe('emote settings', () => {
     expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
   });
 
+  it('custom emotes keep a League sound only when this app ships it, and never next to a sound file', () => {
+    const list = normalizeSettings({
+      customEmotes: [
+        { ...entry('a'), leagueSound: 'ping:danger' },
+        { ...entry('b'), leagueSound: 'emote:from_the_future' },
+        { ...entry('c'), leagueSound: 7 },
+        { ...entry('d'), sound: true, leagueSound: 'emote:facepalm' },
+      ],
+    }).customEmotes;
+    expect(list).toEqual([{ ...entry('a'), leagueSound: 'ping:danger' }, entry('b'), entry('c'), { ...entry('d'), sound: true }]);
+  });
+
   it('skip apps keep their case but match stems without .exe, deduplicated', () => {
     expect(normalizeSettings({ skipApps: [' Photoshop.EXE ', 'photoshop', 'IDEA64', '', 'nope.EXE', 7, null] }).skipApps)
       .toEqual(['Photoshop', 'IDEA64', 'nope']);

@@ -484,6 +484,20 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom', fx: 0 } }); // no fx on the message: the sender's plain pop, whatever we stored
   });
 
+  it('plays the League sound on a room member’s custom emote from our own copy, and none for a name we do not ship', () => {
+    const url = `lolping://emotes/${'a'.repeat(32)}.webp`;
+    const cached: EmoteArt = { kind: 'custom', url, animated: false, fx: 0 };
+    resolveArt.mockReturnValue(cached);
+    const from = { displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, peer: 'peer-1', tag: { name: 'Bob', color: 2 } };
+    mgr.spawnRemoteEmote({ ...from, snd: 'emote:facepalm' });
+    mgr.spawnRemoteEmote({ ...from, snd: 'emote:from_the_future' });
+    mgr.spawnRemoteEmote(from);
+    expect(sent(0)[0][1]).toMatchObject({ art: { kind: 'custom', soundKey: 'emote:facepalm' } });
+    expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom' } });
+    expect((sent(0)[1][1] as { art: EmoteArt }).art).not.toHaveProperty('soundKey');
+    expect((sent(0)[2][1] as { art: EmoteArt }).art).not.toHaveProperty('soundKey');
+  });
+
   it('previews in the middle of the main display without sharing', () => {
     const shared = vi.fn();
     mgr.on('sharedEmote', shared);

@@ -262,6 +262,13 @@ describe('resolveEmoteArt', () => {
     expect(resolveEmoteArt(plain.id, [plain], false)).not.toHaveProperty('sound');
   });
 
+  it('plays our own emote’s League sound by its sound bank key, never a room member’s', () => {
+    const league: CustomEmote = { ...plain, leagueSound: 'ping:danger' };
+    expect(resolveEmoteArt(league.id, [league], false)).toMatchObject({ kind: 'custom', soundKey: 'SRP_12' });
+    expect(resolveEmoteArt(league.id, [league], false)).not.toHaveProperty('sound');
+    expect(resolveEmoteArt(league.id, [league], true)).not.toHaveProperty('soundKey');
+  });
+
   it('resolves bundled emotes and stands a placeholder in for unknown ones', () => {
     expect(resolveEmoteArt('facepalm', [], true)).toEqual({ kind: 'bundled', slug: 'facepalm' });
     expect(resolveEmoteArt(moving.id, [plain], false)).toEqual({ kind: 'placeholder' });

@@ -150,6 +150,32 @@ describe('settings IPC', () => {
     expect(readdirSync(library.dir)).toEqual([`${hash}.webp`]);
   });
 
+  it('gives one of our emotes a League sound in place of its file, and the other way round', async () => {
+    const s = still(6);
+    const hash = idOf(s).slice(2);
+    await call(SETTINGS_CH.emoteImport, { name: 'cat', still: s });
+    const sound = new Uint8Array(300).fill(1);
+    sound.set(ascii('OggS'));
+    await call(SETTINGS_CH.emoteSound, idOf(s), sound);
+    await call(SETTINGS_CH.emoteLeagueSound, idOf(s), 'ping:danger');
+    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'cat', animated: false, leagueSound: 'ping:danger' }]);
+    expect(readdirSync(library.dir)).toEqual([`${hash}.webp`]);
+    await call(SETTINGS_CH.emoteSound, idOf(s), sound);
+    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'cat', animated: false, sound: true }]);
+    await call(SETTINGS_CH.emoteLeagueSound, idOf(s), 'emote:facepalm');
+    await call(SETTINGS_CH.emoteSound, idOf(s), null); // "No sound" takes either away
+    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'cat', animated: false }]);
+  });
+
+  it('refuses a League sound we do not ship, or for an emote that is not ours', async () => {
+    const s = still(7);
+    await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });
+    for (const ref of ['emote:from_the_future', 'danger', null, 7]) await call(SETTINGS_CH.emoteLeagueSound, idOf(s), ref);
+    await call(SETTINGS_CH.emoteLeagueSound, `c:${'ab'.repeat(16)}`, 'ping:danger');
+    await call(SETTINGS_CH.emoteLeagueSound, 'facepalm', 'ping:danger');
+    expect(store.get().customEmotes).toEqual([{ id: idOf(s), name: 'x', animated: false }]);
+  });
+
   it('refuses a sound for an emote that is not ours, or that is not sound bytes', async () => {
     const s = still(5);
     await call(SETTINGS_CH.emoteImport, { name: 'x', still: s });

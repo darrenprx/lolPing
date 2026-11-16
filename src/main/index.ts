@@ -480,9 +480,9 @@ function start(): void {
   });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
-    // The effect rides on the message, so friends see the one its sender picked even before they have the image.
-    const fx = settings.customEmotes.find((c) => c.id === p.ref)?.fx;
-    if (shared) room.sendEmote(p.ref, shared, fx);
+    // The effect and the League sound ride on the message, so friends get the sender's picks even before they have the image.
+    const custom = settings.customEmotes.find((c) => c.id === p.ref);
+    if (shared) room.sendEmote(p.ref, shared, custom?.fx, custom?.leagueSound);
   });
   // This session's room lines: members' text and alive lines while the text feature is on, and our own.
   const history = new RoomHistory(() => refreshRoster());

@@ -403,6 +403,14 @@ describe('incoming emotes', () => {
     expect(emotes.map((e) => e.fx)).toEqual([5, undefined, undefined]);
   });
 
+  it('carries the sender’s League sound on a custom emote, and none when they left it out', () => {
+    const custom = `c:${'ab'.repeat(16)}`;
+    alex.emote({ e: custom, snd: 'ping:danger' });
+    alex.emote({ e: custom });
+    expect(emotes.map((e) => e.snd)).toEqual(['ping:danger', undefined]);
+    expect(emotes[1]).not.toHaveProperty('snd');
+  });
+
   it('keeps an emote at the very edge of the display inside it', () => {
     alex.emote({ x: 0, y: 1 });
     expect(emotes[0]).toMatchObject({ x: 0, y: 1080 });
@@ -465,6 +473,10 @@ describe('outgoing', () => {
     lan.sent = [];
     room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 }, 5);
     expect(sentMessages('lan:a')[0]).toMatchObject({ t: 'emote', e: 'gg', fx: 5, peer: SELF });
+    lan.sent = [];
+    room.sendEmote(`c:${'ab'.repeat(16)}`, { d: 1, x: 0.1, y: 0.2 }, undefined, 'emote:facepalm');
+    expect(sentMessages('lan:a')[0]).toMatchObject({ t: 'emote', snd: 'emote:facepalm' });
+    expect(sentMessages('lan:a')[0]).not.toHaveProperty('fx');
     room.setStatusFlags({ paused: true, roomMuted: false });
     lan.sent = [];
     room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 });

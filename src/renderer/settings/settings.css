@@ -110,6 +110,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weTool.on { color: var(--colorBrandForeground1); opacity: 1; }
 .weTool:hover, .weTool:focus-visible { opacity: 1; background: var(--colorNeutralBackground3Hover); }
 .weTool:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
+/* 44 emote sounds: the list scrolls rather than running off the window. */
+.soundMenu { max-height: 360px; overflow-y: auto; }
 .wePool.filesOver .weTiles { outline: 2px dashed var(--colorBrandStroke1); outline-offset: -1px; border-radius: 6px; }
 
 /* The effect picker, fixed to the viewport (WheelEditor renders it once, at the cursor): a grid of tiles, each playing

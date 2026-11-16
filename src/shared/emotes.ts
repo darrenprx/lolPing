@@ -11,6 +11,11 @@ export interface CustomEmote {
   animated: boolean;
   /** Has a `.sound` file: it plays when we place the emote, on this computer only (rooms never get it). */
   sound?: boolean;
+  /**
+   * A bundled League sound by name (see leagueSounds.ts), in place of a `.sound` file: never both. The name rides on the
+   * emote message, so friends play it from their own copy.
+   */
+  leagueSound?: string;
   /** Which signature effect it plays when it lands: 0–5. Nothing stored (an entry from an older version) plays the plain pop. */
   fx?: number;
 }
@@ -22,7 +27,13 @@ export const isEmoteFx = (v: unknown): v is number =>
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
-  | { kind: 'custom'; url: string; animated: boolean; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
+  | {
+    kind: 'custom'; url: string; animated: boolean; sound?: string;
+    /** A bundled sound to play instead, by its key in the overlay's sound bank. */
+    soundKey?: string;
+    /** The signature effect it plays; 0 is the plain pop. */
+    fx: number;
+  }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';

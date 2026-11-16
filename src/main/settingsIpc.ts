@@ -7,6 +7,7 @@ import {
   type UsageMonth,
 } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
+import { isLeagueSound } from '../shared/leagueSounds';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
@@ -174,9 +175,16 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     if (raw !== null && !(raw instanceof Uint8Array)) return { ok: false, error: 'type' };
     const error = await d.library.setSound(id, raw);
     if (error) return { ok: false, error };
-    const withSound = ({ sound: _old, ...c }: CustomEmote): CustomEmote => (raw === null ? c : { ...c, sound: true });
+    // A file and a League sound are one slot: either way, the League sound goes.
+    const withSound = ({ sound: _old, leagueSound: _league, ...c }: CustomEmote): CustomEmote => (raw === null ? c : { ...c, sound: true });
     d.store.update({ customEmotes: d.store.get().customEmotes.map((c) => (c.id === id ? withSound(c) : c)) });
     return { ok: true };
+  }));
+  ipcMain.handle(SETTINGS_CH.emoteLeagueSound, (_e, id: unknown, ref: unknown) => oneAtATime(async () => {
+    if (!isCustomRef(id) || !isLeagueSound(ref) || !d.store.get().customEmotes.some((c) => c.id === id)) return;
+    if (await d.library.setSound(id, null)) return; // the old file is still there: keep the entry as it is
+    const withLeague = ({ sound: _file, ...c }: CustomEmote): CustomEmote => ({ ...c, leagueSound: ref });
+    d.store.update({ customEmotes: d.store.get().customEmotes.map((c) => (c.id === id ? withLeague(c) : c)) });
   }));
   ipcMain.handle(SETTINGS_CH.emoteFx, (_e, id: unknown, fx: unknown) => {
     // undefined is a choice too: it puts the emote back to the plain pop.

@@ -282,8 +282,10 @@ export interface SettingsApi {
   importEmote(file: EmoteFile): Promise<ImportResult>;
   /** Deletes an imported emote's files and entry; wheel slots that used it fall back. */
   removeEmote(id: EmoteRef): Promise<void>;
-  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes), or takes it away with null. */
+  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes) in place of a League one, or takes either away with null. */
   setEmoteSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundResult>;
+  /** Gives one of our imported emotes a bundled League sound by name, deleting a sound file it had. */
+  setEmoteLeagueSound(id: EmoteRef, ref: string): Promise<void>;
   /** Stores which signature effect the emote plays; undefined puts it back to the plain pop. */
   setEmoteFx(id: EmoteRef, fx: number | undefined): Promise<void>;
   getAbout(): Promise<About>;

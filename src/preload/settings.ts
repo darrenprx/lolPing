@@ -23,6 +23,7 @@ const api: SettingsApi = {
   removeEmote: (id) => ipcRenderer.invoke(SETTINGS_CH.emoteRemove, id),
   setEmoteSound: (id, sound) => ipcRenderer.invoke(SETTINGS_CH.emoteSound, id, sound),
   setEmoteFx: (id, fx) => ipcRenderer.invoke(SETTINGS_CH.emoteFx, id, fx),
+  setEmoteLeagueSound: (id, ref) => ipcRenderer.invoke(SETTINGS_CH.emoteLeagueSound, id, ref),
   getAbout: () => ipcRenderer.invoke(SETTINGS_CH.about),
   openSettingsFolder: () => ipcRenderer.invoke(SETTINGS_CH.openFolder),
   openProjectPage: () => ipcRenderer.invoke(SETTINGS_CH.openProject),

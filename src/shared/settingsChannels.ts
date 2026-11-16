@@ -12,6 +12,7 @@ export const SETTINGS_CH = {
   emoteRemove: 'emote:remove',
   emoteSound: 'emote:sound',
   emoteFx: 'emote:fx',
+  emoteLeagueSound: 'emote:leagueSound',
   about: 'app:about',
   openFolder: 'app:openSettingsFolder',
   openProject: 'app:openProjectPage',

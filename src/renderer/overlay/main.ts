@@ -8,6 +8,7 @@ import {
   DEFAULT_CLICK_PING, TICK_SOUND, allSoundNames, allTextureNames, pingById, pingsFor, soundUrl, textureUrl, type PingDef,
 } from '../../shared/pings';
 import { parseMateGlow, type MateMark, type PingTag } from '../../shared/ipc';
+import { leagueSoundKey } from '../../shared/leagueSounds';
 import type { WheelKind } from '../../shared/protocol';
 import { tagColorCss } from '../../shared/roomColors';
 import { DEFAULT_SETTINGS, overlaySettings, soundLevel, type OverlaySettings } from '../../shared/settings';
@@ -57,7 +58,8 @@ function localArt(ref: EmoteRef): EmoteArt {
   const custom = settings.customEmotes.find((c) => c.id === ref);
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
-  const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
+  const key = custom.leagueSound === undefined ? null : leagueSoundKey(custom.leagueSound);
+  const sound = custom.sound ? { sound: customSoundUrl(hash) } : key ? { soundKey: key } : {};
   return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound, fx: custom.fx ?? 0 };
 }
 
@@ -133,6 +135,7 @@ function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag
   if (!settings.emoteSound) return;
   if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound) sounds.play(`emote:${art.slug}`, volume());
   if (art.kind === 'custom' && art.sound) void sounds.playUrl(art.sound, volume());
+  else if (art.kind === 'custom' && art.soundKey) sounds.play(art.soundKey, volume());
 }
 
 const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);

@@ -68,6 +68,8 @@ export interface RemoteEmote {
   ref: EmoteRef;
   /** The sender's chosen effect for a custom emote; undefined is the plain pop (an app before 0.5.2, or none stored). */
   fx?: number;
+  /** The bundled League sound the sender picked for a custom emote, by name; undefined is none. */
+  snd?: string;
   /** The sender, so their earlier emote can be replaced: everyone has one on screen at a time. */
   peer: string;
   tag: MemberTag;
@@ -236,8 +238,8 @@ export class RoomManager extends EventEmitter {
   }
 
   /** `fx` is the effect stored on the emote's entry here; absent (the plain pop) leaves the field out for the older peers. */
-  sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }, fx?: number): void {
-    this.sendShared({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}) });
+  sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }, fx?: number, snd?: string): void {
+    this.sendShared({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}), ...(snd !== undefined ? { snd } : {}) });
   }
 
   sendText(text: string, shared: { d: number; x: number; y: number }): void {
@@ -563,7 +565,10 @@ export class RoomManager extends EventEmitter {
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag: MemberTag = { name: m.name, color: m.color, rgb: m.rgb };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
-    else if (msg.t === 'emote') this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, fx: msg.fx, peer: m.peer, tag } satisfies RemoteEmote);
+    else if (msg.t === 'emote') {
+      const emote: RemoteEmote = { displayId: target.displayId, x, y, ref: msg.e, fx: msg.fx, peer: m.peer, tag };
+      this.emit('remoteEmote', msg.snd === undefined ? emote : { ...emote, snd: msg.snd });
+    }
     else if (msg.t === 'text') {
       this.emit('remoteText', { kind: 'text', peer: m.peer, tag, displayId: target.displayId, x, y, text: msg.text } satisfies RemoteText);
     } else if (msg.t === 'alive') {

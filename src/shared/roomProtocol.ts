@@ -1,4 +1,5 @@
-import { ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
+import { ANNOUNCED_MAX, HASH_RE, isCustomRef, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
+import { isLeagueSoundShape } from './leagueSounds';
 import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
@@ -60,6 +61,11 @@ export interface EmoteMsg extends Base {
   e: EmoteRef;
   /** The sender's chosen effect for a custom emote, 0–5; absent is the plain pop. Added in 0.5.2; older apps leave it out. */
   fx?: number;
+  /**
+   * Added in 0.6.1: a bundled League sound for a custom emote, by name ('ping:<id>' or 'emote:<slug>'), which the
+   * receiver plays from its own copy. Older apps leave it out and ignore ours.
+   */
+  snd?: string;
   d: number;
   x: number;
   y: number;
@@ -206,12 +212,14 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, ping, d: d as number, x, y };
     }
     case 'emote': {
-      const { e, fx, d, x, y } = raw;
+      const { e, fx, snd, d, x, y } = raw;
       if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
       // A malformed effect is dropped rather than the whole emote, the way a malformed tag colour is: the sender's
       // moment still plays, as the plain pop.
-      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}) };
+      // The sound follows the same rule, and only a custom emote has one: a bundled emote plays its own.
+      const sound = isCustomRef(e) && isLeagueSoundShape(snd) ? { snd } : {};
+      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}), ...sound };
     }
     case 'text': {
       const { text, d, x, y } = raw;

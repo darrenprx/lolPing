@@ -217,6 +217,21 @@ describe('emote messages', () => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
+  it('carries a League sound by name on a custom emote, a newer app\'s name included', () => {
+    for (const snd of ['ping:danger', 'emote:facepalm', 'emote:from_the_future']) {
+      const m: EmoteMsg = { ...emote, e: CUSTOM_REF, snd };
+      expect(validateMessage(m)).toEqual(m);
+      expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    }
+  });
+
+  it('drops a malformed sound, or one on a bundled emote, rather than the emote', () => {
+    for (const snd of ['danger', 'ping:../x', 7, null]) {
+      expect(validateMessage({ ...emote, e: CUSTOM_REF, snd })).toEqual({ ...emote, e: CUSTOM_REF });
+    }
+    expect(validateMessage({ ...emote, snd: 'ping:danger' })).toEqual(emote);
+  });
+
   it('drops a malformed effect rather than the emote, which then plays the plain pop', () => {
     for (const fx of [6, -1, 1.5, '5', null]) {
       expect(validateMessage({ ...emote, fx })).toEqual(emote);

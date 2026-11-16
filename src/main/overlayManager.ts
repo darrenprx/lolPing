@@ -5,6 +5,7 @@ import {
   OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { WHEEL, pickSlice } from '../shared/geometry';
+import { leagueSoundKey } from '../shared/leagueSounds';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings, RoomTextStyle } from '../shared/settings';
@@ -329,11 +330,12 @@ export class OverlayManager extends EventEmitter {
   }
 
   /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
-  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; peer: string; tag: PingTag }): void {
+  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; snd?: string; peer: string; tag: PingTag }): void {
     const art = this.resolveArt(p.ref, true);
     // The effect is the sender's choice, so the one on their message wins — over a cached still's plain pop, and over
-    // the effect we picked if we happen to have the same image imported.
-    const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0 } : art;
+    // the effect we picked if we happen to have the same image imported. So is the sound: a name we don't ship plays none.
+    const soundKey = p.snd === undefined ? null : leagueSoundKey(p.snd);
+    const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0, ...(soundKey ? { soundKey } : {}) } : art;
     this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: withFx, x: p.x, y: p.y, tag: p.tag });
     this.clearElsewhere(p.displayId, p.peer);
   }

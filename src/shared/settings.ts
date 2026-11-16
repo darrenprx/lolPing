@@ -6,6 +6,7 @@ import {
 import { DEFAULT_FEATURES, featureOn, normalizeFeatures, type Features } from './features';
 import { WHEEL } from './geometry';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
+import { isLeagueSound } from './leagueSounds';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
 import type { Platform } from './platform';
@@ -358,6 +359,8 @@ function customEmotes(raw: unknown): CustomEmote[] {
     out.push({
       id, name, animated: e.animated,
       ...(e.sound === true ? { sound: true } : {}),
+      // One sound per image: a sound file on disk wins over a League sound named beside it.
+      ...(e.sound !== true && isLeagueSound(e.leagueSound) ? { leagueSound: e.leagueSound } : {}),
       ...(isEmoteFx(e.fx) ? { fx: e.fx } : {}),
     });
   }

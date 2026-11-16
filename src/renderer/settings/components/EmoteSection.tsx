@@ -1,14 +1,15 @@
-import { Button, Spinner } from '@fluentui/react-components';
+import { Button, Menu, MenuDivider, MenuItem, MenuItemRadio, MenuList, MenuPopover, MenuTrigger, Spinner } from '@fluentui/react-components';
 import {
   CursorClick24Regular, Emoji24Regular, ImageAdd24Regular, ResizeLarge24Regular, Speaker2Regular, Speaker224Regular, SpeakerMuteRegular,
 } from '@fluentui/react-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../../shared/emoteCatalog';
 import {
   MAX_CUSTOM_EMOTES, customHash, customStillUrl, emoteIconUrl, emoteName, type CustomEmote, type EmoteRef, type ImportError,
   type SoundError,
 } from '../../../shared/emotes';
 import type { Strings } from '../../../shared/i18n';
+import { leagueSoundChoices, type LeagueSoundRef } from '../../../shared/leagueSounds';
 import { separateAskKey, triggerLabel, type Settings } from '../../../shared/settings';
 import type { WheelPatch } from '../../../shared/wheelLayout';
 import { api } from '../api';
@@ -21,6 +22,7 @@ import { WheelEditor, type PoolItem } from './WheelEditor';
 
 const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
 const ACCEPT_SOUND = 'audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav';
+const LEAGUE_SOUNDS = leagueSoundChoices();
 
 function importMessage(t: Strings, error: ImportError, file: string): string {
   switch (error) {
@@ -140,21 +142,43 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
   const picker = useRef<HTMLInputElement>(null);
   const soundPicker = useRef<HTMLInputElement>(null);
   const soundFor = useRef<EmoteRef | null>(null); // the emote whose speaker opened the sound picker
-  const soundTool = (c: CustomEmote): PoolItem<EmoteRef>['tool'] => (c.sound
-    ? {
-      label: t.removeSound(c.name), icon: <Speaker2Regular />, on: true,
-      onClick: () => {
-        clearErrors();
-        void api.setEmoteSound(c.id, null);
-      },
-    }
-    : {
-      label: t.addSound(c.name), icon: <SpeakerMuteRegular />, on: false,
-      onClick: () => {
-        soundFor.current = c.id;
-        soundPicker.current?.click();
-      },
-    });
+  const soundTool = (c: CustomEmote): PoolItem<EmoteRef>['tool'] => {
+    const on = c.sound === true || c.leagueSound !== undefined;
+    // One radio group across the menu and its two submenus: the sound this image has now.
+    const checked = { sound: [c.sound ? 'file' : c.leagueSound ?? 'none'] };
+    const pickLeague = (ref: LeagueSoundRef) => {
+      clearErrors();
+      void api.setEmoteLeagueSound(c.id, ref).then(() => api.previewEmote(c.id)); // plays it once with the new sound
+    };
+    const submenu = (label: string, items: { ref: LeagueSoundRef; name: string }[]): ReactNode => (
+      <Menu checkedValues={checked}>
+        <MenuTrigger disableButtonEnhancement><MenuItem>{label}</MenuItem></MenuTrigger>
+        <MenuPopover className="soundMenu">
+          <MenuList checkedValues={checked}>
+            {items.map((i) => (
+              <MenuItemRadio key={i.ref} name="sound" value={i.ref} onClick={() => pickLeague(i.ref)}>{i.name}</MenuItemRadio>
+            ))}
+          </MenuList>
+        </MenuPopover>
+      </Menu>
+    );
+    const menu = (
+      <MenuList checkedValues={checked}>
+        <MenuItemRadio name="sound" value="none" onClick={() => {
+          clearErrors();
+          void api.setEmoteSound(c.id, null);
+        }}>{t.soundNone}</MenuItemRadio>
+        <MenuItemRadio name="sound" value="file" onClick={() => {
+          soundFor.current = c.id;
+          soundPicker.current?.click();
+        }}>{t.soundOwnFile}</MenuItemRadio>
+        <MenuDivider />
+        {submenu(t.soundPings, LEAGUE_SOUNDS.pings.map((p) => ({ ref: p.ref, name: t.pingNames[p.ping] })))}
+        {submenu(t.soundEmotes, LEAGUE_SOUNDS.emotes.map((e) => ({ ref: e.ref, name: emoteName(e.slug, t.lang, []) })))}
+      </MenuList>
+    );
+    return { label: t.soundFor(c.name), icon: on ? <Speaker2Regular /> : <SpeakerMuteRegular />, on, menu };
+  };
 
   const pool: PoolItem<EmoteRef>[] = [
     ...EMOTE_CATALOG.map((e) => ({ id: e.slug, icon: emoteIconUrl(e.slug), name: emoteName(e.slug, t.lang, s.customEmotes) })),
