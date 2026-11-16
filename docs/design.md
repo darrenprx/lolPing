@@ -236,6 +236,7 @@ Several pings can be on screen at once, and each is independent.
 - **Autoplay:** Electron's `autoplayPolicy: 'no-user-gesture-required'` keeps the context running without a user gesture.
 - **No double sounds:** only the overlay that renders a ping plays its sound.
 - **Muted custom sounds:** a play at zero volume skips loading and decoding. The first audible play loads the sound normally.
+- **Concurrent loads:** requests for the same sound key and URL share one fetch and decode. Each play still gets its own source and gain. Forgetting a sound also invalidates its pending load, so an old result cannot restore or play it.
 
 ## 8. Settings
 
