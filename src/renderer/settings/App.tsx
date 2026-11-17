@@ -18,6 +18,7 @@ import { AboutSection } from './components/AboutSection';
 import { EmoteSection } from './components/EmoteSection';
 import { FeaturesSection } from './components/FeaturesSection';
 import { KeyCapture } from './components/KeyCapture';
+import { LinuxSetupCard } from './components/LinuxSetupCard';
 import { PermissionCard } from './components/PermissionCard';
 import { RoomSection } from './components/RoomSection';
 import { SettingRow, SliderRow, SwitchRow } from './components/rows';
@@ -195,6 +196,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
       }}>
         <h1 className="pageTitle">{t.pageTitle}</h1>
         {MAC && status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
+        {status.linuxSetup ? <LinuxSetupCard command={status.linuxSetup.command} /> : null}
         <StatusCard settings={s} status={status} />
 
         <div className="section" id="trigger">{t.navTrigger}</div>

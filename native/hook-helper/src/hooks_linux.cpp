@@ -2,6 +2,7 @@
 // XI2 raw keyboard events observe modifiers without taking keyboard focus or reading /dev/input.
 #include "app.h"
 #include "commands.h"
+#include "hooks_evdev.h"
 #include "linuxinput.h"
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
@@ -262,12 +263,17 @@ class Hooks {
   }
 };
 }
+// LOLPING_INPUT=x11|evdev forces a backend (for debugging). Otherwise a Wayland session uses evdev, because X11
+// grabs cannot see native Wayland windows; LOLPING_ALLOW_XWAYLAND=1 keeps the X11 backend there.
 int runHooks(Output& out) {
+  const char* forced = std::getenv("LOLPING_INPUT");
+  const char* allowXwayland = std::getenv("LOLPING_ALLOW_XWAYLAND");
   const char* session = std::getenv("XDG_SESSION_TYPE");
-  if ((session && std::strcmp(session, "wayland") == 0) || std::getenv("WAYLAND_DISPLAY")) {
-    out.error("noAccess", "Linux requires an X11 login session; XWayland cannot capture input from native Wayland apps.");
-    return 3;
-  }
+  const bool wayland = (session && std::strcmp(session, "wayland") == 0) || std::getenv("WAYLAND_DISPLAY");
+  const bool xwaylandOk = allowXwayland && std::strcmp(allowXwayland, "1") == 0;
+  const bool evdev = forced && std::strcmp(forced, "evdev") == 0;
+  const bool x11 = forced && std::strcmp(forced, "x11") == 0;
+  if (evdev || (!x11 && wayland && !xwaylandOk)) return runEvdevHooks(out);
   Display* display = XOpenDisplay(nullptr);
   if (!display) { out.error("noAccess", "Cannot connect to X11. Start lolPing inside an X11 desktop session."); return 3; }
   XSetErrorHandler(xError);

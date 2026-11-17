@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  把英雄联盟的信号和表情搬到整个桌面，支持 Windows、macOS，以及实验性的 Linux X11 版本。<br>
+  把英雄联盟的信号和表情搬到整个桌面，支持 Windows、macOS，以及实验性的 Linux 版本（X11 和 Wayland）。<br>
   按住 <b>Alt</b>（Mac 上是 <b>⌥ Option</b>）拖动，在想要的信号上松开：动画弹出、音效响起，任何程序之上、任何显示器上都可以。<br>
   按住 <b>Ctrl</b>（Mac 上是 <b>⌃ Control</b>）拖动打开表情轮盘：英雄联盟的表情，或你自己的图片。<br>
   打开 AI 队友后，按住 <b>Win</b>（<b>⌘</b>）对任何东西发信号，模型或编程代理会在那个位置回答。
@@ -54,17 +54,19 @@ Mac 版需要 Apple 芯片（M1 或更新）的 Mac 和 macOS 13 或更新版本
 
 **每次更新后**，macOS 都会忘记辅助功能权限，因为应用没有固定的开发者签名。在**隐私与安全性 → 辅助功能**中选中 lolPing，点 **–** 移除，再重新打开。设置窗口会一步步提示你。
 
-### Linux（实验性，X11）
+### Linux（实验性，X11 和 Wayland）
 
-此源码分支已增加 Linux 支持，在 Ubuntu 24.04 / X11 上开发验证。请使用真正的 **X11 / Xorg 登录会话**；目前不支持 Wayland（包括 Wayland 会话中的 XWayland）。
+支持 x64 的 Linux，X11 和 Wayland 会话都可以，提供 AppImage 和 `.deb`。Alt + 拖动、Ctrl + 拖动的用法与 Windows 相同。Linux 不提供 Caps Lock 触发键或全屏游戏自动检测，AI 队友也不可用。
 
+- X11：无需设置。
+- Wayland：输入助手读取 `/dev/input`，并通过 `/dev/uinput` 把你的输入转发出去。`.deb` 会在安装时设置好这项访问权限。使用 AppImage 时，lolPing 第一次会显示“设置”按钮（只需输入一次密码），也可以自己运行它给出的命令。
+- 隐私：在 Wayland 下，助手会读取这台电脑上的键盘和鼠标输入来识别轮盘手势。它不会保存这些内容，数据也不会离开这台电脑。
 - 构建：安装 Node.js 22.12+、C++20 编译器及 `libx11-dev libxi-dev libxtst-dev`，运行 `npm ci` 和 `npm run dist:linux`。
-- 输出：`release/` 中的 `.AppImage` 和 `.deb`。Ubuntu/Debian 推荐 `sudo apt install ./release/lolPing-0.5.1-amd64.deb`。
-- 操作与 Windows 类似；如 Alt + 拖动被桌面占用，请在设置中更换触发键。Linux 不提供 Caps Lock 触发键或全屏游戏自动检测。
-- 需要桌面合成器；GNOME 需要 AppIndicator 扩展显示托盘。Linux 目前手动更新，界面使用 1:1 屏幕像素，不跟随 HiDPI 缩放。
+- 输出：`release/` 中的 `.AppImage` 和 `.deb`。Ubuntu/Debian 推荐 `sudo apt install ./release/lolPing-<版本>-amd64.deb`。
+- 如 Alt + 拖动被桌面占用，请在设置中更换触发键。需要桌面合成器；GNOME 需要 AppIndicator 扩展显示托盘。Linux 目前手动更新，界面使用 1:1 屏幕像素，不跟随 HiDPI 缩放。
 - 设置在 `~/.config/lolPing/settings.json`，登录启动项在 `~/.config/autostart/lolPing.desktop`（支持 `XDG_CONFIG_HOME`）。
 
-完整开发、测试步骤和平台限制见 [Linux 说明](docs/linux.md)。上游发布页不一定已有本分支的 Linux 包。
+完整说明和限制（触摸板、远程桌面、Flatpak 等）见 [Linux 说明](docs/linux.md)。
 
 ### 升级旧版本
 

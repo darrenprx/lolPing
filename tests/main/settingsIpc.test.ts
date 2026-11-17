@@ -500,3 +500,39 @@ describe('teammate IPC without keys', () => {
     expect(opened).toBe(1);
   });
 });
+
+describe('Linux setup IPC', () => {
+  const register = (platform: 'win' | 'linux', status: object, linuxSetup: () => Promise<unknown>): void => {
+    h.handlers.clear();
+    registerSettingsIpc({
+      store, library, text: () => strings('en'), platform, room: {}, getStatus: () => status, linuxSetup,
+    } as unknown as SettingsIpcDeps);
+  };
+
+  it('runs the setup only on Linux while the helper says it needs setup', async () => {
+    const run = vi.fn(async () => ({ ok: true }));
+    register('linux', { linuxSetup: { command: 'x' } }, run);
+    expect(await call(SETTINGS_CH.linuxSetup)).toEqual({ ok: true });
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it('refuses on other platforms and when no setup is needed', async () => {
+    const run = vi.fn(async () => ({ ok: true }));
+    register('win', { linuxSetup: { command: 'x' } }, run);
+    expect(await call(SETTINGS_CH.linuxSetup)).toEqual({ ok: false, reason: 'unavailable' });
+    register('linux', {}, run);
+    expect(await call(SETTINGS_CH.linuxSetup)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('runs one setup at a time', async () => {
+    let release: () => void = () => undefined;
+    const run = vi.fn(() => new Promise<unknown>((resolve) => { release = () => resolve({ ok: true }); }));
+    register('linux', { linuxSetup: { command: 'x' } }, run);
+    const first = call(SETTINGS_CH.linuxSetup);
+    expect(await call(SETTINGS_CH.linuxSetup)).toEqual({ ok: false, reason: 'unavailable' });
+    release();
+    expect(await first).toEqual({ ok: true });
+    expect(run).toHaveBeenCalledOnce();
+  });
+});

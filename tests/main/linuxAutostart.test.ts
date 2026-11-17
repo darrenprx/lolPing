@@ -10,7 +10,8 @@ describe('Linux autostart', () => {
     try {
       setLinuxAutostart(true, '/home/player/My Apps/lolPing.AppImage', dir);
       const file = join(dir, 'autostart/lolPing.desktop');
-      expect(readFileSync(file, 'utf8')).toContain('Exec="/home/player/My Apps/lolPing.AppImage" --hidden');
+      expect(readFileSync(file, 'utf8')).toContain(
+        'Exec="/home/player/My Apps/lolPing.AppImage" --ozone-platform=x11 --force-device-scale-factor=1 --hidden');
       setLinuxAutostart(false, '', dir);
       expect(existsSync(file)).toBe(false);
       setLinuxAutostart(false, '', dir);

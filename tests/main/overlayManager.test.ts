@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parkedBounds } from '../../src/main/overlayManager';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, OVERLAY_POINTER } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -22,6 +22,7 @@ const h = vi.hoisted(() => {
       hiddenInMissionControl: boolean;
       contentProtection: boolean[];
       visible: boolean;
+      ignoring: boolean[];
     }>,
     handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
     isMac: false,
@@ -69,7 +70,11 @@ vi.mock('electron', async () => {
     }
     /** Every always-on-top level set on it, in order. */
     onTop: string[] = [];
-    setIgnoreMouseEvents(): void {}
+    /** Every setIgnoreMouseEvents call, in order. */
+    ignoring: boolean[] = [];
+    setIgnoreMouseEvents(ignore: boolean): void {
+      this.ignoring.push(ignore);
+    }
     setAlwaysOnTop(_flag: boolean, level: string): void {
       this.onTop.push(level);
     }
@@ -799,5 +804,80 @@ describe('OverlayManager capture exclusion', () => {
       other.setCaptureExcluded(true);
       expect(h.windows.map((w) => w.contentProtection)).toEqual([[], []]);
     }
+  });
+});
+
+describe('OverlayManager pointer mode', () => {
+  const ignoring = (i: number): boolean | undefined => h.windows[i].ignoring.at(-1);
+  const report = (i: number, x: number, y: number): void =>
+    h.handlers.get(OVERLAY_POINTER)!({ sender: h.windows[i].webContents }, { x, y });
+
+  const startLinux = async (): Promise<void> => {
+    h.windows.length = 0;
+    h.handlers.clear();
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    mgr = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), art);
+    mgr.start();
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('never takes mouse events off Linux', () => {
+    mgr.setPointerMode(true);
+    expect(h.windows.map((w) => w.ignoring)).toEqual([[true], [true]]);
+  });
+
+  it('takes mouse events on every overlay while on, and gives them back when off', async () => {
+    await startLinux();
+    mgr.setPointerMode(true);
+    expect([ignoring(0), ignoring(1)]).toEqual([false, false]);
+    mgr.setPointerMode(false);
+    expect([ignoring(0), ignoring(1)]).toEqual([true, true]);
+  });
+
+  it('gives them back after 10 seconds even if nothing says to', async () => {
+    vi.useFakeTimers();
+    await startLinux();
+    mgr.setPointerMode(true);
+    vi.advanceTimersByTime(9_999);
+    expect(ignoring(0)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(ignoring(0)).toBe(true);
+  });
+
+  it.each([
+    ['a wheel cancel', { type: 'cancel' }],
+    ['a wheel release', { type: 'wheelRelease', x: 1, y: 1, wheel: 'ping' }],
+    ['a click', { type: 'click', x: 1, y: 1, wheel: 'ping' }],
+  ] as const)('gives them back on %s', async (_name, ev) => {
+    await startLinux();
+    mgr.setPointerMode(true);
+    mgr.handle(ev);
+    expect([ignoring(0), ignoring(1)]).toEqual([true, true]);
+  });
+
+  it('gives them back when the wheel is cancelled because the helper stopped', async () => {
+    await startLinux();
+    mgr.setPointerMode(true);
+    mgr.cancelWheel();
+    expect(ignoring(0)).toBe(true);
+  });
+
+  it('reports the pointer as a physical point, only while on', async () => {
+    await startLinux();
+    const seen = vi.fn();
+    mgr.on('pointer', seen);
+    report(1, 10, 20);
+    expect(seen).not.toHaveBeenCalled();
+    mgr.setPointerMode(true);
+    report(1, 10, 20);
+    report(0, Number.NaN, 5);
+    h.handlers.get(OVERLAY_POINTER)!({ sender: h.windows[0].webContents }, 'junk');
+    expect(seen).toHaveBeenCalledOnce();
+    expect(seen).toHaveBeenCalledWith({ x: 1930, y: 20 });
   });
 });

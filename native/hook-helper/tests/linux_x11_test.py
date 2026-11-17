@@ -13,12 +13,14 @@ import threading
 import time
 
 helper = Path(__file__).resolve().parents[1] / 'build/hook-helper'
-# Wayland and missing-display errors must stop cleanly, not claim readiness.
-for overrides in [{'XDG_SESSION_TYPE': 'wayland'}, {'XDG_SESSION_TYPE': 'x11', 'DISPLAY': ':65530', 'WAYLAND_DISPLAY': ''}]:
+# A Wayland session without device access and a missing display must stop cleanly, not claim readiness.
+# Wayland goes to the evdev backend, which asks for setup when it can't open the devices (as on CI).
+for overrides, code in [({'XDG_SESSION_TYPE': 'wayland'}, 'needsSetup'),
+                        ({'XDG_SESSION_TYPE': 'x11', 'DISPLAY': ':65530', 'WAYLAND_DISPLAY': ''}, 'noAccess')]:
     env = {**os.environ, **overrides}
     if not env.get('WAYLAND_DISPLAY'): env.pop('WAYLAND_DISPLAY', None)
     r = subprocess.run([helper], input='', text=True, capture_output=True, env=env, timeout=5)
-    assert r.returncode == 3 and 'noAccess' in r.stdout, (r.returncode, r.stdout, r.stderr)
+    assert r.returncode == 3 and code in r.stdout and '"ready"' not in r.stdout, (r.returncode, r.stdout, r.stderr)
 
 x = C.CDLL(ctypes.util.find_library('X11'))
 t = C.CDLL(ctypes.util.find_library('Xtst'))

@@ -87,3 +87,9 @@ export function physicalBoxToLocal(
     h: box.h / d.scale,
   };
 }
+
+/** The inverse of physicalToLocal: a point in CSS px inside the overlay of `displayId` → physical screen pixels. */
+export function localToPhysical(x: number, y: number, maps: readonly DisplayMap[], displayId: number): { x: number; y: number } | null {
+  const d = maps.find((m) => m.id === displayId);
+  return d ? { x: d.phys.x + x * d.scale, y: d.phys.y + y * d.scale } : null;
+}

@@ -24,6 +24,12 @@ export const contextHelperPath = (): string =>
     ? join(process.resourcesPath, CONTEXT_HELPER_FILE)
     : join(app.getAppPath(), 'native', 'hook-helper', 'build', CONTEXT_HELPER_FILE);
 
+/** The Linux input setup script: an extraResource in a package, build/linux/ in a source checkout. */
+export const linuxSetupScriptPath = (): string =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'linux-input-setup.sh')
+    : join(app.getAppPath(), 'build', 'linux', 'linux-input-setup.sh');
+
 /** Files from build/ that ship as extraResources (the macOS menu bar icon). */
 export const buildResourcePath = (file: string): string =>
   app.isPackaged ? join(process.resourcesPath, file) : join(app.getAppPath(), 'build', file);

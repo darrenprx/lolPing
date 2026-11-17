@@ -21,7 +21,7 @@ case "$(uname -s)" in
     CXX=${CXX:-c++}
     FLAGS="-std=c++20 -Wall -Wextra -pthread"
     "$CXX" $FLAGS ${CPPFLAGS:-} -O2 src/main_posix.cpp src/hooks_linux.cpp src/linuxinput.cpp src/simulate.cpp \
-      src/commands.cpp src/output.cpp src/json.cpp src/decision.cpp ${LDFLAGS:-} -lX11 -lXi -lXtst -o build/hook-helper
+      src/commands.cpp src/output.cpp src/json.cpp src/decision.cpp       src/hooks_evdev.cpp src/evdev_logic.cpp ${LDFLAGS:-} -lX11 -lXi -lXtst -o build/hook-helper
     ;;
   *) echo "Unsupported operating system" >&2; exit 1 ;;
 esac
@@ -34,7 +34,9 @@ if [ "$(uname -s)" = Darwin ]; then
     -framework ApplicationServices -framework CoreFoundation -framework Cocoa -o build/hooks_mac_tests
   echo "Built build/hook-helper, build/context-helper, build/helper_tests, build/context_tests and build/hooks_mac_tests"
 else
-  echo "Built build/hook-helper, build/helper_tests and build/context_tests"
+  # The evdev backend's logic and tests are Linux only (they use the kernel's input headers).
+  "$CXX" $FLAGS ${CPPFLAGS:-} -O0 tests/evdev_tests.cpp src/evdev_logic.cpp src/decision.cpp src/output.cpp src/json.cpp     src/linuxinput.cpp -o build/evdev_tests
+  echo "Built build/hook-helper, build/helper_tests, build/context_tests and build/evdev_tests"
 fi
 "$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/output-scenario.cpp src/json.cpp src/output.cpp -o build/output-scenario
 "$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/decision-scenario.cpp src/decision.cpp -o build/decision-scenario

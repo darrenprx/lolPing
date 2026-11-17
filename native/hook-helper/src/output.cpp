@@ -8,7 +8,7 @@ std::string formatEmit(const Emit& e) {
   const char* wheel = e.wheel == WheelKind::Emote ? "emote" : e.wheel == WheelKind::Ask ? "ask" : "ping";
   auto pt = [&](const char* type) {
     return std::string("{\"type\":\"") + type + "\",\"x\":" + std::to_string(e.x) + ",\"y\":" + std::to_string(e.y) +
-           ",\"wheel\":\"" + wheel + "\"}";
+           ",\"wheel\":\"" + wheel + "\"" + (e.rel ? ",\"rel\":true" : "") + "}";
   };
   switch (e.kind) {
     case Emit::Kind::WheelOpen: return pt("wheelOpen");

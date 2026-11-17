@@ -22,3 +22,4 @@ if (action === 'test') {
   for (const name of ['helper_tests', 'context_tests', 'output-scenario', 'decision-scenario']) run(join(here, 'build', win ? `${name}.exe` : name), []);
 }
 if (action === 'test' && process.platform === 'darwin') run(join(here, 'build', 'hooks_mac_tests'), []);
+if (action === 'test' && process.platform === 'linux') run(join(here, 'build', 'evdev_tests'), []);

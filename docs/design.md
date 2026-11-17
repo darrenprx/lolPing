@@ -343,14 +343,19 @@ Multiplayer/sync (rooms arrived in v0.3.0, §12), rebinding wheel slots, colourb
 
 macOS support was added in v0.2.0; see [design-macos.md](design-macos.md).
 
-### Linux (X11, experimental)
+### Linux (X11 and Wayland, experimental)
 
-The Linux port is an X11 backend. Setup, limits and testing are in [linux.md](linux.md). In short:
+The Linux port has two input backends in `hooks_linux.cpp`, chosen at start: X11 (below) or evdev. Setup, limits and testing are in [linux.md](linux.md). In short:
 
-- XInput 2.1 raw events watch the keyboard. The helper does not read `/dev/input` and does not take keyboard focus.
+- X11 backend: XInput 2.1 raw events watch the keyboard. It does not read `/dev/input` and does not take keyboard focus.
 - Passive grabs catch the wheel trigger. Normal clicks are passed on with `ReplayPointer`.
 - XTest replays short trigger clicks and tapped trigger keys to the application underneath.
-- Wayland sessions, including XWayland, are refused at start with a `noAccess` error.
+- A Wayland session uses the evdev backend (`hooks_evdev.cpp`, logic in `evdev_logic.cpp`) unless `LOLPING_INPUT=x11` or `LOLPING_ALLOW_XWAYLAND=1` says otherwise. It grabs keyboards and mice from `/dev/input` with `EVIOCGRAB` (not touchpads, tablets, touchscreens or gamepads), feeds the same `Decision` state machine as the other platforms, and writes every event that isn't swallowed to a `/dev/uinput` clone of the device it came from. Without access it sends `error` with code `needsSetup` and exits with the no-access code; the settings window then shows the setup card (`src/renderer/settings/components/LinuxSetupCard.tsx`), which runs `build/linux/linux-input-setup.sh` through `pkexec` (`src/main/linuxSetup.ts`).
+- **Relative points.** Wayland has no global cursor position, so the evdev helper marks `wheelOpen`, `wheelMove`, `wheelRelease` and `click` with `"rel":true`: x and y are mouse counts since the press, not screen pixels. It also sends `{"type":"pointer","want":true}` when a press may become a gesture and `want:false` when it is over. Nothing else changes for the other backends.
+- **Pointer mode.** On `pointer want:true` the overlays stop being click-through (`OverlayManager.setPointerMode`), so each page can report `pointermove` positions (`overlay:pointer`, mapped to screen pixels with `localToPhysical`). `RelPoints` (`src/main/relPoints.ts`) turns a `rel` point into a screen point: the newest pointer position the overlays reported since the gesture began, else the cursor at the start plus the counts. Pointer mode is off on every cancel, release and click, when the helper isn't running, and after 10 seconds. It is never on for Windows, macOS or X11.
+- The evdev loop has a watchdog: if it stops ticking for 200 ms, it releases every grab and exits, so input can't stay frozen.
+- Paused, the evdev backend lets go of the mice but keeps the keyboards, passing every key through, because the pause hotkey is seen in the helper. Suspended (key capture in settings) it lets go of everything. A device is grabbed only while none of its keys or buttons are down, so the desktop never misses a release.
+- Access: the `.deb` makes the bundled helper setgid `input` and opens `/dev/uinput` to that group (`build/linux/deb-postinst.sh`), so only the helper can read input. The AppImage's setup script uses a `uaccess` udev rule instead, which gives the logged-in user access.
 - Electron is forced to scale factor 1 to match X11 root coordinates. There is no updater; updates are manual. Autostart uses an XDG `.desktop` file.
 
 ## 12. Rooms (v0.3.0, internet in v0.4.0)

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  League of Legends pings and emotes for your whole desktop, on Windows and macOS.<br>
+  League of Legends pings and emotes for your whole desktop, on Windows and macOS, and experimentally on Linux.<br>
   Hold <b>Alt</b> (<b>⌥ Option</b> on a Mac), drag, and let go on a ping. The animation pops and the sound plays on top of any app, on any monitor.<br>
   Hold <b>Ctrl</b> (<b>⌃ Control</b> on a Mac) and drag for the emote wheel: League's emotes, or your own images.<br>
   Turn on the AI teammate and ping anything with <b>Win</b> (<b>⌘</b>) to have a model or a coding agent answer at that spot.
@@ -28,9 +28,14 @@ Pings and emotes show up in whole-screen capture, so friends watching your Disco
 
 ## Linux (experimental)
 
-This source tree includes an **X11 Linux port**, with AppImage and Debian package targets. It requires a genuine X11 session, XInput 2.1/XTest and a compositor. Wayland sessions, including XWayland inside Wayland, are not supported yet. Caps Lock triggers and automatic fullscreen-game detection are not available on Linux. Build with Node.js 22.12+, a C++20 compiler and `libx11-dev libxi-dev libxtst-dev`, then run `npm ci` and `npm run dist:linux`.
+lolPing runs on Linux x64 in X11 and Wayland sessions, as an AppImage or a `.deb`. Alt + drag and Ctrl + drag work as on Windows. Caps Lock triggers and automatic fullscreen-game detection are not available, and the AI teammate is off.
 
-See [Linux build, installation and testing instructions](docs/linux.md) for package usage, desktop shortcut conflicts, tray requirements, HiDPI behavior and manual updates. Upstream releases may not yet contain this port.
+- **X11:** nothing to set up.
+- **Wayland:** the input helper reads `/dev/input` and passes your input on through `/dev/uinput`. The `.deb` sets up that access when it installs. For the AppImage, lolPing shows a **Set up** button the first time (it asks for your password once), or you can run the command it shows.
+- **Build:** Node.js 22.12+, a C++20 compiler and `libx11-dev libxi-dev libxtst-dev`, then `npm ci` and `npm run dist:linux`. On Debian and Ubuntu, `sudo apt install ./release/lolPing-<version>-amd64.deb` installs the package.
+- **Privacy:** on Wayland the helper reads keyboard and mouse input on your computer to see wheel gestures. It doesn't save it and nothing leaves the computer.
+
+See [Linux build, installation and testing instructions](docs/linux.md) for the limits (touchpads, remote desktop, Flatpak), desktop shortcut conflicts, tray requirements, HiDPI behaviour and manual updates.
 
 ## Install
 

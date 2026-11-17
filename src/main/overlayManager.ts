@@ -2,7 +2,8 @@ import { BrowserWindow, ipcMain, screen, type Display, type Rectangle, type WebC
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_IDLE, OVERLAY_PINGED, OVERLAY_POINTER, type OverlayChannel, type OverlayEvents,
+  type PingTag,
 } from '../shared/ipc';
 import { WHEEL, pickSlice } from '../shared/geometry';
 import { leagueSoundKey } from '../shared/leagueSounds';
@@ -11,7 +12,7 @@ import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings, RoomTextStyle } from '../shared/settings';
 import type { Rect } from '../shared/teammate/coords';
 import {
-  displayAtPhysical, physicalBoxToLocal, physicalToDip, physicalToLocal, type DisplayMap, type LocalPoint,
+  displayAtPhysical, localToPhysical, physicalBoxToLocal, physicalToDip, physicalToLocal, type DisplayMap, type LocalPoint,
 } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
 import { IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
@@ -86,6 +87,9 @@ const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>([
   'wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'text:spawn', 'mate:glow',
 ]);
 
+/** Linux evdev: the longest the overlays take mouse events for one gesture, so a lost helper message can never leave them blocking clicks. */
+export const POINTER_MODE_MAX_MS = 10_000;
+
 /** The owner of the teammate's pings and emotes on every overlay. */
 const MATE = 'mate';
 /** Spec §10: the fields of one fill light up in order, this far apart. */
@@ -95,7 +99,8 @@ const GLOW_STEP_MS = 120;
  * One transparent, click-through, always-on-top window per display.
  * Emits 'shared' (SharedPing) for every wheel or trigger+click ping and 'sharedEmote' (SharedEmote) for every wheel or
  * trigger+click emote, never for settings previews. Ask-wheel gestures are never shared: a release on an enabled slice
- * emits 'askRelease' (AskRelease) and an ask click 'askClick' (AskClick).
+ * emits 'askRelease' (AskRelease) and an ask click 'askClick' (AskClick). While pointer mode is on (Linux evdev only), the
+ * pointer's position under the overlays is emitted as 'pointer' ({x, y} in physical px).
  */
 export class OverlayManager extends EventEmitter {
   readonly missingAssets = new Set<string>();
@@ -108,6 +113,8 @@ export class OverlayManager extends EventEmitter {
   private wheelAt: { local: LocalPoint; phys: { x: number; y: number } } | null = null;
   private mateTicket: string | null = null;
   private captureExcluded = false;
+  private pointerMode = false;
+  private pointerTimer: NodeJS.Timeout | null = null;
   /** Overlays whose page last said it has nothing on it, parked off their displays (Windows only). */
   private readonly idleWindows = new WeakSet<BrowserWindow>();
 
@@ -151,6 +158,13 @@ export class OverlayManager extends EventEmitter {
       this.place(win, d);
       if (!idle) win.setAlwaysOnTop(true, 'screen-saver');
     });
+    ipcMain.on(OVERLAY_POINTER, (event, raw: unknown) => {
+      const p = raw as { x?: unknown; y?: unknown } | null;
+      if (!this.pointerMode || !p || !isNum(p.x) || !isNum(p.y)) return;
+      const displayId = this.displayOf(event.sender);
+      const at = displayId === undefined ? null : localToPhysical(p.x, p.y, this.maps, displayId);
+      if (at) this.emit('pointer', at);
+    });
     this.rebuild();
     screen.on('display-added', () => this.rebuild());
     screen.on('display-removed', () => this.rebuild());
@@ -172,7 +186,20 @@ export class OverlayManager extends EventEmitter {
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.setContentProtection(on);
   }
 
+  /**
+   * Linux evdev: while on, the overlays take mouse events, so they can say where the pointer is (Wayland has no
+   * global cursor query). Capped, and off on every wheel end. Never on elsewhere.
+   */
+  setPointerMode(on: boolean): void {
+    if (!IS_LINUX || on === this.pointerMode) return;
+    this.pointerMode = on;
+    if (this.pointerTimer) clearTimeout(this.pointerTimer);
+    this.pointerTimer = on ? setTimeout(() => this.setPointerMode(false), POINTER_MODE_MAX_MS) : null;
+    for (const w of this.windows.values()) if (!w.isDestroyed()) w.setIgnoreMouseEvents(!on);
+  }
+
   handle(ev: HelperEvent): void {
+    if (ev.type === 'cancel' || ev.type === 'wheelRelease' || ev.type === 'click') this.setPointerMode(false);
     // A wheel or a click is placed from screen coordinates, so stale display info would clip or misplace it.
     if (ev.type === 'wheelOpen' || ev.type === 'click' || ev.type === 'askWords') this.refreshDisplays();
     switch (ev.type) {
@@ -356,6 +383,7 @@ export class OverlayManager extends EventEmitter {
   }
 
   destroy(): void {
+    this.setPointerMode(false);
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
     this.windows.clear();
   }
@@ -368,6 +396,7 @@ export class OverlayManager extends EventEmitter {
 
   /** Dismisses a wheel that is on screen, if any. Also used when the helper stops: its cancel would never arrive. */
   cancelWheel(): void {
+    this.setPointerMode(false);
     if (this.wheelDisplay === null) return;
     this.send(this.wheelDisplay, 'wheel:cancel', null);
     this.wheelDisplay = null;
@@ -481,7 +510,7 @@ export class OverlayManager extends EventEmitter {
         spellcheck: false,
       },
     });
-    win.setIgnoreMouseEvents(true);
+    win.setIgnoreMouseEvents(!this.pointerMode);
     win.setAlwaysOnTop(true, 'screen-saver');
     if (this.captureExcluded) win.setContentProtection(true);
     if (IS_LINUX) win.setVisibleOnAllWorkspaces(true);

@@ -1988,6 +1988,15 @@ static void test_formats_ask_words_and_scroll() {
   CHECK(formatEmit(s) == R"({"type":"scroll","x":4,"y":5})");
 }
 
+static void test_point_events_carry_rel_only_when_it_is_set() {
+  Emit p{Emit::Kind::WheelOpen};
+  p.x = 1;
+  p.y = 2;
+  CHECK(formatEmit(p) == R"({"type":"wheelOpen","x":1,"y":2,"wheel":"ping"})");
+  p.rel = true;
+  CHECK(formatEmit(p) == R"({"type":"wheelOpen","x":1,"y":2,"wheel":"ping","rel":true})");
+}
+
 static void test_parses_ask_double_tap_stale_watch_and_the_scroll_sim_event() {
   const Config cur;
   Command c = parseCommand(R"({"type":"config","askDoubleTap":true})", cur);
@@ -2190,6 +2199,7 @@ int main() {
   test_wheel_released_after_its_key_was_let_go_reports_trigger_up_at_once();
   test_a_mouse_5_ask_key_never_reports_trigger_up();
   test_formats_ask_words_and_scroll();
+  test_point_events_carry_rel_only_when_it_is_set();
   test_parses_ask_double_tap_stale_watch_and_the_scroll_sim_event();
   test_mask_menu_keys_off_leaves_alt_up_alone();
   test_mac_keycodes_map_to_vks();
