@@ -14,7 +14,7 @@ import { app, BrowserWindow } from 'electron';
 const SITE = resolve('site-dist');
 const OUT = resolve('docs/media');
 const GIF_WIDTH = 880;
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.wav': 'audio/wav' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.flac': 'audio/flac' };
 
 function serve() {
   const server = createServer((req, res) => {

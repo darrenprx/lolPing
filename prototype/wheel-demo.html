@@ -143,7 +143,7 @@ el('path', { d: 'M5.5,0 V7 H11 V5.5 A5.5,5.5 0 0 0 5.5,0Z', fill: '#6c7a7c' }, m
 const ctx = new AudioContext({ latencyHint: 'interactive' });
 const buffers = {};
 for (const n of [...PINGS, GENERIC].map(p => p.snd).concat('button'))
-  fetch(S + n + '.wav').then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).then(buf => buffers[n] = buf);
+  fetch(S + n + '.flac').then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).then(buf => buffers[n] = buf);
 addEventListener('pointerdown', () => ctx.state !== 'running' && ctx.resume(), { capture: true });
 function play(name, vol = .7) {
   const buf = buffers[name]; if (!buf) return;

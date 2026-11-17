@@ -18,4 +18,6 @@ cl %FLAGS% /O2 src\main_win.cpp src\hooks_win.cpp src\simulate.cpp src\commands.
 cl %FLAGS% /Od tests\helper_tests.cpp src\decision.cpp src\commands.cpp src\macinput.cpp src\json.cpp src\output.cpp /Fe:build\helper_tests.exe || exit /b 1
 cl %FLAGS% /O2 src\context_main_win.cpp src\context_capture_win.cpp src\context_text_win.cpp src\context_write_win.cpp src\context.cpp src\json.cpp /Fe:build\context-helper.exe /link user32.lib gdi32.lib ole32.lib oleaut32.lib windowscodecs.lib windowsapp.lib uiautomationcore.lib shell32.lib dwmapi.lib || exit /b 1
 cl %FLAGS% /Od tests\context_tests.cpp src\context.cpp src\json.cpp /Fe:build\context_tests.exe || exit /b 1
-echo Built build\hook-helper.exe, build\context-helper.exe, build\helper_tests.exe and build\context_tests.exe
+cl %FLAGS% /O2 ..\..\tools\performance\output-scenario.cpp src\json.cpp src\output.cpp /Fe:build\output-scenario.exe || exit /b 1
+cl %FLAGS% /O2 ..\..\tools\performance\decision-scenario.cpp src\decision.cpp /Fe:build\decision-scenario.exe || exit /b 1
+echo Built hook-helper.exe, context-helper.exe, helper_tests.exe, context_tests.exe, output-scenario.exe and decision-scenario.exe

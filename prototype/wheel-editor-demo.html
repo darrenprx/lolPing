@@ -176,7 +176,7 @@ function render() {
 
 const audio = {};
 function play(id) {
-  const a = (audio[id] ??= new Audio(SND + PINGS[id].sound + '.wav'));
+  const a = (audio[id] ??= new Audio(SND + PINGS[id].sound + '.flac'));
   a.currentTime = 0; a.volume = 0.6; void a.play().catch(() => {});
 }
 

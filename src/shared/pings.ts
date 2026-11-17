@@ -9,7 +9,7 @@ export interface PingDef {
   icon: string;
   /** Textures drawn at the ping location. Two entries = All In's clashing halves. */
   art: string[];
-  /** File in assets/sounds without ".wav". */
+  /** File in assets/sounds without ".flac". */
   sound: string;
   /** Ring and glow colour. */
   color: string;
@@ -56,7 +56,7 @@ export const DEFAULT_WHEEL_PINGS: readonly PingDef[] = pingsFor(DEFAULT_WHEEL);
 
 /** Relative to a renderer page at <root>/<page>/index.html; assets/ is served at <root>/. */
 export const textureUrl = (name: string): string => `../textures/${name}.png`;
-export const soundUrl = (name: string): string => `../sounds/${name}.wav`;
+export const soundUrl = (name: string): string => `../sounds/${name}.flac`;
 
 export function allSoundNames(): string[] {
   return [...new Set([...ALL_PINGS.map((p) => p.sound), TICK_SOUND])];

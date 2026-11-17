@@ -38,3 +38,6 @@ else
   "$CXX" $FLAGS ${CPPFLAGS:-} -O0 tests/evdev_tests.cpp src/evdev_logic.cpp src/decision.cpp src/output.cpp src/json.cpp     src/linuxinput.cpp -o build/evdev_tests
   echo "Built build/hook-helper, build/helper_tests, build/context_tests and build/evdev_tests"
 fi
+"$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/output-scenario.cpp src/json.cpp src/output.cpp -o build/output-scenario
+"$CXX" $FLAGS ${CPPFLAGS:-} -O2 ../../tools/performance/decision-scenario.cpp src/decision.cpp -o build/decision-scenario
+echo "Built build/output-scenario and build/decision-scenario"

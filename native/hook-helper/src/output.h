@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #include "decision.h"
@@ -20,7 +21,8 @@ struct AppEntry {
 };
 
 // Writes protocol lines on a background thread so the hook thread never blocks
-// on a full stdout pipe. When the queue is full, new lines are dropped.
+// on a full stdout pipe. Consecutive moves for the same wheel keep only the latest
+// position; other messages retain their order. A full queue drops new messages.
 class Output {
  public:
   using Writer = std::function<bool(const std::string&)>;  // false = pipe is gone
@@ -41,13 +43,15 @@ class Output {
   size_t dropped() const;
 
  private:
+  using Message = std::variant<std::string, Emit>;
+  void enqueue(Message message);
   void run();
 
   Writer writer_;
   size_t max_;
   mutable std::mutex mu_;
   std::condition_variable cv_;
-  std::deque<std::string> q_;
+  std::deque<Message> q_;
   bool stopping_ = false;
   size_t dropped_ = 0;
   std::thread thread_;  // declared last: starts after everything above is initialised

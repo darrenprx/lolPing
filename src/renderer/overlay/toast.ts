@@ -1,6 +1,9 @@
 import { LOGO_TEXTURE, textureUrl } from '../../shared/pings';
 
+const expiry = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
 export function showToast(layer: HTMLElement, title: string, body: string, ms = 1800): void {
+  clearTimeout(expiry.get(layer));
   layer.querySelectorAll('.toast').forEach((t) => t.remove());
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -14,8 +17,11 @@ export function showToast(layer: HTMLElement, title: string, body: string, ms = 
   text.append(b, small);
   toast.append(icon, text);
   layer.append(toast);
-  setTimeout(() => {
+  expiry.set(layer, setTimeout(() => {
     toast.classList.add('out');
-    setTimeout(() => toast.remove(), 220);
-  }, ms);
+    expiry.set(layer, setTimeout(() => {
+      toast.remove();
+      expiry.delete(layer);
+    }, 220));
+  }, ms));
 }
